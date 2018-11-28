@@ -1,0 +1,142 @@
+# this just sets up the consul layer
+version: '3.7'
+
+# client_addr is set to 0.0.0.0 to make control from the host easier
+# it should be disabled for real topologies
+
+networks:
+  dc1:
+    ipam:
+      driver: default
+      config:
+        - subnet: '10.0.1.0/24'
+
+# https://yipee.io/2017/06/getting-kubernetes-pod-features-using-native-docker-commands/
+services:
+  dc1-server1-pod:
+    container_name: 'dc1-server1-pod'
+    image: gcr.io/google_containers/pause:1.0
+    restart: always
+    hostname: dc1-server1-pod
+    networks:
+      dc1:
+        ipv4_address: '10.0.1.11'
+
+  dc1-server1:
+    network_mode: 'service:dc1-server1-pod'
+    depends_on:
+      - dc1-server1-pod
+    volumes:
+      - 'dc1-server1:/consul/data'
+    image: '${CONSUL_IMAGE:-consul:1.4.0}'
+    command:
+      - 'agent'
+      - '-hcl'
+      - |
+        server = true
+        client_addr = "0.0.0.0"
+        bootstrap_expect = 1
+        datacenter = "dc1"
+        disable_update_check = true
+        log_level = "debug"
+        primary_datacenter = "dc1"
+        encrypt = "g4TjOaAg+RUxVzv/dY7dfw=="
+        connect {
+            enabled = true
+        }
+        acl {
+            enabled = true
+            default_policy = "deny"
+            down_policy = "async-cache"
+        }
+
+########################################################
+  dc1-client1-pod:
+    container_name: 'dc1-client1-pod'
+    image: gcr.io/google_containers/pause:1.0
+    restart: always
+    hostname: dc1-client1-pod
+    networks:
+      dc1:
+        ipv4_address: '10.0.1.12'
+
+  dc1-client1:
+    network_mode: 'service:dc1-client1-pod'
+    depends_on:
+      - dc1-client1-pod
+      - dc1-server1
+    volumes:
+      - 'dc1-client1:/consul/data'
+    image: '${CONSUL_IMAGE:-consul:1.4.0}'
+    command:
+      - 'agent'
+      - '-hcl'
+      - |
+        server = false
+        client_addr = "0.0.0.0"
+        retry_join = [ "10.0.1.11" ]
+        ui = true
+        datacenter = "dc1"
+        disable_update_check = true
+        log_level = "debug"
+        primary_datacenter = "dc1"
+        encrypt = "g4TjOaAg+RUxVzv/dY7dfw=="
+        connect {
+            enabled = true
+        }
+        ports {
+          grpc = 8502
+        }
+        acl {
+            enabled = true
+            default_policy = "deny"
+            down_policy = "async-cache"
+        }
+
+########################################################
+  dc1-client2-pod:
+    container_name: 'dc1-client2-pod'
+    image: gcr.io/google_containers/pause:1.0
+    restart: always
+    hostname: dc1-client2-pod
+    networks:
+      dc1:
+        ipv4_address: '10.0.1.13'
+
+  dc1-client2:
+    network_mode: 'service:dc1-client2-pod'
+    depends_on:
+      - dc1-client2-pod
+      - dc1-server1
+    volumes:
+      - 'dc1-client2:/consul/data'
+    image: '${CONSUL_IMAGE:-consul:1.4.0}'
+    command:
+      - 'agent'
+      - '-hcl'
+      - |
+        server = false
+        client_addr = "0.0.0.0"
+        retry_join = [ "10.0.1.11" ]
+        ui = true
+        datacenter = "dc1"
+        disable_update_check = true
+        log_level = "debug"
+        primary_datacenter = "dc1"
+        encrypt = "g4TjOaAg+RUxVzv/dY7dfw=="
+        connect {
+            enabled = true
+        }
+        ports {
+          grpc = 8502
+        }
+        acl {
+            enabled = true
+            default_policy = "deny"
+            down_policy = "async-cache"
+        }
+
+volumes:
+  dc1-server1:
+  dc1-client1:
+  dc1-client2:
