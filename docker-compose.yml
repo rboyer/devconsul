@@ -18,6 +18,7 @@ services:
     image: gcr.io/google_containers/pause:1.0
     restart: always
     hostname: dc1-server1-pod
+    dns: 8.8.8.8
     networks:
       dc1:
         ipv4_address: '10.0.1.11'
@@ -48,6 +49,9 @@ services:
             enabled = true
             default_policy = "deny"
             down_policy = "async-cache"
+            tokens {
+                agent = "${AGENT_TOKEN_DC1_SERVER1:-unspecified}"
+            }
         }
 
 ########################################################
@@ -56,6 +60,7 @@ services:
     image: gcr.io/google_containers/pause:1.0
     restart: always
     hostname: dc1-client1-pod
+    dns: 8.8.8.8
     networks:
       dc1:
         ipv4_address: '10.0.1.12'
@@ -91,6 +96,9 @@ services:
             enabled = true
             default_policy = "deny"
             down_policy = "async-cache"
+            tokens {
+                agent = "${AGENT_TOKEN_DC1_CLIENT1:-unspecified}"
+            }
         }
 
 ########################################################

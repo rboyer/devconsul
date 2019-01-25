@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"errors"
 	"flag"
@@ -9,6 +10,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -172,15 +174,17 @@ func registerServices() error {
 		asr := s.GetRegistration()
 
 		// nuke previous using master token
-		if err := mgmtClient.Agent().ServiceDeregister(asr.Name); err != nil {
-			log.Printf("WARN: force deregister of %q failed: %v", asr.Name, err)
-		}
-
-		if !*dereg {
-			if err := ac.ServiceRegister(asr); err != nil {
-				return err
+		if *dereg {
+			if err := mgmtClient.Agent().ServiceDeregister(asr.Name); err != nil {
+				log.Printf("WARN: force deregister of %q failed: %v", asr.Name, err)
 			}
-			log.Printf("registered service %s on %s with token: %s", s.Name, node.Name, token)
+		} else {
+			if !*dereg {
+				if err := ac.ServiceRegister(asr); err != nil {
+					return err
+				}
+				log.Printf("registered service %s on %s with token: %s", s.Name, node.Name, token)
+			}
 		}
 
 		return nil
@@ -292,6 +296,10 @@ func createAgentTokens(client *api.Client) error {
 
 		log.Printf("agent token secretID for %q is: %s", node.Name, secretID)
 
+		if err := editEnvVar("AGENT_TOKEN_"+node.EnvVarName(), secretID); err != nil {
+			return err
+		}
+
 		topo.UpdateNode(node.Name, func(node Node) Node {
 			node.AccessorID = accessorID
 			node.SecretID = secretID
@@ -301,6 +309,53 @@ func createAgentTokens(client *api.Client) error {
 		return nil
 	})
 	return nil
+}
+
+func editEnvVar(k, v string) error {
+	m, err := loadEnv()
+	if err != nil {
+		return err
+	}
+
+	m[k] = v
+
+	return saveEnv(m)
+}
+
+func saveEnv(m map[string]string) error {
+	var lines []string
+	for k, v := range m {
+		lines = append(lines, k+"="+v)
+	}
+	sort.Strings(lines)
+
+	all := strings.Join(lines, "\n") + "\n"
+
+	_, err := safeio.WriteToFile(strings.NewReader(all), ".env", 0644)
+	return err
+}
+
+func loadEnv() (map[string]string, error) {
+	m := make(map[string]string)
+
+	f, err := os.Open(".env")
+	if os.IsNotExist(err) {
+		return m, nil
+	} else if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	scan := bufio.NewScanner(f)
+	for scan.Scan() {
+		parts := strings.SplitN(scan.Text(), "=", 2)
+		m[parts[0]] = parts[1]
+	}
+	if scan.Err() != nil {
+		return nil, scan.Err()
+	}
+
+	return m, nil
 }
 
 func createAgentPolicies(client *api.Client) error {
@@ -575,8 +630,9 @@ func (p *Service) Rules() string {
 	buf.WriteString("service \"" + p.Name + "-sidecar-proxy\" { policy = \"write\" }\n")
 	// // TODO: tighten the node acl
 	buf.WriteString("node_prefix \"\" { policy = \"read\" }\n")
-	buf.WriteString("service \"" + p.UpstreamName + "\" { policy = \"read\" }\n")
-	buf.WriteString("service \"" + p.UpstreamName + "-sidecar-proxy\" { policy = \"read\" }")
+	// buf.WriteString("service \"" + p.UpstreamName + "\" { policy = \"read\" }\n")
+	// buf.WriteString("service \"" + p.UpstreamName + "-sidecar-proxy\" { policy = \"read\" }")
+	buf.WriteString("service_prefix \"\" { policy = \"read\" }\n")
 	return buf.String()
 }
 
@@ -650,6 +706,10 @@ type Node struct {
 func (n *Node) PolicyName() string { return "agent--" + n.Name }
 func (n *Node) TokenName() string  { return "agent--" + n.Name }
 func (n *Node) Rules() string      { return `node "` + n.Name + `-pod" { policy = "write" } ` }
+
+func (n *Node) EnvVarName() string {
+	return strings.ToUpper(strings.Replace(n.Name, "-", "_", -1))
+}
 
 func (n *Node) GetACLPolicy() *api.ACLPolicy {
 	return &api.ACLPolicy{

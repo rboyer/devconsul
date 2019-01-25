@@ -15,6 +15,10 @@ init: docker
 
 .PHONY: docker
 docker:
+	if [[ -f .env ]]; then \
+		source .env ; \
+	fi ; \
+	docker tag $${CONSUL_IMAGE:-consul:1.4.0} local/consul-base:latest ; \
 	docker build -t local/consul-envoy -f Dockerfile-envoy .
 
 .PHONY: up
@@ -38,4 +42,7 @@ services:
 .PHONY: use-dev
 use-dev:
 	$(info switching to dev builds)
-	echo "CONSUL_IMAGE=consul-dev:latest" > .env
+	@if [[ -f .env ]]; then \
+		sed -i '/CONSUL_IMAGE=/d' .env ; \
+	fi
+	@echo "CONSUL_IMAGE=consul-dev:latest" >> .env
