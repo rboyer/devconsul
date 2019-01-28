@@ -29,7 +29,7 @@ services:
       - dc1-server1-pod
     volumes:
       - 'dc1-server1:/consul/data'
-    image: '${CONSUL_IMAGE:-consul:1.4.0}'
+    image: '${CONSUL_IMAGE:-consul:1.4.1}'
     command:
       - 'agent'
       - '-hcl'
@@ -72,7 +72,7 @@ services:
       - dc1-server1
     volumes:
       - 'dc1-client1:/consul/data'
-    image: '${CONSUL_IMAGE:-consul:1.4.0}'
+    image: '${CONSUL_IMAGE:-consul:1.4.1}'
     command:
       - 'agent'
       - '-hcl'
@@ -118,7 +118,7 @@ services:
       - dc1-server1
     volumes:
       - 'dc1-client2:/consul/data'
-    image: '${CONSUL_IMAGE:-consul:1.4.0}'
+    image: '${CONSUL_IMAGE:-consul:1.4.1}'
     command:
       - 'agent'
       - '-hcl'

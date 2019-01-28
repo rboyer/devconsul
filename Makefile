@@ -18,7 +18,7 @@ docker:
 	if [[ -f .env ]]; then \
 		source .env ; \
 	fi ; \
-	docker tag $${CONSUL_IMAGE:-consul:1.4.0} local/consul-base:latest ; \
+	docker tag $${CONSUL_IMAGE:-consul:1.4.1} local/consul-base:latest ; \
 	docker build -t local/consul-envoy -f Dockerfile-envoy .
 
 .PHONY: up
