@@ -10,7 +10,10 @@ gomod:
 	GO111MODULE=on go mod download
 
 .PHONY: init
-init: docker
+init: docker -init-dirs tls
+
+.PHONY: -init-dirs
+-init-dirs:
 	@mkdir -p cache
 
 .PHONY: docker
@@ -20,6 +23,22 @@ docker:
 	fi ; \
 	docker tag $${CONSUL_IMAGE:-consul:1.4.1} local/consul-base:latest ; \
 	docker build -t local/consul-envoy -f Dockerfile-envoy .
+
+.PHONY: tls
+tls:
+	@mkdir -p cache/tls
+	@if [[ -f .env ]]; then \
+		source .env ; \
+	fi ; \
+	docker run \
+		--rm \
+		-v "$$(pwd)/cache/tls:/out" \
+		-v "$$(pwd)/tls-init.sh:/bin/tls-init.sh:ro" \
+		-w /out \
+		-u "$$(id -u):$$(id -g)" \
+		--entrypoint /bin/tls-init.sh \
+		-it \
+		$${CONSUL_IMAGE:-consul:1.4.1}
 
 .PHONY: up
 up:
