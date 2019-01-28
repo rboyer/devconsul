@@ -39,6 +39,10 @@ tls:
 		--entrypoint /bin/tls-init.sh \
 		-it \
 		$${CONSUL_IMAGE:-consul:1.4.1}
+	@if [[ -f .env ]]; then \
+		sed -i '/CONSUL_GOSSIP_KEY=/d' .env ; \
+	fi
+	@echo "CONSUL_GOSSIP_KEY=$$(head -n 1 ./cache/tls/gossip.key)" >> .env
 
 .PHONY: up
 up:

@@ -1,6 +1,12 @@
 #!/bin/sh
 
+# this is overloaded to also make gossip encryption
+
 set -euo pipefail
+
+if [[ ! -f gossip.key ]]; then
+    consul keygen > gossip.key
+fi
 
 if [[ ! -f consul-agent-ca-key.pem || ! -f consul-agent-ca.pem ]]; then
     consul tls ca create
