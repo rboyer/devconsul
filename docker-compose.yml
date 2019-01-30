@@ -54,12 +54,12 @@ services:
                 agent = "${AGENT_TOKEN_DC1_SERVER1:-unspecified}"
             }
         }
-        verify_incoming = true
-        verify_outgoing = true
-        verify_server_hostname = true
-        ca_file   = "/tls/consul-agent-ca.pem"
-        cert_file = "/tls/dc1-server-consul-0.pem"
-        key_file  = "/tls/dc1-server-consul-0-key.pem"
+        ${TLS_DISABLED:-}verify_incoming = true
+        ${TLS_DISABLED:-}verify_outgoing = true
+        ${TLS_DISABLED:-}verify_server_hostname = true
+        ${TLS_DISABLED:-}ca_file   = "/tls/consul-agent-ca.pem"
+        ${TLS_DISABLED:-}cert_file = "/tls/dc1-server-consul-0.pem"
+        ${TLS_DISABLED:-}key_file  = "/tls/dc1-server-consul-0-key.pem"
 
 ########################################################
   dc1-client1-pod:
@@ -108,12 +108,12 @@ services:
                 agent = "${AGENT_TOKEN_DC1_CLIENT1:-unspecified}"
             }
         }
-        verify_incoming = true
-        verify_outgoing = true
-        verify_server_hostname = true
-        ca_file   = "/tls/consul-agent-ca.pem"
-        cert_file = "/tls/dc1-client-consul-0.pem"
-        key_file  = "/tls/dc1-client-consul-0-key.pem"
+        ${TLS_DISABLED:-}verify_incoming = true
+        ${TLS_DISABLED:-}verify_outgoing = true
+        ${TLS_DISABLED:-}verify_server_hostname = true
+        ${TLS_DISABLED:-}ca_file   = "/tls/consul-agent-ca.pem"
+        ${TLS_DISABLED:-}cert_file = "/tls/dc1-client-consul-0.pem"
+        ${TLS_DISABLED:-}key_file  = "/tls/dc1-client-consul-0-key.pem"
 
 ########################################################
   dc1-client2-pod:
@@ -158,12 +158,12 @@ services:
             default_policy = "deny"
             down_policy = "async-cache"
         }
-        verify_incoming = true
-        verify_outgoing = true
-        verify_server_hostname = true
-        ca_file   = "/tls/consul-agent-ca.pem"
-        cert_file = "/tls/dc1-client-consul-0.pem"
-        key_file  = "/tls/dc1-client-consul-0-key.pem"
+        ${TLS_DISABLED:-}verify_incoming = true
+        ${TLS_DISABLED:-}verify_outgoing = true
+        ${TLS_DISABLED:-}verify_server_hostname = true
+        ${TLS_DISABLED:-}ca_file   = "/tls/consul-agent-ca.pem"
+        ${TLS_DISABLED:-}cert_file = "/tls/dc1-client-consul-0.pem"
+        ${TLS_DISABLED:-}key_file  = "/tls/dc1-client-consul-0-key.pem"
 
 volumes:
   dc1-server1:

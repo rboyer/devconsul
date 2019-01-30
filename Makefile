@@ -1,5 +1,7 @@
 SHELL := /bin/bash
 
+TLS_ENABLED := $(shell if [[ -f .env ]]; then source .env ; fi ; echo $${TLS_ENABLED:-})
+
 .PHONY: all
 all: init
 
@@ -10,7 +12,7 @@ gomod:
 	GO111MODULE=on go mod download
 
 .PHONY: init
-init: docker -init-dirs tls
+init: docker -init-dirs crypto
 
 .PHONY: -init-dirs
 -init-dirs:
@@ -24,8 +26,9 @@ docker:
 	docker tag $${CONSUL_IMAGE:-consul:1.4.1} local/consul-base:latest ; \
 	docker build -t local/consul-envoy -f Dockerfile-envoy .
 
-.PHONY: tls
-tls:
+.PHONY: crypto
+crypto:
+ifdef TLS_ENABLED
 	@mkdir -p cache/tls
 	@if [[ -f .env ]]; then \
 		source .env ; \
@@ -39,6 +42,16 @@ tls:
 		--entrypoint /bin/tls-init.sh \
 		-it \
 		$${CONSUL_IMAGE:-consul:1.4.1}
+	@if [[ -f .env ]]; then \
+		sed -i '/TLS_DISABLED=/d' .env ; \
+	fi
+else
+	@if [[ -f .env ]]; then \
+		sed -i '/TLS_DISABLED=/d' .env ; \
+		sed -i '/TLS_ENABLED=/d' .env ; \
+	fi
+	@echo "TLS_DISABLED=#" >> .env
+endif
 	@if [[ -f .env ]]; then \
 		sed -i '/CONSUL_GOSSIP_KEY=/d' .env ; \
 	fi
