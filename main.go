@@ -19,6 +19,12 @@ import (
 	"github.com/rboyer/safeio"
 )
 
+const (
+	PrimaryDC        = "dc1"
+	SecondaryDC      = "dc2"
+	AgentMasterToken = "66976a62-f596-4655-8a62-78741a708c44"
+)
+
 var (
 	dereg  = flag.Bool("dereg", false, "nuke the services")
 	master = flag.Bool("master", false, "everybody uses master token")
@@ -54,19 +60,25 @@ func run() error {
 
 	}
 
-	client, err := getClient(topo.LeaderIP(), "" /*no token yet*/)
+	client, err := getClient(topo.LeaderIP(PrimaryDC), "" /*no token yet*/)
 	if err != nil {
 		return fmt.Errorf("error creating initial bootstrap client: %v", err)
 	}
 
 	waitForLeader(client, "dc1-server1")
 
+	clientSecondary, err := getClient(topo.LeaderIP(SecondaryDC), "" /*no token yet*/)
+	if err != nil {
+		return fmt.Errorf("initClient: %v", err)
+	}
+	waitForLeader(clientSecondary, "dc2-server1")
+
 	if err := bootstrap(client); err != nil {
 		return fmt.Errorf("bootstrap: %v", err)
 	}
 
 	// now we have master token set we can do anything
-	client, err = getClient(topo.LeaderIP(), masterToken)
+	client, err = getClient(topo.LeaderIP(PrimaryDC), masterToken)
 	if err != nil {
 		return fmt.Errorf("initClient: %v", err)
 	}
@@ -76,6 +88,16 @@ func run() error {
 	err = createAgentTokens(client)
 	if err != nil {
 		return fmt.Errorf("createAgentTokens: %v", err)
+	}
+
+	err = createAdminTokens(client)
+	if err != nil {
+		return fmt.Errorf("createAdminTokens: %v", err)
+	}
+
+	err = injectReplicationToken()
+	if err != nil {
+		return fmt.Errorf("injectReplicationToken: %v", err)
 	}
 
 	err = injectAgentTokens()
@@ -241,6 +263,34 @@ func createIntentions(client *api.Client) error {
 	})
 }
 
+func injectReplicationToken() error {
+	replicationSecretID := topo.ReadAdmin("replication-secret-id")
+	if replicationSecretID == "" {
+		return nil
+	}
+	return topo.Walk(func(node Node) error {
+		if node.Datacenter != SecondaryDC || !node.Server {
+			return nil
+		}
+
+		agentClient, err := getClient(node.IPAddress, AgentMasterToken)
+		if err != nil {
+			return err
+		}
+		ac := agentClient.Agent()
+
+		_, err = ac.UpdateACLReplicationToken(replicationSecretID, nil)
+		if err != nil {
+			return err
+		}
+		log.Printf("[%s] agent was given its replication token", node.Name)
+
+		// waitForUpgrade(agentClient, node.Name)
+
+		return nil
+	})
+}
+
 // TALK TO EACH AGENT
 func injectAgentTokens() error {
 	return topo.Walk(func(node Node) error {
@@ -383,6 +433,89 @@ func createAgentPolicies(client *api.Client) error {
 	})
 }
 
+func createAdminTokens(client *api.Client) error {
+	if err := createReplicationToken(client); err != nil {
+		return fmt.Errorf("createReplicationToken: %v", err)
+	}
+	return nil
+}
+
+const (
+	replicationName = "acl-replication"
+)
+
+func createReplicationToken(client *api.Client) error {
+	if err := createReplicationPolicy(client); err != nil {
+		return err
+	}
+
+	exist, err := listExistingTokenAccessorsByDescription(client)
+	if err != nil {
+		return err
+	}
+
+	t := &api.ACLToken{
+		Description: replicationName,
+		Local:       false,
+		Policies: []*api.ACLTokenPolicyLink{
+			{
+				Name: replicationName,
+			},
+		},
+	}
+
+	accessorID, ok := exist[replicationName]
+	if ok {
+		t.AccessorID = accessorID
+	}
+
+	ot, err := createOrUpdateToken(client, t)
+	if err != nil {
+		return err
+	}
+	accessorID = ot.AccessorID
+	secretID := ot.SecretID
+
+	log.Printf("replication token secretID is: %s", secretID)
+
+	if err := editEnvVar("REPLICATION_TOKEN", secretID); err != nil {
+		return err
+	}
+
+	topo.SaveAdmin("replication-accessor-id", accessorID)
+	topo.SaveAdmin("replication-secret-id", secretID)
+
+	return nil
+}
+
+func createReplicationPolicy(client *api.Client) error {
+	p := &api.ACLPolicy{
+		Name:        replicationName,
+		Description: replicationName,
+		Rules:       `acl = "write"`,
+	}
+
+	exist, err := listExistingPoliciesByName(client)
+	if err != nil {
+		return err
+	}
+
+	id, ok := exist[p.Name]
+	if ok {
+		p.ID = id
+	}
+
+	op, err := createOrUpdatePolicy(client, p)
+	if err != nil {
+		return err
+	}
+	id = op.ID
+
+	log.Printf("replication policy id for %q is: %s", p.Name, id)
+
+	return nil
+}
+
 const anonymousTokenAccessorID = "00000000-0000-0000-0000-000000000002"
 
 func createAnonymousToken(client *api.Client) error {
@@ -513,11 +646,32 @@ type Topology struct {
 
 	services []string // service names
 	sm       map[string]Service
+
+	admin map[string]string
 }
 
-func (t *Topology) LeaderIP() string {
-	name := t.servers[0]
-	return t.nm[name].IPAddress
+func (t *Topology) SaveAdmin(k, v string) {
+	if t.admin == nil {
+		t.admin = make(map[string]string)
+	}
+	t.admin[k] = v
+}
+
+func (t *Topology) ReadAdmin(k string) string {
+	if t.admin == nil {
+		return ""
+	}
+	return t.admin[k]
+}
+
+func (t *Topology) LeaderIP(datacenter string) string {
+	for _, name := range t.servers {
+		n := t.Node(name)
+		if n.Datacenter == datacenter {
+			return n.IPAddress
+		}
+	}
+	panic("no such dc")
 }
 
 func (t *Topology) all() []string {
@@ -694,10 +848,11 @@ func (s *Service) GetIntention() *api.Intention {
 }
 
 type Node struct {
-	Name      string
-	Server    bool
-	IPAddress string
-	Services  []string
+	Datacenter string
+	Name       string
+	Server     bool
+	IPAddress  string
+	Services   []string
 	//
 	AccessorID string
 	SecretID   string
@@ -735,20 +890,30 @@ var topo Topology
 
 func init() {
 	topo.AddNode(Node{
-		Name:      "dc1-server1",
-		Server:    true,
-		IPAddress: "10.0.1.11",
-		Services:  nil,
+		Datacenter: "dc1",
+		Name:       "dc1-server1",
+		Server:     true,
+		IPAddress:  "10.0.1.11",
+		Services:   nil,
 	})
 	topo.AddNode(Node{
-		Name:      "dc1-client1",
-		IPAddress: "10.0.1.12",
-		Services:  []string{"ping"},
+		Datacenter: "dc2",
+		Name:       "dc2-server1",
+		Server:     true,
+		IPAddress:  "10.0.2.11",
+		Services:   nil,
 	})
 	topo.AddNode(Node{
-		Name:      "dc1-client2",
-		IPAddress: "10.0.1.13",
-		Services:  []string{"pong"},
+		Datacenter: "dc1",
+		Name:       "dc1-client1",
+		IPAddress:  "10.0.1.12",
+		Services:   []string{"ping"},
+	})
+	topo.AddNode(Node{
+		Datacenter: "dc1",
+		Name:       "dc1-client2",
+		IPAddress:  "10.0.1.13",
+		Services:   []string{"pong"},
 	})
 
 	topo.AddService(Service{
@@ -847,10 +1012,10 @@ func waitForLeader(client *api.Client, name string) {
 	for {
 		leader, err := sc.Leader()
 		if leader != "" && err == nil {
-			log.Printf("leader is %q", leader)
+			log.Printf("[%s] leader is %q", name, leader)
 			return
 		}
-		log.Print("no leader yet")
+		log.Printf("[%s] no leader yet", name)
 		time.Sleep(500 * time.Millisecond)
 	}
 }
@@ -863,34 +1028,38 @@ func waitForUpgrade(client *api.Client, name string) {
 			log.Printf("[%s] acl mode is now in v2 mode", name)
 			return
 		}
-		log.Printf("[%s] acl mode not upgrade to v2 yet", name)
+		log.Printf("[%s] acl mode not upgraded to v2 yet", name)
 
 		time.Sleep(500 * time.Millisecond)
 	}
 }
 
 func waitForNodeUpdates(client *api.Client) {
+	waitForNodeUpdatesDC(client, PrimaryDC)
+	waitForNodeUpdatesDC(client, SecondaryDC)
+}
+func waitForNodeUpdatesDC(client *api.Client, datacenter string) {
 	cc := client.Catalog()
 
 	for {
-		nodes, _, err := cc.Nodes(nil)
+		nodes, _, err := cc.Nodes(&api.QueryOptions{Datacenter: datacenter})
 		if err != nil {
 			nodes = nil
 		}
 
-		stragglers := determineNodeUpdateStragglers(nodes)
+		stragglers := determineNodeUpdateStragglers(nodes, datacenter)
 		if len(stragglers) == 0 {
-			log.Printf("all nodes have posted node updates, so agent acl tokens are working")
+			log.Printf("[dc=%s] all nodes have posted node updates, so agent acl tokens are working", datacenter)
 			return
 		}
-		log.Printf("not all client nodes have posted node updates yet: %v", stragglers)
+		log.Printf("[dc=%s] not all client nodes have posted node updates yet: %v", datacenter, stragglers)
 
 		// takes like 90s to actually right itself
 		time.Sleep(5 * time.Second)
 	}
 }
 
-func determineNodeUpdateStragglers(nodes []*api.Node) []string {
+func determineNodeUpdateStragglers(nodes []*api.Node, datacenter string) []string {
 	nm := make(map[string]*api.Node)
 	for _, n := range nodes {
 		nm[n.Node] = n
@@ -899,6 +1068,9 @@ func determineNodeUpdateStragglers(nodes []*api.Node) []string {
 	var out []string
 	for _, nodeName := range topo.all() {
 		n := topo.Node(nodeName)
+		if n.Datacenter != datacenter {
+			continue
+		}
 
 		catNode, ok := nm[n.Name+"-pod"]
 		if ok && len(catNode.TaggedAddresses) > 0 {
