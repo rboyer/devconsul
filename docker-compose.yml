@@ -39,6 +39,7 @@ services:
       - |
         server = true
         client_addr = "0.0.0.0"
+        ui = true
         bootstrap_expect = 1
         datacenter = "dc1"
         disable_update_check = true
@@ -89,6 +90,7 @@ services:
       - |
         server = true
         client_addr = "0.0.0.0"
+        ui = true
         bootstrap_expect = 1
         datacenter = "dc2"
         disable_update_check = true

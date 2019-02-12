@@ -85,11 +85,6 @@ func run() error {
 
 	waitForUpgrade(client, "dc1-server1")
 
-	err = createAgentTokens(client)
-	if err != nil {
-		return fmt.Errorf("createAgentTokens: %v", err)
-	}
-
 	err = createAdminTokens(client)
 	if err != nil {
 		return fmt.Errorf("createAdminTokens: %v", err)
@@ -98,6 +93,17 @@ func run() error {
 	err = injectReplicationToken()
 	if err != nil {
 		return fmt.Errorf("injectReplicationToken: %v", err)
+	}
+
+	clientSecondary, err = getClient(topo.LeaderIP(SecondaryDC), masterToken)
+	if err != nil {
+		return fmt.Errorf("initClient: %v", err)
+	}
+	waitForUpgrade(clientSecondary, "dc2-server1")
+
+	err = createAgentTokens(client)
+	if err != nil {
+		return fmt.Errorf("createAgentTokens: %v", err)
 	}
 
 	err = injectAgentTokens()
