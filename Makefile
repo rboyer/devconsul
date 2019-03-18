@@ -23,7 +23,7 @@ docker:
 	if [[ -f .env ]]; then \
 		source .env ; \
 	fi ; \
-	docker tag $${CONSUL_IMAGE:-consul:1.4.2} local/consul-base:latest ; \
+	docker tag $${CONSUL_IMAGE:-consul:1.4.3} local/consul-base:latest ; \
 	docker build -t local/consul-envoy -f Dockerfile-envoy .
 
 .PHONY: crypto
@@ -40,7 +40,7 @@ crypto:
 		-u "$$(id -u):$$(id -g)" \
 		--entrypoint /bin/tls-init.sh \
 		-it \
-		$${CONSUL_IMAGE:-consul:1.4.2}
+		$${CONSUL_IMAGE:-consul:1.4.3}
 ifdef TLS_ENABLED
 	@if [[ -f .env ]]; then \
 		sed -i '/TLS_DISABLED=/d' .env ; \
