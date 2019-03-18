@@ -38,10 +38,10 @@ services:
       - '-admin-bind'
       # for demo purposes
       - '0.0.0.0:19000'
-      # debug
-      - '--'
-      - '-l'
-      - 'trace'
+      ## debug
+      # - '--'
+      # - '-l'
+      # - 'trace'
 
   dc1-client2-pong:
     network_mode: 'service:dc1-client2-pod'
@@ -76,7 +76,7 @@ services:
       - '-admin-bind'
       # for demo purposes
       - '0.0.0.0:19000'
-      # debug
-      - '--'
-      - '-l'
-      - 'trace'
+      ## debug
+      # - '--'
+      # - '-l'
+      # - 'trace'
