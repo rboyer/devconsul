@@ -285,7 +285,7 @@ func injectReplicationToken() error {
 		}
 		ac := agentClient.Agent()
 
-		_, err = ac.UpdateACLReplicationToken(replicationSecretID, nil)
+		_, err = ac.UpdateReplicationACLToken(replicationSecretID, nil)
 		if err != nil {
 			return err
 		}
@@ -314,7 +314,7 @@ func injectAgentTokens() error {
 			token = masterToken
 		}
 
-		_, err = ac.UpdateACLAgentToken(token, nil)
+		_, err = ac.UpdateAgentACLToken(token, nil)
 		if err != nil {
 			return err
 		}
@@ -351,10 +351,6 @@ func createAgentTokens(client *api.Client) error {
 		secretID := ot.SecretID
 
 		log.Printf("agent token secretID for %q is: %s", node.Name, secretID)
-
-		if err := editEnvVar("AGENT_TOKEN_"+node.EnvVarName(), secretID); err != nil {
-			return err
-		}
 
 		topo.UpdateNode(node.Name, func(node Node) Node {
 			node.AccessorID = accessorID
@@ -483,10 +479,6 @@ func createReplicationToken(client *api.Client) error {
 	secretID := ot.SecretID
 
 	log.Printf("replication token secretID is: %s", secretID)
-
-	if err := editEnvVar("REPLICATION_TOKEN", secretID); err != nil {
-		return err
-	}
 
 	topo.SaveAdmin("replication-accessor-id", accessorID)
 	topo.SaveAdmin("replication-secret-id", secretID)

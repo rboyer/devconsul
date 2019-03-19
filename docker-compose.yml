@@ -52,9 +52,9 @@ services:
         acl {
             enabled = true
             default_policy = "deny"
-            down_policy = "async-cache"
+            down_policy = "extend-cache"
+            enable_token_persistence = true
             tokens {
-                agent = "${AGENT_TOKEN_DC1_SERVER1:-unspecified}"
                 agent_master = "66976a62-f596-4655-8a62-78741a708c44"
             }
         }
@@ -104,12 +104,11 @@ services:
         acl {
             enabled = true
             default_policy = "deny"
-            down_policy = "async-cache"
+            down_policy = "extend-cache"
             enable_token_replication = true
+            enable_token_persistence = true
             tokens {
-                agent = "${AGENT_TOKEN_DC1_SERVER1:-unspecified}"
                 agent_master = "66976a62-f596-4655-8a62-78741a708c44"
-                replication = "${REPLICATION_TOKEN:-unspecified}"
             }
         }
         ${TLS_DISABLED:-}verify_incoming = true
@@ -161,9 +160,9 @@ services:
         acl {
             enabled = true
             default_policy = "deny"
-            down_policy = "async-cache"
+            down_policy = "extend-cache"
+            enable_token_persistence = true
             tokens {
-                agent = "${AGENT_TOKEN_DC1_CLIENT1:-unspecified}"
                 agent_master = "66976a62-f596-4655-8a62-78741a708c44"
             }
         }
@@ -215,7 +214,8 @@ services:
         acl {
             enabled = true
             default_policy = "deny"
-            down_policy = "async-cache"
+            down_policy = "extend-cache"
+            enable_token_persistence = true
         }
         ${TLS_DISABLED:-}verify_incoming = true
         ${TLS_DISABLED:-}verify_outgoing = true
