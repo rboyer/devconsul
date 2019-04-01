@@ -26,6 +26,10 @@ docker:
 	docker tag $${CONSUL_IMAGE:-consul:1.4.3} local/consul-base:latest ; \
 	docker build -t local/consul-envoy -f Dockerfile-envoy .
 
+.PHONY: reset-crypto
+reset-crypto:
+	@rm -rf cache/tls
+
 .PHONY: crypto
 crypto:
 	@mkdir -p cache/tls
@@ -82,3 +86,11 @@ use-dev:
 		sed -i '/CONSUL_IMAGE=/d' .env ; \
 	fi
 	@echo "CONSUL_IMAGE=consul-dev:latest" >> .env
+
+.PHONY: use-tls
+use-tls:
+	$(info switching to TLS)
+	@if [[ -f .env ]]; then \
+		sed -i '/TLS_ENABLED=/d' .env ; \
+	fi
+	@echo "TLS_ENABLED=1" >> .env
