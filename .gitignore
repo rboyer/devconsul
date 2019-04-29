@@ -1,3 +1,4 @@
-/consul-cloud
 /cache
-/.env
+/config.hcl
+/consul-cloud
+/docker-compose.yml

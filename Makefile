@@ -1,96 +1,90 @@
 SHELL := /bin/bash
 
-TLS_ENABLED := $(shell if [[ -f .env ]]; then source .env ; fi ; echo $${TLS_ENABLED:-})
+PROGRAM_NAME := consul-cloud
 
 .PHONY: all
-all: init
+all: bin init
 
-.PHONY: gomod
-gomod:
-	GO111MODULE=on go mod tidy
-	GO111MODULE=on go mod vendor
-	GO111MODULE=on go mod download
+.PHONY: bin
+bin: $(PROGRAM_NAME)
+$(PROGRAM_NAME): *.go cachestore/*.go consulfunc/*.go go.mod go.sum
+	$(info rebuilding binary...)
+	@go build
 
 .PHONY: init
-init: docker -init-dirs crypto
+init: -gen-init docker k8s
+
+.PHONY: -gen-init
+-gen-init: -preflight -init-dirs crypto
+
+.PHONY: -preflight
+-preflight:
+	@if [[ ! -f config.hcl ]]; then \
+		echo "Missing required config.hcl file" >&2 ; \
+		exit 1 ; \
+	fi
 
 .PHONY: -init-dirs
 -init-dirs:
 	@mkdir -p cache
 
 .PHONY: docker
-docker:
-	if [[ -f .env ]]; then \
-		source .env ; \
-	fi ; \
-	docker tag $${CONSUL_IMAGE:-consul:1.4.3} local/consul-base:latest ; \
+docker: cache/docker.done
+cache/docker.done: $(PROGRAM_NAME) config.hcl Dockerfile-envoy
+	docker tag "$(shell ./$(PROGRAM_NAME) config image)" local/consul-base:latest ; \
 	docker build -t local/consul-envoy -f Dockerfile-envoy .
-
-.PHONY: reset-crypto
-reset-crypto:
-	@rm -rf cache/tls
+	@touch cache/docker.done
 
 .PHONY: crypto
-crypto:
+crypto: cache/tls/done
+cache/tls/done: $(PROGRAM_NAME) config.hcl tls-init.sh
 	@mkdir -p cache/tls
-	@if [[ -f .env ]]; then \
-		source .env ; \
-	fi ; \
-	docker run \
-		--rm \
-		-v "$$(pwd)/cache/tls:/out" \
-		-v "$$(pwd)/tls-init.sh:/bin/tls-init.sh:ro" \
-		-w /out \
-		-u "$$(id -u):$$(id -g)" \
-		--entrypoint /bin/tls-init.sh \
-		-it \
-		$${CONSUL_IMAGE:-consul:1.4.3}
-ifdef TLS_ENABLED
-	@if [[ -f .env ]]; then \
-		sed -i '/TLS_DISABLED=/d' .env ; \
+	@if [[ -n "$$(./$(PROGRAM_NAME) config tls)" ]]; then \
+		CONSUL_IMAGE="$$(./$(PROGRAM_NAME) config image)" ; \
+		docker run \
+			--rm \
+			--net=none \
+			-v "$$(pwd)/cache/tls:/out" \
+			-v "$$(pwd)/tls-init.sh:/bin/tls-init.sh:ro" \
+			-w /out \
+			-e N_SERVERS_DC1="$$(./$(PROGRAM_NAME) config topologyServersDatacenter1)" \
+			-e N_SERVERS_DC2="$$(./$(PROGRAM_NAME) config topologyServersDatacenter2)" \
+			-e N_CLIENTS_DC1="$$(./$(PROGRAM_NAME) config topologyClientsDatacenter1)" \
+			-e N_CLIENTS_DC2="$$(./$(PROGRAM_NAME) config topologyClientsDatacenter2)" \
+			-u "$$(id -u):$$(id -g)" \
+			--entrypoint /bin/tls-init.sh \
+			$${CONSUL_IMAGE} ; \
 	fi
-else
-	@if [[ -f .env ]]; then \
-		sed -i '/TLS_DISABLED=/d' .env ; \
-		sed -i '/TLS_ENABLED=/d' .env ; \
+	@touch cache/tls/done
+
+.PHONY: k8s
+k8s: cache/k8s/done
+cache/k8s/done: $(PROGRAM_NAME) config.hcl scripts/k8s-rbac.sh
+	@mkdir -p cache/k8s
+	@if [[ -n "$$(./$(PROGRAM_NAME) config k8s)" ]]; then \
+		./scripts/k8s-rbac.sh ; \
 	fi
-	@echo "TLS_DISABLED=#" >> .env
-endif
-	@if [[ -f .env ]]; then \
-		sed -i '/CONSUL_GOSSIP_KEY=/d' .env ; \
-	fi
-	@echo "CONSUL_GOSSIP_KEY=$$(head -n 1 ./cache/tls/gossip.key)" >> .env
+	@touch cache/k8s/done
+
+.PHONY: gen
+gen: -gen-init docker-compose.yml
+docker-compose.yml: $(PROGRAM_NAME) config.hcl
+	./$(PROGRAM_NAME) gen
 
 .PHONY: up
-up:
+up: gen
 	docker-compose up -d
-	go run main.go
+	./$(PROGRAM_NAME) boot
 
 .PHONY: down
-down:
+down: gen
 	docker-compose down -v --remove-orphans
-	rm -f cache/*.val
+	rm -f cache/*.val cache/*.hcl
 
 .PHONY: members
 members:
-	@./consul.sh members
+	@./consul.sh dc1 members
 
 .PHONY: services
 services:
-	@./consul.sh catalog services
-
-.PHONY: use-dev
-use-dev:
-	$(info switching to dev builds)
-	@if [[ -f .env ]]; then \
-		sed -i '/CONSUL_IMAGE=/d' .env ; \
-	fi
-	@echo "CONSUL_IMAGE=consul-dev:latest" >> .env
-
-.PHONY: use-tls
-use-tls:
-	$(info switching to TLS)
-	@if [[ -f .env ]]; then \
-		sed -i '/TLS_ENABLED=/d' .env ; \
-	fi
-	@echo "TLS_ENABLED=1" >> .env
+	@./consul.sh dc1 catalog services

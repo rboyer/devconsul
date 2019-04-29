@@ -29,10 +29,10 @@ shift
 
 case "$datacenter" in
     dc1)
-        container=dc1-server1
+        ip="10.0.1.11"
         ;;
     dc2)
-        container=dc2-server1
+        ip="10.0.2.11"
         ;;
     *)
         echo "unknown dc: ${datacenter}" >&2
@@ -40,4 +40,12 @@ case "$datacenter" in
         ;;
 esac
 
-exec docker-compose exec -e CONSUL_HTTP_TOKEN="$(master_token)" "${container}" consul "$@"
+if [[ $# -lt 1 ]]; then
+    echo "missing required path portion" >&2
+    exit 1
+fi
+
+path="$1"
+shift
+
+exec curl -H "x-consul-token: $(master_token)" "http://${ip}:8500/${path}" "$@"
