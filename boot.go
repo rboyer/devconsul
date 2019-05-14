@@ -242,7 +242,10 @@ func (t *Tool) createAgentTokens() error {
 		p := &api.ACLPolicy{
 			Name:        policyName,
 			Description: policyName,
-			Rules:       `node "` + node.Name + `-pod" { policy = "write" } `,
+			Rules: `
+node "` + node.Name + `-pod" { policy = "write" }
+service_prefix "" { policy = "read" }
+`,
 		}
 
 		op, err := consulfunc.CreateOrUpdatePolicy(t.clientDC1, p)
