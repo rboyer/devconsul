@@ -5,6 +5,8 @@ import (
 	"bytes"
 	"errors"
 	"flag"
+	"io/ioutil"
+	"os"
 	"strconv"
 	"strings"
 	"text/template"
@@ -81,12 +83,26 @@ func (t *Tool) commandGen() error {
 		return err
 	}
 
-	_, err = safeio.WriteToFile(&out, "docker-compose.yml", 0644)
+	return t.updateFileIfDifferent(out.Bytes(), "docker-compose.yml", 0644)
+}
+
+func (t *Tool) updateFileIfDifferent(body []byte, path string, perm os.FileMode) error {
+	prev, err := ioutil.ReadFile(path)
 	if err != nil {
-		return err
+		if !os.IsNotExist(err) {
+			return err
+		}
+		t.logger.Info("writing new file", "path", path)
+	} else {
+		// loaded
+		if bytes.Equal(body, prev) {
+			return nil
+		}
+		t.logger.Info("file has changed", "path", path)
 	}
 
-	return nil
+	_, err = safeio.WriteToFile(bytes.NewReader(body), path, perm)
+	return err
 }
 
 type composeInfo struct {
