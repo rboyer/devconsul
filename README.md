@@ -1,4 +1,4 @@
-# consul-cloud
+# devconsul
 
 This project helps bring up a local Consul Connect cluster using Docker.
 
@@ -15,7 +15,7 @@ This project helps bring up a local Consul Connect cluster using Docker.
 1. Run `make`. This will create any necessary docker containers that you may
    lack.
 2. Run `make up`. This will bring up the containers with docker-compose, and
-   then `consul-cloud boot` to bootstrap the cluster.
+   then `devconsul boot` to bootstrap the cluster.
 3. If you wish to destroy everything, run `make down`.
 
 ## Configuration

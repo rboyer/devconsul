@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/hashicorp/consul/api"
-	"github.com/rboyer/consul-cloud/consulfunc"
+	"github.com/rboyer/devconsul/consulfunc"
 )
 
 func (t *Tool) commandBoot() error {
@@ -433,7 +433,7 @@ func (t *Tool) initializeKubernetes() error {
 	return nil
 }
 
-const bindingRuleDescription = "consul-cloud--default"
+const bindingRuleDescription = "devconsul--default"
 
 func (t *Tool) createBindingRulesForK8s() error {
 	rule := &api.ACLBindingRule{

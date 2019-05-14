@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 
-PROGRAM_NAME := consul-cloud
+PROGRAM_NAME := devconsul
 
 .PHONY: all
 all: bin init

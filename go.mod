@@ -1,4 +1,4 @@
-module github.com/rboyer/consul-cloud
+module github.com/rboyer/devconsul
 
 go 1.12
 

@@ -12,10 +12,10 @@ import (
 	"github.com/hashicorp/consul/api"
 	"github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/go-uuid"
-	"github.com/rboyer/consul-cloud/cachestore"
+	"github.com/rboyer/devconsul/cachestore"
 )
 
-const programName = "consul-cloud"
+const programName = "devconsul"
 
 const (
 	PrimaryDC   = "dc1"

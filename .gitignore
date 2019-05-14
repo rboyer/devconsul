@@ -1,4 +1,4 @@
 /cache
 /config.hcl
-/consul-cloud
+/devconsul
 /docker-compose.yml
