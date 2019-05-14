@@ -131,9 +131,15 @@ func (t *Tool) bootstrap(client *api.Client) error {
 		return nil
 	}
 
+TRYAGAIN2:
 	t.logger.Info("bootstrapping ACLs")
 	tok, _, err := ac.Bootstrap()
 	if err != nil {
+		if strings.Index(err.Error(), "The ACL system is currently in legacy mode") != -1 {
+			t.logger.Warn(fmt.Sprintf("system is rebooting: %v", err))
+			time.Sleep(250 * time.Millisecond)
+			goto TRYAGAIN2
+		}
 		return err
 	}
 	t.masterToken = tok.SecretID

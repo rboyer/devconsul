@@ -67,7 +67,7 @@ cache/k8s/done: $(PROGRAM_NAME) config.hcl scripts/k8s-rbac.sh
 	@touch cache/k8s/done
 
 .PHONY: gen
-gen: -gen-init docker-compose.yml
+gen: -gen-init docker-compose.yml cache/agent-master-token.val cache/gossip-key.val
 docker-compose.yml: $(PROGRAM_NAME) config.hcl
 	./$(PROGRAM_NAME) gen
 
@@ -79,6 +79,7 @@ up: gen
 .PHONY: down
 down: gen
 	docker-compose down -v --remove-orphans
+	rm -f docker-compose.yml
 	rm -f cache/*.val cache/*.hcl
 
 .PHONY: members
