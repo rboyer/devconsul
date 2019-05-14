@@ -208,6 +208,8 @@ func (t *Tool) generatePingPongYAML(podName string, node Node) (string, error) {
 				"direct",
 				"-t",
 				"/secrets/service-token--" + svc.Name + ".val",
+				"-r",
+				"/secrets/servicereg__" + node.Name + "__" + svc.Name + ".hcl",
 			}
 		}
 

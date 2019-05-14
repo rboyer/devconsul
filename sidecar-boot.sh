@@ -20,10 +20,14 @@ done
 case "${mode}" in
     direct)
         token_file=""
-        while getopts ":t:" opt; do
+        service_register_file=""
+        while getopts ":t:r:" opt; do
             case "${opt}" in
                 t)
                     token_file="$OPTARG"
+                    ;;
+                r)
+                    service_register_file="$OPTARG"
                     ;;
                 \?)
                     echo "invalid option: -$OPTARG" >&2
@@ -39,6 +43,10 @@ case "${mode}" in
 
         if [[ -z "${token_file}" ]]; then
             echo "missing required argument -t <BOOT_TOKEN_FILE>" >&2
+            exit 1
+        fi
+        if [[ -z "${service_register_file}" ]]; then
+            echo "missing required argument -r <SERVICE_REGISTER_FILE>" >&2
             exit 1
         fi
 
@@ -57,6 +65,11 @@ case "${mode}" in
 
         echo "Loaded token ${token} from ${token_file}"
 
+        echo "Registering service..."
+        consul services register -token "${token}" "${service_register_file}"
+
+        echo "Launching proxy..."
+        consul connect envoy -bootstrap -token "${token}" "$@" > /tmp/envoy.config
         exec consul connect envoy -token "${token}" "$@"
         ;;
     login)
@@ -110,6 +123,7 @@ case "${mode}" in
         echo "Registering service..."
         consul services register -token-file "${token_sink_file}" "${service_register_file}"
 
+        echo "Launching proxy..."
         consul connect envoy -bootstrap -token-file "${token_sink_file}" "$@" > /tmp/envoy.config
         exec consul connect envoy -token-file "${token_sink_file}" "$@"
         ;;
