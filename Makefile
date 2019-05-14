@@ -82,6 +82,12 @@ down: gen
 	rm -f docker-compose.yml
 	rm -f cache/*.val cache/*.hcl
 
+.PHONY: restart
+restart: gen
+	docker-compose down
+	docker-compose up -d
+	./$(PROGRAM_NAME) boot
+
 .PHONY: members
 members:
 	@./consul.sh dc1 members
