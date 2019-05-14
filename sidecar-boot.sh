@@ -2,8 +2,20 @@
 
 set -euo pipefail
 
+ready_file="${1:-}"
+shift
+
 mode="${1:-}"
 shift
+
+# wait until ready
+while : ; do
+    if [[ -f "${ready_file}" ]]; then
+        break
+    fi
+    echo "waiting for system to be ready at ${ready_file}..."
+    sleep 0.1
+done
 
 case "${mode}" in
     direct)

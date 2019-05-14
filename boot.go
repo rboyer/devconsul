@@ -101,6 +101,10 @@ func (t *Tool) commandBoot() error {
 		return fmt.Errorf("createIntentions: %v", err)
 	}
 
+	if err := t.cache.SaveValue("ready", "1"); err != nil {
+		return err
+	}
+
 	return nil
 }
 

@@ -193,6 +193,7 @@ func (t *Tool) generatePingPongYAML(podName string, node Node) (string, error) {
 
 		if t.config.Kubernetes.Enabled {
 			ppi.SidecarBootArgs = []string{
+				"/secrets/ready.val",
 				"login",
 				"-t",
 				"/secrets/k8s/service_jwt_token." + svc.Name,
@@ -203,6 +204,7 @@ func (t *Tool) generatePingPongYAML(podName string, node Node) (string, error) {
 			}
 		} else {
 			ppi.SidecarBootArgs = []string{
+				"/secrets/ready.val",
 				"direct",
 				"-boot-token-file",
 				"/secrets/service-token--" + svc.Name + ".val",
