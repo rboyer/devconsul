@@ -206,7 +206,7 @@ func (t *Tool) generatePingPongYAML(podName string, node Node) (string, error) {
 			ppi.SidecarBootArgs = []string{
 				"/secrets/ready.val",
 				"direct",
-				"-boot-token-file",
+				"-t",
 				"/secrets/service-token--" + svc.Name + ".val",
 			}
 		}
