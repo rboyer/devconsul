@@ -21,7 +21,7 @@ func InferTopology(c *Config) (*Topology, error) {
 	forDC := func(dc, baseIP string, servers, clients int) {
 		for idx := 1; idx <= servers; idx++ {
 			id := strconv.Itoa(idx)
-			ip := baseIP + ".1" + id
+			ip := baseIP + "." + strconv.Itoa(10+idx)
 
 			node := Node{
 				Datacenter: dc,
@@ -35,7 +35,7 @@ func InferTopology(c *Config) (*Topology, error) {
 
 		for idx := 1; idx <= clients; idx++ {
 			id := strconv.Itoa(idx)
-			ip := baseIP + ".1" + strconv.Itoa(idx+servers)
+			ip := baseIP + "." + strconv.Itoa(20+idx)
 
 			node := Node{
 				Datacenter: dc,
