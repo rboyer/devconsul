@@ -57,7 +57,7 @@ func (t *Tool) commandGen() error {
 
 		pod := composePod{
 			PodName:        podName,
-			ConsulImage:    t.config.ConsulImage,
+			ConsulImage:    t.runtimeConfig.ConsulImage,
 			Node:           node,
 			HCL:            indent(podHCL, 8),
 			AgentDependsOn: []string{podName},
@@ -273,7 +273,6 @@ func (t *Tool) generateAgentHCL(node Node) (string, error) {
 	configInfo := consulAgentConfigInfo{
 		RetryJoin:        `"` + strings.Join(t.topology.ServerIPs(node.Datacenter), `", "`) + `"`,
 		Datacenter:       node.Datacenter,
-		MasterToken:      t.config.InitialMasterToken,
 		AgentMasterToken: t.runtimeConfig.AgentMasterToken,
 		Server:           node.Server,
 		GossipKey:        t.runtimeConfig.GossipKey,
@@ -281,6 +280,7 @@ func (t *Tool) generateAgentHCL(node Node) (string, error) {
 	}
 
 	if node.Server {
+		configInfo.MasterToken = t.config.InitialMasterToken
 		leaderDC1 := t.topology.LeaderIP("dc1")
 		leaderDC2 := t.topology.LeaderIP("dc2")
 		configInfo.RetryJoinWAN = `"` + leaderDC1 + `", "` + leaderDC2 + `"`

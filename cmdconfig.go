@@ -13,7 +13,8 @@ func (t *Tool) commandConfig() error {
 	topoConfig := t.config.Topology
 
 	m := map[string]string{
-		"image":            t.config.ConsulImage,
+		"image":            t.runtimeConfig.ConsulImage,
+		"rawImage":         t.config.ConsulImage,
 		"tls":              bool2str(t.config.Encryption.TLS),
 		"gossip":           bool2str(t.config.Encryption.Gossip),
 		"k8s":              bool2str(t.config.Kubernetes.Enabled),

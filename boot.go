@@ -345,8 +345,14 @@ service_prefix "" { policy = "read" }
 }
 
 func (t *Tool) createServiceTokens() error {
+	done := make(map[string]struct{})
+
 	return t.topology.Walk(func(n Node) error {
 		for _, s := range n.Services {
+			if _, ok := done[s.Name]; ok {
+				continue
+			}
+
 			token := &api.ACLToken{
 				Description: "service--" + s.Name,
 				Local:       false,
@@ -372,6 +378,8 @@ func (t *Tool) createServiceTokens() error {
 			}
 
 			t.setToken("service", s.Name, token.SecretID)
+
+			done[s.Name] = struct{}{}
 		}
 		return nil
 	})

@@ -1,13 +1,17 @@
 package main
 
 import (
+	"bytes"
 	"crypto/rand"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"log"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"github.com/hashicorp/consul/api"
 	"github.com/hashicorp/go-hclog"
@@ -90,6 +94,7 @@ type Tool struct {
 type RuntimeConfig struct {
 	GossipKey        string
 	AgentMasterToken string
+	ConsulImage      string // this may be a resolved value if :latest were used
 }
 
 func (t *Tool) Init() error {
@@ -127,8 +132,56 @@ func (t *Tool) Init() error {
 		return err
 	}
 
-	// t.logger.Info("Runtime config:\n" + jsonPretty(&t.runtimeConfig))
+	if err := t.initConsulImage(); err != nil {
+		return err
+	}
 
+	// t.logger.Info("Runtime config:\n" + jsonPretty(&t.runtimeConfig))
+	// $(docker image inspect consul-dev:latest | jq -r '.[0].Id' | cut -d':' -f2-)
+
+	return nil
+}
+
+func (t *Tool) initConsulImage() error {
+	if !strings.HasSuffix(t.config.ConsulImage, ":latest") {
+		t.runtimeConfig.ConsulImage = t.config.ConsulImage
+		return nil
+	}
+
+	dockerBin, err := exec.LookPath("docker")
+	if err != nil {
+		return err
+	}
+
+	var errWriter bytes.Buffer
+	var outWriter bytes.Buffer
+
+	cmd := exec.Command(dockerBin, "image", "inspect", t.config.ConsulImage)
+	cmd.Stdout = &outWriter
+	cmd.Stderr = &errWriter
+	cmd.Stdin = nil
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("could not invoke 'docker': %v : %s", err, errWriter.String())
+	}
+
+	dec := json.NewDecoder(&outWriter)
+
+	var obj []struct {
+		Id string `json:"Id"`
+	}
+	if err := dec.Decode(&obj); err != nil {
+		return err
+	}
+
+	if len(obj) != 1 {
+		return fmt.Errorf("unexpected docker output")
+	}
+
+	if !strings.HasPrefix(obj[0].Id, "sha256:") {
+		return fmt.Errorf("unexpected docker output: %q", obj[0].Id)
+	}
+
+	t.runtimeConfig.ConsulImage = strings.TrimPrefix(obj[0].Id, "sha256:")
 	return nil
 }
 
