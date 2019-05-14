@@ -79,20 +79,21 @@ func (t *Tool) commandBoot() error {
 		return fmt.Errorf("createAnonymousPolicy: %v", err)
 	}
 
+	err = t.writeServiceRegistrationFiles()
+	if err != nil {
+		return fmt.Errorf("writeServiceRegistrationFiles: %v", err)
+	}
+
 	if t.config.Kubernetes.Enabled {
 		err = t.initializeKubernetes()
 		if err != nil {
 			return fmt.Errorf("initializeKubernetes: %v", err)
 		}
-		err = t.writeServiceRegistrationFiles()
+	} else {
+		err = t.createServiceTokens()
 		if err != nil {
-			return fmt.Errorf("writeServiceRegistrationFiles: %v", err)
+			return fmt.Errorf("createServiceTokens: %v", err)
 		}
-	}
-
-	err = t.createServiceTokens()
-	if err != nil {
-		return fmt.Errorf("createServiceTokens: %v", err)
 	}
 
 	err = t.createIntentions()
