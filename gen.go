@@ -271,6 +271,7 @@ func (t *Tool) generateAgentHCL(node Node) (string, error) {
 	configInfo := consulAgentConfigInfo{
 		RetryJoin:        `"` + strings.Join(t.topology.ServerIPs(node.Datacenter), `", "`) + `"`,
 		Datacenter:       node.Datacenter,
+		MasterToken:      t.config.InitialMasterToken,
 		AgentMasterToken: t.runtimeConfig.AgentMasterToken,
 		Server:           node.Server,
 		GossipKey:        t.runtimeConfig.GossipKey,
@@ -303,6 +304,7 @@ type consulAgentConfigInfo struct {
 	RetryJoinWAN     string
 	Datacenter       string
 	SecondaryServer  bool
+	MasterToken      string
 	AgentMasterToken string
 	Server           bool
 	BootstrapExpect  int
@@ -360,6 +362,9 @@ acl {
   enable_token_replication = true
   {{- end}}
   tokens {
+    {{ if .MasterToken -}}
+    master       = "{{.MasterToken}}"
+    {{- end }}
     agent_master = "{{.AgentMasterToken}}"
   }
 }

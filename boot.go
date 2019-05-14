@@ -115,6 +115,13 @@ func (t *Tool) bootstrap(client *api.Client) error {
 		return err
 	}
 
+	if t.masterToken == "" && t.config.InitialMasterToken != "" {
+		t.masterToken = t.config.InitialMasterToken
+		if err := t.cache.SaveValue("master-token", t.masterToken); err != nil {
+			return err
+		}
+	}
+
 	ac := client.ACL()
 
 	if t.masterToken != "" {

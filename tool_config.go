@@ -23,10 +23,11 @@ func DefaultConfig() Config {
 }
 
 type Config struct {
-	ConsulImage string           `hcl:"consul_image"`
-	Encryption  ConfigEncryption `hcl:"encryption"`
-	Kubernetes  ConfigKubernetes `hcl:"kubernetes"`
-	Topology    ConfigTopology   `hcl:"topology"`
+	ConsulImage        string           `hcl:"consul_image"`
+	Encryption         ConfigEncryption `hcl:"encryption"`
+	Kubernetes         ConfigKubernetes `hcl:"kubernetes"`
+	Topology           ConfigTopology   `hcl:"topology"`
+	InitialMasterToken string           `hcl:"initial_master_token"`
 }
 type ConfigEncryption struct {
 	TLS    bool `hcl:"tls"`
