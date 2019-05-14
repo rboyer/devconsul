@@ -84,7 +84,6 @@ func (t *Tool) commandBoot() error {
 		if err != nil {
 			return fmt.Errorf("initializeKubernetes: %v", err)
 		}
-	} else {
 		err = t.writeServiceRegistrationFiles()
 		if err != nil {
 			return fmt.Errorf("writeServiceRegistrationFiles: %v", err)
