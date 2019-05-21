@@ -79,6 +79,11 @@ func (t *Tool) commandBoot() error {
 		return fmt.Errorf("createAnonymousPolicy: %v", err)
 	}
 
+	err = t.writeCentralConfigs()
+	if err != nil {
+		return fmt.Errorf("writeCentralConfigs: %v", err)
+	}
+
 	err = t.writeServiceRegistrationFiles()
 	if err != nil {
 		return fmt.Errorf("writeServiceRegistrationFiles: %v", err)
@@ -383,6 +388,41 @@ func (t *Tool) createServiceTokens() error {
 			t.setToken("service", s.Name, token.SecretID)
 
 			done[s.Name] = struct{}{}
+		}
+		return nil
+	})
+}
+
+func (t *Tool) writeCentralConfigs() error {
+	done := make(map[string]struct{})
+
+	return t.topology.Walk(func(n Node) error {
+		for _, s := range n.Services {
+			key := n.Datacenter + "--" + s.Name
+			client := t.clientForDC(n.Datacenter)
+
+			if _, ok := done[key]; ok {
+				continue
+			}
+
+			sce := &api.ServiceConfigEntry{
+				Kind:     api.ServiceDefaults,
+				Name:     s.Name,
+				Protocol: "http",
+			}
+
+			ce := client.ConfigEntries()
+
+			_, _, err := ce.Set(sce, nil)
+			if err != nil {
+				return err
+			}
+
+			t.logger.Info("service default config created",
+				"service", s.Name,
+			)
+
+			done[key] = struct{}{}
 		}
 		return nil
 	})

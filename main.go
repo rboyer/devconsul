@@ -91,6 +91,17 @@ type Tool struct {
 	tokens map[string]string
 }
 
+func (t *Tool) clientForDC(dc string) *api.Client {
+	switch dc {
+	case PrimaryDC:
+		return t.clientDC1
+	case SecondaryDC:
+		return t.clientDC2
+	default:
+		panic("illegal dc name '" + dc + "'")
+	}
+}
+
 type RuntimeConfig struct {
 	GossipKey        string
 	AgentMasterToken string
