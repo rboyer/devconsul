@@ -28,6 +28,11 @@ init: -gen-init docker k8s
 -init-dirs:
 	@mkdir -p cache
 
+.PHONY: force-docker
+force-docker:
+	@rm -f cache/docker.done
+	$(MAKE) docker
+
 .PHONY: docker
 docker: cache/docker.done
 cache/docker.done: $(PROGRAM_NAME) config.hcl Dockerfile-envoy
@@ -80,7 +85,7 @@ up: gen
 down: gen
 	docker-compose down -v --remove-orphans
 	rm -f docker-compose.yml
-	rm -f cache/*.val cache/*.hcl
+	rm -f cache/*.val cache/*.hcl cache/docker.done
 
 .PHONY: restart
 restart: gen
