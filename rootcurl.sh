@@ -48,4 +48,4 @@ fi
 path="$1"
 shift
 
-exec curl -H "x-consul-token: $(master_token)" "http://${ip}:8500/${path}" "$@"
+exec curl -sL -H "x-consul-token: $(master_token)" "http://${ip}:8500/${path}" "$@"
