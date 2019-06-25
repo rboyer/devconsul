@@ -398,10 +398,10 @@ func (t *Tool) writeCentralConfigs() error {
 
 	return t.topology.Walk(func(n Node) error {
 		for _, s := range n.Services {
-			key := n.Datacenter + "--" + s.Name
-			client := t.clientForDC(n.Datacenter)
+			// Configs live in the primary DC only.
+			client := t.clientForDC(PrimaryDC)
 
-			if _, ok := done[key]; ok {
+			if _, ok := done[s.Name]; ok {
 				continue
 			}
 
@@ -422,7 +422,7 @@ func (t *Tool) writeCentralConfigs() error {
 				"service", s.Name,
 			)
 
-			done[key] = struct{}{}
+			done[s.Name] = struct{}{}
 		}
 		return nil
 	})
