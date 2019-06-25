@@ -324,6 +324,9 @@ datacenter             = "{{.Datacenter}}"
 disable_update_check   = true
 log_level              = "debug"
 
+enable_debug                  = true
+enable_central_service_config = true
+
 primary_datacenter     = "dc1"
 retry_join             = [ {{.RetryJoin}} ]
 {{ if .Server -}}
