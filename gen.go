@@ -186,9 +186,10 @@ func (t *Tool) generatePingPongYAML(podName string, node Node) (string, error) {
 		}
 
 		ppi := pingpongInfo{
-			PodName:  podName,
-			NodeName: node.Name,
-			PingPong: svc.Name,
+			PodName:       podName,
+			NodeName:      node.Name,
+			PingPong:      svc.Name,
+			EnvoyLogLevel: t.config.Envoy.LogLevel,
 		}
 
 		if t.config.Kubernetes.Enabled {
@@ -225,6 +226,7 @@ type pingpongInfo struct {
 	NodeName        string
 	PingPong        string // ping or pong
 	SidecarBootArgs []string
+	EnvoyLogLevel   string
 }
 
 var pingpongT = template.Must(template.New("pingpong").Parse(`  #####################
@@ -263,10 +265,9 @@ var pingpongT = template.Must(template.New("pingpong").Parse(`  ################
       - '-admin-bind'
       # for demo purposes
       - '0.0.0.0:19000'
-      ## debug
-      # - '--'
-      # - '-l'
-      # - 'trace'
+      - '--'
+      - '-l'
+      - '{{ .EnvoyLogLevel }}'
 `))
 
 func (t *Tool) generateAgentHCL(node Node) (string, error) {

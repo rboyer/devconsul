@@ -9,6 +9,9 @@ import (
 func DefaultConfig() Config {
 	return Config{
 		ConsulImage: "consul:1.5.0",
+		Envoy: ConfigEnvoy{
+			LogLevel: "info",
+		},
 		Topology: ConfigTopology{
 			Servers: ConfigTopologyDatacenter{
 				Datacenter1: 1,
@@ -26,6 +29,7 @@ type Config struct {
 	ConsulImage        string           `hcl:"consul_image"`
 	Encryption         ConfigEncryption `hcl:"encryption"`
 	Kubernetes         ConfigKubernetes `hcl:"kubernetes"`
+	Envoy              ConfigEnvoy      `hcl:"envoy"`
 	Topology           ConfigTopology   `hcl:"topology"`
 	InitialMasterToken string           `hcl:"initial_master_token"`
 }
@@ -35,6 +39,9 @@ type ConfigEncryption struct {
 }
 type ConfigKubernetes struct {
 	Enabled bool `hcl:"enabled"`
+}
+type ConfigEnvoy struct {
+	LogLevel string `hcl:"log_level"`
 }
 
 type ConfigTopology struct {
