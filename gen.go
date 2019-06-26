@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"errors"
 	"flag"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"strconv"
@@ -191,6 +192,9 @@ func (t *Tool) generatePingPongYAML(podName string, node Node) (string, error) {
 			PingPong:      svc.Name,
 			EnvoyLogLevel: t.config.Envoy.LogLevel,
 		}
+		if len(svc.Meta) > 0 {
+			ppi.MetaString = fmt.Sprintf("--%q", svc.Meta)
+		}
 
 		if t.config.Kubernetes.Enabled {
 			ppi.SidecarBootArgs = []string{
@@ -225,6 +229,7 @@ type pingpongInfo struct {
 	PodName         string
 	NodeName        string
 	PingPong        string // ping or pong
+	MetaString      string
 	SidecarBootArgs []string
 	EnvoyLogLevel   string
 }
@@ -242,6 +247,8 @@ var pingpongT = template.Must(template.New("pingpong").Parse(`  ################
       - '0.0.0.0:8080'
       - '-dial'
       - '127.0.0.1:9090'
+      - '-name'
+      - '{{.PingPong}}{{.MetaString}}'
 
   {{.NodeName}}-{{.PingPong}}-sidecar:
     network_mode: 'service:{{.PodName}}'
