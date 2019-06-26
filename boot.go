@@ -573,6 +573,12 @@ services = [
       },
     ]
 
+	meta {
+	{{ range $k, $v := .Meta }}
+	  "{{ $k }}" = "{{ $v }}",
+	{{ end }}
+	}
+
     connect {
       sidecar_service {
         proxy {

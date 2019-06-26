@@ -33,17 +33,28 @@ func InferTopology(c *Config) (*Topology, error) {
 			addNode(node)
 		}
 
+		serviceMeta := c.Topology.Clients.ServiceMeta
+
 		for idx := 1; idx <= clients; idx++ {
 			id := strconv.Itoa(idx)
 			ip := baseIP + "." + strconv.Itoa(20+idx)
 
+			nodeName := dc + "-client" + id
 			node := Node{
 				Datacenter: dc,
-				Name:       dc + "-client" + id,
+				Name:       nodeName,
 				Server:     false,
 				IPAddress:  ip,
 				Index:      idx - 1,
 			}
+
+			meta := make(map[string]string)
+			if serviceMeta != nil {
+				if myMeta, ok := serviceMeta[nodeName]; ok {
+					meta = myMeta
+				}
+			}
+
 			if idx%2 == 1 {
 				node.Services = []Service{
 					{
@@ -51,6 +62,7 @@ func InferTopology(c *Config) (*Topology, error) {
 						Port:              8080,
 						UpstreamName:      "pong",
 						UpstreamLocalPort: 9090,
+						Meta:              meta,
 					},
 				}
 			} else {
@@ -60,6 +72,7 @@ func InferTopology(c *Config) (*Topology, error) {
 						Port:              8080,
 						UpstreamName:      "ping",
 						UpstreamLocalPort: 9090,
+						Meta:              meta,
 					},
 				}
 			}
@@ -146,8 +159,9 @@ type Node struct {
 func (n *Node) TokenName() string { return "agent--" + n.Name }
 
 type Service struct {
-	Name              string `hcl:"name,key"`
-	Port              int    `hcl:"port"`
-	UpstreamName      string `hcl:"upstream_name"`
-	UpstreamLocalPort int    `hcl:"upstream_local_port"`
+	Name              string            `hcl:"name,key"`
+	Port              int               `hcl:"port"`
+	UpstreamName      string            `hcl:"upstream_name"`
+	UpstreamLocalPort int               `hcl:"upstream_local_port"`
+	Meta              map[string]string `hcl:"meta"`
 }

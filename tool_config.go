@@ -20,6 +20,7 @@ func DefaultConfig() Config {
 			Clients: ConfigTopologyDatacenter{
 				Datacenter1: 2,
 				Datacenter2: 2,
+				ServiceMeta: map[string]map[string]string{},
 			},
 		},
 	}
@@ -52,6 +53,8 @@ type ConfigTopology struct {
 type ConfigTopologyDatacenter struct {
 	Datacenter1 int `hcl:"dc1"`
 	Datacenter2 int `hcl:"dc2"`
+	// Just for clients
+	ServiceMeta map[string]map[string]string `hcl:"service_meta"` // node -> key -> val
 }
 
 func LoadConfig() (*Config, error) {
