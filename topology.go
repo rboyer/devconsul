@@ -33,7 +33,7 @@ func InferTopology(c *Config) (*Topology, error) {
 			addNode(node)
 		}
 
-		serviceMeta := c.Topology.Clients.ServiceMeta
+		nodeConfigs := c.Topology.Clients.NodeConfig
 
 		for idx := 1; idx <= clients; idx++ {
 			id := strconv.Itoa(idx)
@@ -48,34 +48,39 @@ func InferTopology(c *Config) (*Topology, error) {
 				Index:      idx - 1,
 			}
 
-			meta := make(map[string]string)
-			if serviceMeta != nil {
-				if myMeta, ok := serviceMeta[nodeName]; ok {
-					meta = myMeta
+			nodeConfig := ConfigTopologyNodeConfig{} // yay zero value!
+			if nodeConfigs != nil {
+				if c, ok := nodeConfigs[nodeName]; ok {
+					nodeConfig = c
 				}
 			}
 
-			if idx%2 == 1 {
-				node.Services = []Service{
-					{
-						Name:              "ping",
-						Port:              8080,
-						UpstreamName:      "pong",
-						UpstreamLocalPort: 9090,
-						Meta:              meta,
-					},
-				}
+			if nodeConfig.MeshGateway {
+				node.MeshGateway = true
 			} else {
-				node.Services = []Service{
-					{
-						Name:              "pong",
-						Port:              8080,
-						UpstreamName:      "ping",
-						UpstreamLocalPort: 9090,
-						Meta:              meta,
-					},
+				svc := Service{
+					Port:              8080,
+					UpstreamLocalPort: 9090,
+					Meta:              nodeConfig.Meta(),
 				}
+				if idx%2 == 1 {
+					svc.Name = "ping"
+					svc.UpstreamName = "pong"
+				} else {
+					svc.Name = "pong"
+					svc.UpstreamName = "ping"
+				}
+
+				if nodeConfig.UpstreamName != "" {
+					svc.UpstreamName = nodeConfig.UpstreamName
+				}
+				if nodeConfig.UpstreamDatacenter != "" {
+					svc.UpstreamDatacenter = nodeConfig.UpstreamDatacenter
+				}
+
+				node.Services = []Service{svc}
 			}
+
 			addNode(node)
 		}
 	}
@@ -148,20 +153,22 @@ func (t *Topology) WalkSilent(f func(n Node)) {
 }
 
 type Node struct {
-	Datacenter string    `hcl:"datacenter"`
-	Name       string    `hcl:"name,key"`
-	Server     bool      `hcl:"server"`
-	IPAddress  string    `hcl:"ip_address"`
-	Services   []Service `hcl:"service"`
-	Index      int       `hcl:"-"`
+	Datacenter  string    `hcl:"datacenter"`
+	Name        string    `hcl:"name,key"`
+	Server      bool      `hcl:"server"`
+	IPAddress   string    `hcl:"ip_address"`
+	Services    []Service `hcl:"service"`
+	MeshGateway bool      `hcl:"mesh_gateway"`
+	Index       int       `hcl:"-"`
 }
 
 func (n *Node) TokenName() string { return "agent--" + n.Name }
 
 type Service struct {
-	Name              string            `hcl:"name,key"`
-	Port              int               `hcl:"port"`
-	UpstreamName      string            `hcl:"upstream_name"`
-	UpstreamLocalPort int               `hcl:"upstream_local_port"`
-	Meta              map[string]string `hcl:"meta"`
+	Name               string            `hcl:"name,key"`
+	Port               int               `hcl:"port"`
+	UpstreamName       string            `hcl:"upstream_name"`
+	UpstreamDatacenter string            `hcl:"upstream_datacenter"`
+	UpstreamLocalPort  int               `hcl:"upstream_local_port"`
+	Meta               map[string]string `hcl:"meta"`
 }

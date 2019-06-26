@@ -51,6 +51,11 @@ func (t *Tool) commandBoot() error {
 		return fmt.Errorf("createReplicationToken: %v", err)
 	}
 
+	err = t.createMeshGatewayToken()
+	if err != nil {
+		return fmt.Errorf("createMeshGatewayToken: %v", err)
+	}
+
 	err = t.injectReplicationToken()
 	if err != nil {
 		return fmt.Errorf("injectReplicationToken: %v", err)
@@ -177,7 +182,7 @@ func (t *Tool) createReplicationToken() error {
 		Description: replicationName,
 		Rules: `
 acl      = "write"
-operator = "read"
+operator = "write"
 service_prefix "" {
 	policy     = "read"
 	intentions = "read"
@@ -203,6 +208,53 @@ service_prefix "" {
 	t.setToken("replication", "", token.SecretID)
 
 	t.logger.Info(fmt.Sprintf("replication token secretID is: %s", token.SecretID))
+
+	return nil
+}
+
+func (t *Tool) createMeshGatewayToken() error {
+	const meshGatewayName = "mesh-gateway"
+
+	p := &api.ACLPolicy{
+		Name:        meshGatewayName,
+		Description: meshGatewayName,
+		Rules: `
+service "mesh-gateway" {
+  policy = "write"
+}
+service_prefix "" {
+  policy = "read"
+}
+node_prefix "" {
+  policy = "read"
+}
+`,
+	}
+	p, err := consulfunc.CreateOrUpdatePolicy(t.clientDC1, p)
+	if err != nil {
+		return err
+	}
+
+	t.logger.Info(fmt.Sprintf("mesh-gateway policy id for %q is: %s", p.Name, p.ID))
+
+	token := &api.ACLToken{
+		Description: meshGatewayName,
+		Local:       false,
+		Policies:    []*api.ACLTokenPolicyLink{{ID: p.ID}},
+	}
+
+	token, err = consulfunc.CreateOrUpdateToken(t.clientDC1, token)
+	if err != nil {
+		return err
+	}
+
+	if err := t.cache.SaveValue("mesh-gateway", token.SecretID); err != nil {
+		return err
+	}
+
+	t.setToken("mesh-gateway", "", token.SecretID)
+
+	t.logger.Info(fmt.Sprintf("mesh-gateway token secretID is: %s", token.SecretID))
 
 	return nil
 }
@@ -394,38 +446,60 @@ func (t *Tool) createServiceTokens() error {
 }
 
 func (t *Tool) writeCentralConfigs() error {
-	done := make(map[string]struct{})
+	// Configs live in the primary DC only.
+	client := t.clientForDC(PrimaryDC)
 
-	return t.topology.Walk(func(n Node) error {
-		for _, s := range n.Services {
-			// Configs live in the primary DC only.
-			client := t.clientForDC(PrimaryDC)
+	currentEntries, err := consulfunc.ListAllConfigEntries(client)
+	if err != nil {
+		return err
+	}
 
-			if _, ok := done[s.Name]; ok {
+	ce := client.ConfigEntries()
+
+	entries := t.config.ConfigEntries
+
+	for _, entry := range entries {
+		if _, _, err := ce.Set(entry, nil); err != nil {
+			return err
+		}
+
+		ckn := consulfunc.ConfigKindName{
+			Kind: entry.GetKind(),
+			Name: entry.GetName(),
+		}
+		delete(currentEntries, ckn)
+
+		t.logger.Info("config entry created",
+			"kind", entry.GetKind(),
+			"name", entry.GetName(),
+		)
+	}
+
+	// Loop over the kinds in the order that will make the graph happy during erasure.
+	for _, kind := range []string{
+		api.ServiceRouter,
+		api.ServiceSplitter,
+		api.ServiceResolver,
+		api.ServiceDefaults,
+		api.ProxyDefaults,
+	} {
+		for ckn, _ := range currentEntries {
+			if ckn.Kind != kind {
 				continue
 			}
 
-			sce := &api.ServiceConfigEntry{
-				Kind:     api.ServiceDefaults,
-				Name:     s.Name,
-				Protocol: "http",
-			}
+			t.logger.Info(fmt.Sprintf("nuking config entry %s/%s", ckn.Kind, ckn.Name))
 
-			ce := client.ConfigEntries()
-
-			_, _, err := ce.Set(sce, nil)
+			_, err = ce.Delete(ckn.Kind, ckn.Name, nil)
 			if err != nil {
 				return err
 			}
 
-			t.logger.Info("service default config created",
-				"service", s.Name,
-			)
-
-			done[s.Name] = struct{}{}
+			delete(currentEntries, ckn)
 		}
-		return nil
-	})
+	}
+
+	return nil
 }
 
 func (t *Tool) writeServiceRegistrationFiles() error {
@@ -573,11 +647,11 @@ services = [
       },
     ]
 
-	meta {
-	{{ range $k, $v := .Meta }}
-	  "{{ $k }}" = "{{ $v }}",
-	{{ end }}
-	}
+    meta {
+{{- range $k, $v := .Meta }}
+      "{{ $k }}" = "{{ $v }}",
+{{- end }}
+    }
 
     connect {
       sidecar_service {
@@ -586,6 +660,9 @@ services = [
             {
               destination_name = "{{.UpstreamName}}"
               local_bind_port  = {{.UpstreamLocalPort}}
+{{- if .UpstreamDatacenter }}
+              datacenter = "{{.UpstreamDatacenter}}"
+{{- end }}
             },
           ]
         }

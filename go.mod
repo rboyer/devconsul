@@ -5,7 +5,7 @@ go 1.12
 require (
 	github.com/armon/go-metrics v0.0.0-20190423201044-2801d9688273 // indirect
 	github.com/google/btree v1.0.0 // indirect
-	github.com/hashicorp/consul/api v1.1.0
+	github.com/hashicorp/consul/api v1.1.1-0.20190807163521-3a3086ecd22d
 	github.com/hashicorp/go-hclog v0.9.2
 	github.com/hashicorp/go-msgpack v0.5.4 // indirect
 	github.com/hashicorp/go-sockaddr v1.0.2 // indirect

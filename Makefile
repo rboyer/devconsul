@@ -100,3 +100,12 @@ members:
 .PHONY: services
 services:
 	@./consul.sh dc1 catalog services
+
+.PHONY: configs
+configs:
+	@for kind in service-router service-splitter service-resolver service-defaults proxy-defaults ; do \
+	    names=$$(./consul.sh dc1 config list -kind $$kind | sort) ; \
+		for name in $$names; do \
+			echo "$$kind/$$name" ; \
+		done ; \
+	done

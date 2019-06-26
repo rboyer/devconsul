@@ -51,10 +51,17 @@ func (t *Tool) commandGen() error {
 			return err
 		}
 
-		extraYAML, err := t.generatePingPongYAML(podName, node)
+		extraYAML_1, err := t.generateMeshGatewayYAML(podName, node)
 		if err != nil {
 			return err
 		}
+
+		extraYAML_2, err := t.generatePingPongYAML(podName, node)
+		if err != nil {
+			return err
+		}
+
+		extraYAML := extraYAML_1 + "\n\n" + extraYAML_2
 
 		pod := composePod{
 			PodName:        podName,
@@ -269,6 +276,56 @@ var pingpongT = template.Must(template.New("pingpong").Parse(`  ################
       #################
       - '-sidecar-for'
       - '{{.PingPong}}'
+      - '-admin-bind'
+      # for demo purposes
+      - '0.0.0.0:19000'
+      - '--'
+      - '-l'
+      - '{{ .EnvoyLogLevel }}'
+`))
+
+func (t *Tool) generateMeshGatewayYAML(podName string, node Node) (string, error) {
+	if !node.MeshGateway {
+		return "", nil
+	}
+
+	mgi := meshGatewayInfo{
+		PodName:       podName,
+		NodeName:      node.Name,
+		EnvoyLogLevel: t.config.Envoy.LogLevel,
+	}
+
+	var extraYAML bytes.Buffer
+	if err := meshGatewayT.Execute(&extraYAML, &mgi); err != nil {
+		return "", err
+	}
+	return extraYAML.String(), nil
+}
+
+type meshGatewayInfo struct {
+	PodName       string
+	NodeName      string
+	EnvoyLogLevel string
+}
+
+var meshGatewayT = template.Must(template.New("mesh-gateway").Parse(`  #####################
+  {{.NodeName}}-mesh-gateway:
+    network_mode: 'service:{{.PodName}}'
+    depends_on:
+      - {{.NodeName}}
+    image: local/consul-envoy
+    init: true
+    restart: on-failure
+    volumes:
+      - './cache:/secrets:ro'
+      - './mesh-gateway-sidecar-boot.sh:/bin/mesh-gateway-sidecar-boot.sh:ro'
+    command:
+      - '/bin/mesh-gateway-sidecar-boot.sh'
+      - "/secrets/ready.val"
+      - "-t"
+      - "/secrets/mesh-gateway.val"
+      - '--'
+      #################
       - '-admin-bind'
       # for demo purposes
       - '0.0.0.0:19000'
