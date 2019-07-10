@@ -84,3 +84,25 @@ dc2=2}`:
 The copies of pingpong running in the two pods are configured to dial each
 other using Connect and exchange simple RPCs to showcase all of the plumbing in
 action.
+
+## Warning about running on OSX
+
+Everything works fine on a linux machine as long as docker is running directly
+on your host machine where you are running the makefile and helper scripts.
+
+For some reasons Docker-for-mac does not make networks created with
+docker/docker-compose routable from the host laptop. The networks work
+perfectly well _inside of the VM_ but not from the host.
+
+This is troublesome because this repository assumes that the place the
+makefile/scripts/go-program run from can access the `10.0.0.0/16` address space
+and have it be routed to the correct container.
+
+There are three awkward solutions:
+
+1. Actually run this repository from within the VM.
+
+2. Use some CLI route table commands to intercept `10.0.0.0/16` and route it to
+   the VM.
+
+3. Use linux.
