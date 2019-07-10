@@ -12,11 +12,30 @@ This project helps bring up a local Consul Connect cluster using Docker.
 
 ## Getting Started
 
-1. Run `make`. This will create any necessary docker containers that you may
+1. Fork this repository. I'm not currently making guarantees about destructive
+   changes to this repository.
+
+2. Create a `consul.hcl` file (see below).
+
+3. Run `make`. This will create any necessary docker containers that you may
    lack.
-2. Run `make up`. This will bring up the containers with docker-compose, and
+
+4. Run `make up`. This will bring up the containers with docker-compose, and
    then `devconsul boot` to bootstrap the cluster.
-3. If you wish to destroy everything, run `make down`.
+
+5. If you wish to destroy everything, run `make down`.
+
+## If you are developing consul
+
+1. From your `consul` working copy run `make dev-docker`. This will update a
+   `consul-dev:latest` docker image locally.
+
+2. From your `devconsul` working copy run `make force-docker` to rebuild the
+   images locally to use that binary.
+
+3. Set `consul_image = "consul-dev:latest"` in your `config.hcl` file
+   (discussed below).  You may wish to just start from the
+   `example-dev-connect--config.hcl` file in this repository.
 
 ## Configuration
 
