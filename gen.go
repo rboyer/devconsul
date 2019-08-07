@@ -194,18 +194,25 @@ func (t *Tool) generatePingPongYAML(podName string, node Node) (string, error) {
 		}
 
 		ppi := pingpongInfo{
-			PodName:       podName,
-			NodeName:      node.Name,
-			PingPong:      svc.Name,
-			EnvoyLogLevel: t.config.Envoy.LogLevel,
+			PodName:         podName,
+			NodeName:        node.Name,
+			PingPong:        svc.Name,
+			UseBuiltinProxy: node.UseBuiltinProxy,
+			EnvoyLogLevel:   t.config.Envoy.LogLevel,
 		}
 		if len(svc.Meta) > 0 {
 			ppi.MetaString = fmt.Sprintf("--%q", svc.Meta)
 		}
 
+		proxyType := "envoy"
+		if node.UseBuiltinProxy {
+			proxyType = "builtin"
+		}
+
 		if t.config.Kubernetes.Enabled {
 			ppi.SidecarBootArgs = []string{
 				"/secrets/ready.val",
+				proxyType,
 				"login",
 				"-t",
 				"/secrets/k8s/service_jwt_token." + svc.Name,
@@ -217,6 +224,7 @@ func (t *Tool) generatePingPongYAML(podName string, node Node) (string, error) {
 		} else {
 			ppi.SidecarBootArgs = []string{
 				"/secrets/ready.val",
+				proxyType,
 				"direct",
 				"-t",
 				"/secrets/service-token--" + svc.Name + ".val",
@@ -238,6 +246,7 @@ type pingpongInfo struct {
 	PingPong        string // ping or pong
 	MetaString      string
 	SidecarBootArgs []string
+	UseBuiltinProxy bool
 	EnvoyLogLevel   string
 }
 
@@ -276,12 +285,14 @@ var pingpongT = template.Must(template.New("pingpong").Parse(`  ################
       #################
       - '-sidecar-for'
       - '{{.PingPong}}'
+{{- if not .UseBuiltinProxy }}
       - '-admin-bind'
       # for demo purposes
       - '0.0.0.0:19000'
       - '--'
       - '-l'
       - '{{ .EnvoyLogLevel }}'
+{{- end }}
 `))
 
 func (t *Tool) generateMeshGatewayYAML(podName string, node Node) (string, error) {

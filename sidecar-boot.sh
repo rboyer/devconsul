@@ -5,6 +5,11 @@ set -euo pipefail
 ready_file="${1:-}"
 shift
 
+proxy_type="${1:-}"
+shift
+
+echo "launching a '${proxy_type}' sidecar proxy"
+
 mode="${1:-}"
 shift
 
@@ -63,14 +68,22 @@ case "${mode}" in
         # whitespace in the middle so :shrug:
         token="${token//[[:space:]]}"
 
-        echo "Loaded token ${token} from ${token_file}"
-
         echo "Registering service..."
-        consul services register -token "${token}" "${service_register_file}"
+        consul services register -token-file "${token_file}" "${service_register_file}"
 
         echo "Launching proxy..."
-        consul connect envoy -bootstrap -token "${token}" "$@" > /tmp/envoy.config
-        exec consul connect envoy -token "${token}" "$@"
+        case "${proxy_type}" in
+            envoy)
+                consul connect envoy -bootstrap -token-file "${token_file}" "$@" > /tmp/envoy.config
+                exec consul connect envoy -token-file "${token_file}" "$@"
+                ;;
+            builtin)
+                exec consul connect proxy -token-file "${token_file}" "$@"
+                ;;
+            *)
+                echo "unknown proxy type: ${proxy_type}" >&2
+                exit 1
+        esac
         ;;
     login)
         bearer_token_file=""
@@ -124,8 +137,18 @@ case "${mode}" in
         consul services register -token-file "${token_sink_file}" "${service_register_file}"
 
         echo "Launching proxy..."
-        consul connect envoy -bootstrap -token-file "${token_sink_file}" "$@" > /tmp/envoy.config
-        exec consul connect envoy -token-file "${token_sink_file}" "$@"
+        case "${proxy_type}" in
+            envoy)
+                consul connect envoy -bootstrap -token-file "${token_sink_file}" "$@" > /tmp/envoy.config
+                exec consul connect envoy -token-file "${token_sink_file}" "$@"
+                ;;
+            builtin)
+                exec consul connect proxy -token-file "${token_sink_file}" "$@"
+                ;;
+            *)
+                echo "unknown proxy type: ${proxy_type}" >&2
+                exit 1
+        esac
         ;;
     *)
         echo "unknown mode: $mode" >&2

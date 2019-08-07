@@ -65,6 +65,7 @@ type ConfigTopologyNodeConfig struct {
 	UpstreamDatacenter string            `hcl:"upstream_datacenter"`
 	ServiceMeta        map[string]string `hcl:"service_meta"` // key -> val
 	MeshGateway        bool              `hcl:"mesh_gateway"`
+	UseBuiltinProxy    bool              `hcl:"use_builtin_proxy"`
 }
 
 func (c *ConfigTopologyNodeConfig) Meta() map[string]string {

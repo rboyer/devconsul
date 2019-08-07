@@ -58,6 +58,9 @@ func InferTopology(c *Config) (*Topology, error) {
 			if nodeConfig.MeshGateway {
 				node.MeshGateway = true
 			} else {
+				if nodeConfig.UseBuiltinProxy {
+					node.UseBuiltinProxy = true
+				}
 				svc := Service{
 					Port:              8080,
 					UpstreamLocalPort: 9090,
@@ -153,13 +156,14 @@ func (t *Topology) WalkSilent(f func(n Node)) {
 }
 
 type Node struct {
-	Datacenter  string    `hcl:"datacenter"`
-	Name        string    `hcl:"name,key"`
-	Server      bool      `hcl:"server"`
-	IPAddress   string    `hcl:"ip_address"`
-	Services    []Service `hcl:"service"`
-	MeshGateway bool      `hcl:"mesh_gateway"`
-	Index       int       `hcl:"-"`
+	Datacenter      string    `hcl:"datacenter"`
+	Name            string    `hcl:"name,key"`
+	Server          bool      `hcl:"server"`
+	IPAddress       string    `hcl:"ip_address"`
+	Services        []Service `hcl:"service"`
+	MeshGateway     bool      `hcl:"mesh_gateway"`
+	UseBuiltinProxy bool      `hcl:"use_builtin_proxy"`
+	Index           int       `hcl:"-"`
 }
 
 func (n *Node) TokenName() string { return "agent--" + n.Name }
