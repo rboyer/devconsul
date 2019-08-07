@@ -223,7 +223,7 @@ func (t *Tool) createMeshGatewayToken() error {
 		},
 	}
 
-	token, err = consulfunc.CreateOrUpdateToken(t.clientDC1, token)
+	token, err := consulfunc.CreateOrUpdateToken(t.clientDC1, token)
 	if err != nil {
 		return err
 	}
