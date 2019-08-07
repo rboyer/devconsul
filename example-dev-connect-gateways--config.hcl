@@ -52,63 +52,63 @@ topology {
   clients {
     dc1 = 5
     dc2 = 5
+  }
 
-    node_config {
-      // Gateways are the last client in each DC.
-      "dc1-client5" = {
-        mesh_gateway = true
+  node_config {
+    // Gateways are the last client in each DC.
+    "dc1-client5" = {
+      mesh_gateway = true
+    }
+
+    "dc2-client5" = {
+      mesh_gateway = true
+    }
+
+    "dc1-client1" = {
+      service_meta {
+        version = "v1" // ping
       }
+    }
 
-      "dc2-client5" = {
-        mesh_gateway = true
+    "dc1-client2" = {
+      service_meta {
+        version = "v1" // pong
       }
+    }
 
-      "dc1-client1" = {
-        service_meta {
-          version = "v1" // ping
-        }
+    "dc1-client3" = {
+      service_meta {
+        version = "v2" // ping
       }
+    }
 
-      "dc1-client2" = {
-        service_meta {
-          version = "v1" // pong
-        }
+    "dc1-client4" = {
+      service_meta {
+        version = "v2" // pong
       }
+    }
 
-      "dc1-client3" = {
-        service_meta {
-          version = "v2" // ping
-        }
+    "dc2-client1" = {
+      service_meta {
+        version = "v1" // ping
       }
+    }
 
-      "dc1-client4" = {
-        service_meta {
-          version = "v2" // pong
-        }
+    "dc2-client2" = {
+      service_meta {
+        version = "v1" // pong
       }
+    }
 
-      "dc2-client1" = {
-        service_meta {
-          version = "v1" // ping
-        }
+    "dc2-client3" = {
+      service_meta {
+        version = "v2" // ping
       }
+    }
 
-      "dc2-client2" = {
-        service_meta {
-          version = "v1" // pong
-        }
-      }
-
-      "dc2-client3" = {
-        service_meta {
-          version = "v2" // ping
-        }
-      }
-
-      "dc2-client4" = {
-        service_meta {
-          version = "v2" // pong
-        }
+    "dc2-client4" = {
+      service_meta {
+        version = "v2" // pong
       }
     }
   }

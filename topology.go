@@ -33,7 +33,7 @@ func InferTopology(c *Config) (*Topology, error) {
 			addNode(node)
 		}
 
-		nodeConfigs := c.Topology.Clients.NodeConfig
+		nodeConfigs := c.Topology.NodeConfig
 
 		for idx := 1; idx <= clients; idx++ {
 			id := strconv.Itoa(idx)

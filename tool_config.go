@@ -22,8 +22,8 @@ func DefaultConfig() Config {
 			Clients: ConfigTopologyDatacenter{
 				Datacenter1: 2,
 				Datacenter2: 2,
-				NodeConfig:  map[string]ConfigTopologyNodeConfig{},
 			},
+			NodeConfig: map[string]ConfigTopologyNodeConfig{},
 		},
 	}
 }
@@ -50,15 +50,14 @@ type ConfigEnvoy struct {
 }
 
 type ConfigTopology struct {
-	Servers ConfigTopologyDatacenter `hcl:"servers"`
-	Clients ConfigTopologyDatacenter `hcl:"clients"`
+	Servers    ConfigTopologyDatacenter            `hcl:"servers"`
+	Clients    ConfigTopologyDatacenter            `hcl:"clients"`
+	NodeConfig map[string]ConfigTopologyNodeConfig `hcl:"node_config"` // node -> data
 }
 
 type ConfigTopologyDatacenter struct {
 	Datacenter1 int `hcl:"dc1"`
 	Datacenter2 int `hcl:"dc2"`
-	// Just for clients
-	NodeConfig map[string]ConfigTopologyNodeConfig `hcl:"node_config"` // node -> data
 }
 
 type ConfigTopologyNodeConfig struct {
