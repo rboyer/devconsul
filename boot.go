@@ -215,32 +215,12 @@ service_prefix "" {
 func (t *Tool) createMeshGatewayToken() error {
 	const meshGatewayName = "mesh-gateway"
 
-	p := &api.ACLPolicy{
-		Name:        meshGatewayName,
-		Description: meshGatewayName,
-		Rules: `
-service "mesh-gateway" {
-  policy = "write"
-}
-service_prefix "" {
-  policy = "read"
-}
-node_prefix "" {
-  policy = "read"
-}
-`,
-	}
-	p, err := consulfunc.CreateOrUpdatePolicy(t.clientDC1, p)
-	if err != nil {
-		return err
-	}
-
-	t.logger.Info(fmt.Sprintf("mesh-gateway policy id for %q is: %s", p.Name, p.ID))
-
 	token := &api.ACLToken{
 		Description: meshGatewayName,
 		Local:       false,
-		Policies:    []*api.ACLTokenPolicyLink{{ID: p.ID}},
+		ServiceIdentities: []*api.ACLServiceIdentity{
+			{ServiceName: "mesh-gateway"},
+		},
 	}
 
 	token, err = consulfunc.CreateOrUpdateToken(t.clientDC1, token)
