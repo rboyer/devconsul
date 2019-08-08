@@ -388,39 +388,40 @@ func (t *Tool) createServiceTokens() error {
 	done := make(map[string]struct{})
 
 	return t.topology.Walk(func(n Node) error {
-		for _, s := range n.Services {
-			if _, ok := done[s.Name]; ok {
-				continue
-			}
-
-			token := &api.ACLToken{
-				Description: "service--" + s.Name,
-				Local:       false,
-				ServiceIdentities: []*api.ACLServiceIdentity{
-					&api.ACLServiceIdentity{
-						ServiceName: s.Name,
-					},
-				},
-			}
-
-			token, err := consulfunc.CreateOrUpdateToken(t.clientDC1, token)
-			if err != nil {
-				return err
-			}
-
-			t.logger.Info("service token created",
-				"service", s.Name,
-				"token", token.SecretID,
-			)
-
-			if err := t.cache.SaveValue("service-token--"+s.Name, token.SecretID); err != nil {
-				return err
-			}
-
-			t.setToken("service", s.Name, token.SecretID)
-
-			done[s.Name] = struct{}{}
+		if n.Service == nil {
+			return nil
 		}
+		if _, ok := done[n.Service.Name]; ok {
+			return nil
+		}
+
+		token := &api.ACLToken{
+			Description: "service--" + n.Service.Name,
+			Local:       false,
+			ServiceIdentities: []*api.ACLServiceIdentity{
+				&api.ACLServiceIdentity{
+					ServiceName: n.Service.Name,
+				},
+			},
+		}
+
+		token, err := consulfunc.CreateOrUpdateToken(t.clientDC1, token)
+		if err != nil {
+			return err
+		}
+
+		t.logger.Info("service token created",
+			"service", n.Service.Name,
+			"token", token.SecretID,
+		)
+
+		if err := t.cache.SaveValue("service-token--"+n.Service.Name, token.SecretID); err != nil {
+			return err
+		}
+
+		t.setToken("service", n.Service.Name, token.SecretID)
+
+		done[n.Service.Name] = struct{}{}
 		return nil
 	})
 }
@@ -437,6 +438,34 @@ func (t *Tool) writeCentralConfigs() error {
 	ce := client.ConfigEntries()
 
 	entries := t.config.ConfigEntries
+	if t.config.Monitor.Prometheus {
+		found := false
+		for _, entry := range entries {
+			if entry.GetKind() != api.ProxyDefaults {
+				continue
+			}
+			if entry.GetName() != api.ProxyConfigGlobal {
+				continue
+			}
+			ce := entry.(*api.ProxyConfigEntry)
+			if ce.Config == nil {
+				ce.Config = make(map[string]interface{})
+			}
+			// hardcoded address of prometheus container
+			ce.Config["envoy_prometheus_bind_addr"] = "0.0.0.0:9102"
+			found = true
+			break
+		}
+		if !found {
+			entries = append(entries, &api.ProxyConfigEntry{
+				Kind: api.ProxyDefaults,
+				Name: api.ProxyConfigGlobal,
+				Config: map[string]interface{}{
+					"envoy_prometheus_bind_addr": "0.0.0.0:9102",
+				},
+			})
+		}
+	}
 
 	for _, entry := range entries {
 		if _, _, err := ce.Set(entry, nil); err != nil {
@@ -484,19 +513,21 @@ func (t *Tool) writeCentralConfigs() error {
 
 func (t *Tool) writeServiceRegistrationFiles() error {
 	return t.topology.Walk(func(n Node) error {
-		for _, s := range n.Services {
-			var buf bytes.Buffer
-			if err := serviceRegistrationT.Execute(&buf, &s); err != nil {
-				return err
-			}
-			regHCL := buf.String()
-
-			filename := "servicereg__" + n.Name + "__" + s.Name + ".hcl"
-			if err := t.cache.WriteStringFile(filename, regHCL); err != nil {
-				return err
-			}
-			t.logger.Info("Generated", "filename", filename)
+		if n.Service == nil {
+			return nil
 		}
+
+		var buf bytes.Buffer
+		if err := serviceRegistrationT.Execute(&buf, n.Service); err != nil {
+			return err
+		}
+		regHCL := buf.String()
+
+		filename := "servicereg__" + n.Name + "__" + n.Service.Name + ".hcl"
+		if err := t.cache.WriteStringFile(filename, regHCL); err != nil {
+			return err
+		}
+		t.logger.Info("Generated", "filename", filename)
 		return nil
 	})
 }
@@ -523,23 +554,24 @@ func intentionKey(i *api.Intention) string {
 
 func (t *Tool) createIntentions() error {
 	return t.topology.Walk(func(n Node) error {
-		for _, s := range n.Services {
-			i := &api.Intention{
-				SourceName:      s.Name,
-				DestinationName: s.UpstreamName,
-				Action:          api.IntentionActionAllow,
-			}
-
-			oi, err := consulfunc.CreateOrUpdateIntention(t.clientDC1, i)
-			if err != nil {
-				return err
-			}
-
-			t.logger.Info("created/updated intention", "src", oi.SourceName,
-				"dst", oi.DestinationName, "action", oi.Action)
-
+		if n.Service == nil {
 			return nil
 		}
+
+		i := &api.Intention{
+			SourceName:      n.Service.Name,
+			DestinationName: n.Service.UpstreamName,
+			Action:          api.IntentionActionAllow,
+		}
+
+		oi, err := consulfunc.CreateOrUpdateIntention(t.clientDC1, i)
+		if err != nil {
+			return err
+		}
+
+		t.logger.Info("created/updated intention", "src", oi.SourceName,
+			"dst", oi.DestinationName, "action", oi.Action)
+
 		return nil
 	})
 }
@@ -643,6 +675,7 @@ services = [
 {{- if .UpstreamDatacenter }}
               datacenter = "{{.UpstreamDatacenter}}"
 {{- end }}
+{{ .UpstreamExtraHCL }}
             },
           ]
         }

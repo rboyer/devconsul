@@ -33,6 +33,7 @@ type Config struct {
 	Encryption         ConfigEncryption  `hcl:"encryption"`
 	Kubernetes         ConfigKubernetes  `hcl:"kubernetes"`
 	Envoy              ConfigEnvoy       `hcl:"envoy"`
+	Monitor            ConfigMonitor     `hcl:"monitor"`
 	Topology           ConfigTopology    `hcl:"topology"`
 	InitialMasterToken string            `hcl:"initial_master_token"`
 	RawConfigEntries   []string          `hcl:"config_entries"`
@@ -47,6 +48,9 @@ type ConfigKubernetes struct {
 }
 type ConfigEnvoy struct {
 	LogLevel string `hcl:"log_level"`
+}
+type ConfigMonitor struct {
+	Prometheus bool `hcl:"prometheus"`
 }
 
 type ConfigTopology struct {
@@ -63,6 +67,7 @@ type ConfigTopologyDatacenter struct {
 type ConfigTopologyNodeConfig struct {
 	UpstreamName       string            `hcl:"upstream_name"`
 	UpstreamDatacenter string            `hcl:"upstream_datacenter"`
+	UpstreamExtraHCL   string            `hcl:"upstream_extra_hcl"`
 	ServiceMeta        map[string]string `hcl:"service_meta"` // key -> val
 	MeshGateway        bool              `hcl:"mesh_gateway"`
 	UseBuiltinProxy    bool              `hcl:"use_builtin_proxy"`

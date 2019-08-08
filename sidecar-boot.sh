@@ -68,6 +68,15 @@ case "${mode}" in
         # whitespace in the middle so :shrug:
         token="${token//[[:space:]]}"
 
+        while : ; do
+            if consul acl token read -token-file "${token_file}" -self &> /dev/null ; then
+                break
+            fi
+
+            echo "waiting for ACLs to work..."
+            sleep 0.1
+        done
+
         echo "Registering service..."
         consul services register -token-file "${token_file}" "${service_register_file}"
 

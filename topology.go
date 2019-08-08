@@ -64,6 +64,7 @@ func InferTopology(c *Config) (*Topology, error) {
 				svc := Service{
 					Port:              8080,
 					UpstreamLocalPort: 9090,
+					UpstreamExtraHCL:  nodeConfig.UpstreamExtraHCL,
 					Meta:              nodeConfig.Meta(),
 				}
 				if idx%2 == 1 {
@@ -81,7 +82,7 @@ func InferTopology(c *Config) (*Topology, error) {
 					svc.UpstreamDatacenter = nodeConfig.UpstreamDatacenter
 				}
 
-				node.Services = []Service{svc}
+				node.Service = &svc
 			}
 
 			addNode(node)
@@ -156,23 +157,24 @@ func (t *Topology) WalkSilent(f func(n Node)) {
 }
 
 type Node struct {
-	Datacenter      string    `hcl:"datacenter"`
-	Name            string    `hcl:"name,key"`
-	Server          bool      `hcl:"server"`
-	IPAddress       string    `hcl:"ip_address"`
-	Services        []Service `hcl:"service"`
-	MeshGateway     bool      `hcl:"mesh_gateway"`
-	UseBuiltinProxy bool      `hcl:"use_builtin_proxy"`
-	Index           int       `hcl:"-"`
+	Datacenter      string
+	Name            string
+	Server          bool
+	IPAddress       string
+	Service         *Service
+	MeshGateway     bool
+	UseBuiltinProxy bool
+	Index           int
 }
 
 func (n *Node) TokenName() string { return "agent--" + n.Name }
 
 type Service struct {
-	Name               string            `hcl:"name,key"`
-	Port               int               `hcl:"port"`
-	UpstreamName       string            `hcl:"upstream_name"`
-	UpstreamDatacenter string            `hcl:"upstream_datacenter"`
-	UpstreamLocalPort  int               `hcl:"upstream_local_port"`
-	Meta               map[string]string `hcl:"meta"`
+	Name               string
+	Port               int
+	UpstreamName       string
+	UpstreamDatacenter string
+	UpstreamLocalPort  int
+	UpstreamExtraHCL   string
+	Meta               map[string]string
 }
