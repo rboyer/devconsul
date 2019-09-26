@@ -36,7 +36,7 @@ func (t *Tool) commandGen() error {
 				"name", node.Name,
 				"server", node.Server,
 				"dc", node.Datacenter,
-				"ip", node.IPAddress,
+				"ip", node.LocalAddress(),
 			)
 		})
 	}
@@ -66,6 +66,33 @@ func (t *Tool) generateComposeFile() error {
 	if t.config.Monitor.Prometheus {
 		info.Volumes = append(info.Volumes, "prometheus-data")
 		info.Volumes = append(info.Volumes, "grafana-data")
+	}
+
+	switch t.topology.netShape {
+	case NetworkShapeDual:
+		info.Networks = []composeNetwork{
+			{
+				Name: "wan",
+				CIDR: "10.1.0.0/16",
+			},
+			{
+				Name: "dc1",
+				CIDR: "10.0.1.0/24",
+			},
+			{
+				Name: "dc2",
+				CIDR: "10.0.2.0/24",
+			},
+		}
+	case NetworkShapeFlat:
+		info.Networks = []composeNetwork{
+			{
+				Name: "lan",
+				CIDR: "10.0.0.0/16",
+			},
+		}
+	default:
+		panic("unknown shape: " + t.topology.netShape)
 	}
 
 	err := t.topology.Walk(func(node Node) error {
@@ -123,8 +150,14 @@ type composeInfo struct {
 	Config        *Config
 	RuntimeConfig RuntimeConfig
 
-	Volumes []string
-	Pods    []composePod
+	Volumes  []string
+	Pods     []composePod
+	Networks []composeNetwork
+}
+
+type composeNetwork struct {
+	Name string
+	CIDR string
 }
 
 type composePod struct {
@@ -147,11 +180,13 @@ var dockerComposeT = template.Must(template.New("docker").Parse(`version: '3.7'
 #   it should be disabled for real topologies
 
 networks:
-  consul:
+{{- range .Networks }}
+  consul-{{ .Name }}:
     ipam:
       driver: default
       config:
-        - subnet: '10.0.0.0/16'
+        - subnet: '{{ .CIDR }}'
+{{- end }}
 
 volumes:
 {{- range .Volumes }}
@@ -165,12 +200,10 @@ services:
     image: prom/prometheus:latest
     restart: always
     dns: 8.8.8.8
+	network_mode: host
     volumes:
       - 'prometheus-data:/prometheus-data'
       - './cache/prometheus.yml:/etc/prometheus/prometheus.yml:ro'
-    networks:
-      consul:
-        ipv4_address: '10.0.100.1'
 
   grafana:
     network_mode: 'service:prometheus'
@@ -191,8 +224,10 @@ services:
     restart: always
     dns: 8.8.8.8
     networks:
-      consul:
-        ipv4_address: '{{.Node.IPAddress}}'
+{{- range .Node.Addresses }}
+      consul-{{.Network}}:
+        ipv4_address: '{{.IPAddress}}'
+{{- end }}
 
   {{.Node.Name}}:
     network_mode: 'service:{{.PodName}}'
@@ -338,6 +373,14 @@ func (t *Tool) generateMeshGatewayYAML(podName string, node Node) (string, error
 		EnvoyLogLevel: t.config.Envoy.LogLevel,
 	}
 
+	switch t.topology.netShape {
+	case NetworkShapeDual:
+		mgi.EnableWAN = true
+	case NetworkShapeFlat:
+	default:
+		panic("unknown shape: " + t.topology.netShape)
+	}
+
 	var extraYAML bytes.Buffer
 	if err := meshGatewayT.Execute(&extraYAML, &mgi); err != nil {
 		return "", err
@@ -349,6 +392,7 @@ type meshGatewayInfo struct {
 	PodName       string
 	NodeName      string
 	EnvoyLogLevel string
+	EnableWAN     bool
 }
 
 var meshGatewayT = template.Must(template.New("mesh-gateway").Parse(`  #####################
@@ -369,6 +413,10 @@ var meshGatewayT = template.Must(template.New("mesh-gateway").Parse(`  #########
       - "/secrets/mesh-gateway.val"
       - '--'
       #################
+{{- if .EnableWAN }}
+      - '-wan-address'
+      - '{{ "{{ GetInterfaceIP \"eth1\" }}:443" }}'
+{{- end }}
       - '-admin-bind'
       # for demo purposes
       - '0.0.0.0:19000'
@@ -379,6 +427,7 @@ var meshGatewayT = template.Must(template.New("mesh-gateway").Parse(`  #########
 
 func (t *Tool) generateAgentHCL(node Node) (string, error) {
 	configInfo := consulAgentConfigInfo{
+		AdvertiseAddr:    node.LocalAddress(),
 		RetryJoin:        `"` + strings.Join(t.topology.ServerIPs(node.Datacenter), `", "`) + `"`,
 		Datacenter:       node.Datacenter,
 		AgentMasterToken: t.runtimeConfig.AgentMasterToken,
@@ -390,9 +439,20 @@ func (t *Tool) generateAgentHCL(node Node) (string, error) {
 
 	if node.Server {
 		configInfo.MasterToken = t.config.InitialMasterToken
-		leaderDC1 := t.topology.LeaderIP("dc1")
-		leaderDC2 := t.topology.LeaderIP("dc2")
-		configInfo.RetryJoinWAN = `"` + leaderDC1 + `", "` + leaderDC2 + `"`
+
+		switch t.topology.netShape {
+		case NetworkShapeDual:
+			leaderDC1 := t.topology.WANLeaderIP("dc1")
+			leaderDC2 := t.topology.WANLeaderIP("dc2")
+			configInfo.RetryJoinWAN = `"` + leaderDC1 + `", "` + leaderDC2 + `"`
+			configInfo.AdvertiseAddrWAN = node.PublicAddress()
+		case NetworkShapeFlat:
+			leaderDC1 := t.topology.LeaderIP("dc1")
+			leaderDC2 := t.topology.LeaderIP("dc2")
+			configInfo.RetryJoinWAN = `"` + leaderDC1 + `", "` + leaderDC2 + `"`
+		default:
+			panic("unknown shape: " + t.topology.netShape)
+		}
 
 		configInfo.SecondaryServer = node.Datacenter != "dc1"
 		configInfo.BootstrapExpect = len(t.topology.ServerIPs(node.Datacenter))
@@ -411,6 +471,8 @@ func (t *Tool) generateAgentHCL(node Node) (string, error) {
 }
 
 type consulAgentConfigInfo struct {
+	AdvertiseAddr    string
+	AdvertiseAddrWAN string
 	RetryJoin        string
 	RetryJoinWAN     string
 	Datacenter       string
@@ -429,6 +491,12 @@ var consulAgentConfigT = template.Must(template.New("consul-agent-config").Parse
 {{ if .Server -}}
 bootstrap_expect       = {{.BootstrapExpect}}
 {{- end}}
+client_addr            = "0.0.0.0"
+advertise_addr         = "{{.AdvertiseAddr }}"
+{{ if .AdvertiseAddrWAN -}}
+advertise_addr_wan     = "{{.AdvertiseAddrWAN }}"
+{{- end}}
+translate_wan_addrs    = true
 client_addr            = "0.0.0.0"
 datacenter             = "{{.Datacenter}}"
 disable_update_check   = true
@@ -548,7 +616,7 @@ func (t *Tool) generatePrometheusConfigFile() error {
 					"token":  []string{t.runtimeConfig.AgentMasterToken},
 				},
 				Targets: []string{
-					net.JoinHostPort(node.IPAddress, "8500"),
+					net.JoinHostPort(node.LocalAddress(), "8500"),
 				},
 				Labels: []kv{
 					{"dc", node.Datacenter},
@@ -565,7 +633,7 @@ func (t *Tool) generatePrometheusConfigFile() error {
 					"token":  []string{t.runtimeConfig.AgentMasterToken},
 				},
 				Targets: []string{
-					net.JoinHostPort(node.IPAddress, "8500"),
+					net.JoinHostPort(node.LocalAddress(), "8500"),
 				},
 				Labels: []kv{
 					{"dc", node.Datacenter},
@@ -579,7 +647,7 @@ func (t *Tool) generatePrometheusConfigFile() error {
 					Name:        "mesh-gateways-" + node.Datacenter,
 					MetricsPath: "/metrics",
 					Targets: []string{
-						net.JoinHostPort(node.IPAddress, "9102"),
+						net.JoinHostPort(node.LocalAddress(), "9102"),
 					},
 					Labels: []kv{
 						{"dc", node.Datacenter},
@@ -592,7 +660,7 @@ func (t *Tool) generatePrometheusConfigFile() error {
 					Name:        node.Service.Name + "-proxy",
 					MetricsPath: "/metrics",
 					Targets: []string{
-						net.JoinHostPort(node.IPAddress, "9102"),
+						net.JoinHostPort(node.LocalAddress(), "9102"),
 					},
 					Labels: []kv{
 						{"dc", node.Datacenter},

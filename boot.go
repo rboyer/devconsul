@@ -249,7 +249,7 @@ func (t *Tool) injectReplicationToken() error {
 			return nil
 		}
 
-		agentClient, err := consulfunc.GetClient(node.IPAddress, agentMasterToken)
+		agentClient, err := consulfunc.GetClient(node.LocalAddress(), agentMasterToken)
 		if err != nil {
 			return err
 		}
@@ -314,7 +314,7 @@ service_prefix "" { policy = "read" }
 // TALK TO EACH AGENT
 func (t *Tool) injectAgentTokens() error {
 	return t.topology.Walk(func(node Node) error {
-		agentClient, err := consulfunc.GetClient(node.IPAddress, t.masterToken)
+		agentClient, err := consulfunc.GetClient(node.LocalAddress(), t.masterToken)
 		if err != nil {
 			return err
 		}

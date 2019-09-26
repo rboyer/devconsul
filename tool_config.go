@@ -54,9 +54,10 @@ type ConfigMonitor struct {
 }
 
 type ConfigTopology struct {
-	Servers    ConfigTopologyDatacenter            `hcl:"servers"`
-	Clients    ConfigTopologyDatacenter            `hcl:"clients"`
-	NodeConfig map[string]ConfigTopologyNodeConfig `hcl:"node_config"` // node -> data
+	NetworkShape string                              `hcl:"network_shape"`
+	Servers      ConfigTopologyDatacenter            `hcl:"servers"`
+	Clients      ConfigTopologyDatacenter            `hcl:"clients"`
+	NodeConfig   map[string]ConfigTopologyNodeConfig `hcl:"node_config"` // node -> data
 }
 
 type ConfigTopologyDatacenter struct {
