@@ -12,21 +12,7 @@ $(PROGRAM_NAME): *.go cachestore/*.go consulfunc/*.go go.mod go.sum
 	@go build
 
 .PHONY: init
-init: -gen-init docker k8s
-
-.PHONY: -gen-init
--gen-init: -preflight -init-dirs crypto
-
-.PHONY: -preflight
--preflight:
-	@if [[ ! -f config.hcl ]]; then \
-		echo "Missing required config.hcl file" >&2 ; \
-		exit 1 ; \
-	fi
-
-.PHONY: -init-dirs
--init-dirs:
-	@mkdir -p cache
+init: crypto docker k8s
 
 .PHONY: force-docker
 force-docker:
@@ -72,7 +58,7 @@ cache/k8s/done: $(PROGRAM_NAME) config.hcl scripts/k8s-rbac.sh
 	@touch cache/k8s/done
 
 .PHONY: gen
-gen: -gen-init docker-compose.yml cache/agent-master-token.val cache/gossip-key.val
+gen: crypto docker-compose.yml cache/agent-master-token.val cache/gossip-key.val
 docker-compose.yml: $(PROGRAM_NAME) config.hcl cache/docker.done
 	./$(PROGRAM_NAME) gen
 

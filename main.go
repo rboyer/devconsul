@@ -116,7 +116,7 @@ func (t *Tool) Init() error {
 		return err
 	}
 	if _, err := os.Stat(filepath.Join(cwd, "config.hcl")); err != nil {
-		return fmt.Errorf("This must be run from the home of the checkout: %v", err)
+		return fmt.Errorf("Missing required config.hcl file", err)
 	}
 
 	cacheDir := filepath.Join(cwd, "cache")
