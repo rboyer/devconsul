@@ -84,7 +84,7 @@ func InferTopology(c *Config) (*Topology, error) {
 		for idx := 1; idx <= clients; idx++ {
 			id := strconv.Itoa(idx)
 			ip := baseIP + "." + strconv.Itoa(20+idx)
-			wanIP := wanBaseIP + "." + strconv.Itoa(10+idx)
+			wanIP := wanBaseIP + "." + strconv.Itoa(20+idx)
 
 			nodeName := dc + "-client" + id
 			node := Node{
@@ -154,6 +154,7 @@ func InferTopology(c *Config) (*Topology, error) {
 
 	forDC("dc1", "10.0.1", "10.1.1", c.Topology.Servers.Datacenter1, c.Topology.Clients.Datacenter1)
 	forDC("dc2", "10.0.2", "10.1.2", c.Topology.Servers.Datacenter2, c.Topology.Clients.Datacenter2)
+	forDC("dc3", "10.0.3", "10.1.3", c.Topology.Servers.Datacenter3, c.Topology.Clients.Datacenter3)
 
 	return topology, nil
 }

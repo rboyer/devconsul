@@ -24,6 +24,7 @@ const programName = "devconsul"
 const (
 	PrimaryDC   = "dc1"
 	SecondaryDC = "dc2"
+	TertiaryDC  = "dc3"
 )
 
 func main() {
@@ -86,6 +87,7 @@ type Tool struct {
 	masterToken         string      // for boot
 	clientDC1           *api.Client // for boot
 	clientDC2           *api.Client // for boot
+	clientDC3           *api.Client // for boot
 	replicationSecretID string      // for boot
 
 	tokens map[string]string
@@ -97,6 +99,8 @@ func (t *Tool) clientForDC(dc string) *api.Client {
 		return t.clientDC1
 	case SecondaryDC:
 		return t.clientDC2
+	case TertiaryDC:
+		return t.clientDC3
 	default:
 		panic("illegal dc name '" + dc + "'")
 	}

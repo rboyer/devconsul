@@ -83,6 +83,10 @@ func (t *Tool) generateComposeFile() error {
 				Name: "dc2",
 				CIDR: "10.0.2.0/24",
 			},
+			{
+				Name: "dc3",
+				CIDR: "10.0.3.0/24",
+			},
 		}
 	case NetworkShapeFlat:
 		info.Networks = []composeNetwork{
@@ -444,12 +448,14 @@ func (t *Tool) generateAgentHCL(node Node) (string, error) {
 		case NetworkShapeDual:
 			leaderDC1 := t.topology.WANLeaderIP("dc1")
 			leaderDC2 := t.topology.WANLeaderIP("dc2")
-			configInfo.RetryJoinWAN = `"` + leaderDC1 + `", "` + leaderDC2 + `"`
+			leaderDC3 := t.topology.WANLeaderIP("dc3")
+			configInfo.RetryJoinWAN = `"` + leaderDC1 + `", "` + leaderDC2 + `", "` + leaderDC3 + `"`
 			configInfo.AdvertiseAddrWAN = node.PublicAddress()
 		case NetworkShapeFlat:
 			leaderDC1 := t.topology.LeaderIP("dc1")
 			leaderDC2 := t.topology.LeaderIP("dc2")
-			configInfo.RetryJoinWAN = `"` + leaderDC1 + `", "` + leaderDC2 + `"`
+			leaderDC3 := t.topology.LeaderIP("dc3")
+			configInfo.RetryJoinWAN = `"` + leaderDC1 + `", "` + leaderDC2 + `", "` + leaderDC3 + `"`
 		default:
 			panic("unknown shape: " + t.topology.netShape)
 		}

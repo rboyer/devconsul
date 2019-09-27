@@ -35,10 +35,18 @@ for id in $(seq 0 $((N_SERVERS_DC2 - 1))); do
     gen_server dc2 "$id"
 done
 
+for id in $(seq 0 $((N_SERVERS_DC3 - 1))); do
+    gen_server dc3 "$id"
+done
+
 for id in $(seq 0 $((N_CLIENTS_DC1 - 1))); do
     gen_client dc1 "$id"
 done
 
 for id in $(seq 0 $((N_CLIENTS_DC2 - 1))); do
     gen_client dc2 "$id"
+done
+
+for id in $(seq 0 $((N_CLIENTS_DC3 - 1))); do
+    gen_client dc3 "$id"
 done

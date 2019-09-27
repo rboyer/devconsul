@@ -33,6 +33,12 @@ func (t *Tool) commandBoot() error {
 			return fmt.Errorf("initClient: %v", err)
 		}
 		consulfunc.WaitForLeader(t.logger, t.clientDC2, "dc2-server1")
+
+		t.clientDC3, err = consulfunc.GetClient(t.topology.LeaderIP(TertiaryDC), "" /*no token yet*/)
+		if err != nil {
+			return fmt.Errorf("initClient: %v", err)
+		}
+		consulfunc.WaitForLeader(t.logger, t.clientDC3, "dc3-server1")
 	}
 
 	if err := t.bootstrap(t.clientDC1); err != nil {
@@ -66,6 +72,12 @@ func (t *Tool) commandBoot() error {
 		return fmt.Errorf("initClient: %v", err)
 	}
 	consulfunc.WaitForUpgrade(t.logger, t.clientDC2, "dc2-server1")
+
+	t.clientDC3, err = consulfunc.GetClient(t.topology.LeaderIP(TertiaryDC), t.masterToken)
+	if err != nil {
+		return fmt.Errorf("initClient: %v", err)
+	}
+	consulfunc.WaitForUpgrade(t.logger, t.clientDC3, "dc3-server1")
 
 	err = t.createAgentTokens()
 	if err != nil {
@@ -245,7 +257,7 @@ func (t *Tool) injectReplicationToken() error {
 	agentMasterToken := t.runtimeConfig.AgentMasterToken
 
 	return t.topology.Walk(func(node Node) error {
-		if node.Datacenter != SecondaryDC || !node.Server {
+		if node.Datacenter == PrimaryDC || !node.Server {
 			return nil
 		}
 
@@ -697,7 +709,9 @@ func GetServiceRegistrationHCL(s Service) (string, error) {
 func (t *Tool) waitForNodeUpdates() {
 	t.waitForNodeUpdatesDC(t.clientDC1, PrimaryDC)
 	t.waitForNodeUpdatesDC(t.clientDC2, SecondaryDC)
+	t.waitForNodeUpdatesDC(t.clientDC3, TertiaryDC)
 }
+
 func (t *Tool) waitForNodeUpdatesDC(client *api.Client, datacenter string) {
 	cc := client.Catalog()
 

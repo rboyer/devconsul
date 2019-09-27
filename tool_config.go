@@ -63,6 +63,7 @@ type ConfigTopology struct {
 type ConfigTopologyDatacenter struct {
 	Datacenter1 int `hcl:"dc1"`
 	Datacenter2 int `hcl:"dc2"`
+	Datacenter3 int `hcl:"dc3"`
 }
 
 type ConfigTopologyNodeConfig struct {
@@ -95,15 +96,21 @@ func LoadConfig() (*Config, error) {
 	if cfg.Topology.Servers.Datacenter1 <= 0 {
 		return nil, errors.New("dc1: must always have at least one server")
 	}
-	if cfg.Topology.Servers.Datacenter2 < 0 {
-		return nil, errors.New("dc2: has an invalid number of servers")
+	if cfg.Topology.Servers.Datacenter2 <= 0 {
+		return nil, errors.New("dc2: must always have at least one server")
+	}
+	if cfg.Topology.Servers.Datacenter3 <= 0 {
+		return nil, errors.New("dc3: must always have at least one server")
 	}
 
-	if cfg.Topology.Clients.Datacenter1 < 0 {
-		return nil, errors.New("dc1: has an invalid number of clients")
+	if cfg.Topology.Clients.Datacenter1 <= 0 {
+		return nil, errors.New("dc1: must always have at least one client")
 	}
-	if cfg.Topology.Clients.Datacenter2 < 0 {
-		return nil, errors.New("dc2: has an invalid number of clients")
+	if cfg.Topology.Clients.Datacenter2 <= 0 {
+		return nil, errors.New("dc2: must always have at least one client")
+	}
+	if cfg.Topology.Clients.Datacenter3 <= 0 {
+		return nil, errors.New("dc3: must always have at least one client")
 	}
 
 	for i, raw := range cfg.RawConfigEntries {

@@ -34,6 +34,9 @@ case "$datacenter" in
     dc2)
         ip="10.0.2.11"
         ;;
+    dc3)
+        ip="10.0.3.11"
+        ;;
     *)
         echo "unknown dc: ${datacenter}" >&2
         exit 1

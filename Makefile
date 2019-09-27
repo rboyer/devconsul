@@ -40,8 +40,10 @@ cache/tls/done: $(PROGRAM_NAME) config.hcl tls-init.sh
 			-w /out \
 			-e N_SERVERS_DC1="$$(./$(PROGRAM_NAME) config topologyServersDatacenter1)" \
 			-e N_SERVERS_DC2="$$(./$(PROGRAM_NAME) config topologyServersDatacenter2)" \
+			-e N_SERVERS_DC3="$$(./$(PROGRAM_NAME) config topologyServersDatacenter3)" \
 			-e N_CLIENTS_DC1="$$(./$(PROGRAM_NAME) config topologyClientsDatacenter1)" \
 			-e N_CLIENTS_DC2="$$(./$(PROGRAM_NAME) config topologyClientsDatacenter2)" \
+			-e N_CLIENTS_DC3="$$(./$(PROGRAM_NAME) config topologyClientsDatacenter3)" \
 			-u "$$(id -u):$$(id -g)" \
 			--entrypoint /bin/tls-init.sh \
 			$${CONSUL_IMAGE} ; \

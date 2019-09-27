@@ -23,8 +23,10 @@ func (t *Tool) commandConfig() error {
 
 		"topologyServersDatacenter1": int2str(topoConfig.Servers.Datacenter1),
 		"topologyServersDatacenter2": int2str(topoConfig.Servers.Datacenter2),
+		"topologyServersDatacenter3": int2str(topoConfig.Servers.Datacenter3),
 		"topologyClientsDatacenter1": int2str(topoConfig.Clients.Datacenter1),
 		"topologyClientsDatacenter2": int2str(topoConfig.Clients.Datacenter2),
+		"topologyClientsDatacenter3": int2str(topoConfig.Clients.Datacenter3),
 	}
 
 	if len(args) == 0 {

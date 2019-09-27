@@ -34,6 +34,9 @@ case "$datacenter" in
     dc2)
         container=dc2-server1
         ;;
+    dc3)
+        container=dc3-server1
+        ;;
     *)
         echo "unknown dc: ${datacenter}" >&2
         exit 1
