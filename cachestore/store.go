@@ -23,6 +23,27 @@ func New(cacheDir string) (*Store, error) {
 	return s, nil
 }
 
+func (s *Store) LoadOrSaveValue(name string, fetchFn func() (string, error)) (string, error) {
+	val, err := s.LoadValue(name)
+	if err != nil {
+		return "", err
+	}
+	if val != "" {
+		return val, nil
+	}
+
+	val, err = fetchFn()
+	if err != nil {
+		return "", err
+	}
+
+	if err := s.SaveValue(name, val); err != nil {
+		return "", err
+	}
+
+	return val, nil
+}
+
 func (s *Store) LoadValue(name string) (string, error) {
 	fn := filepath.Join(s.cacheDir, name+".val")
 	b, err := ioutil.ReadFile(fn)

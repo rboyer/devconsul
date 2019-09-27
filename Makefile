@@ -28,25 +28,10 @@ cache/docker.done: $(PROGRAM_NAME) config.hcl Dockerfile-envoy
 
 .PHONY: crypto
 crypto: cache/tls/done
-cache/tls/done: $(PROGRAM_NAME) config.hcl tls-init.sh
+cache/tls/done: $(PROGRAM_NAME) config.hcl scripts/tls-init.sh
 	@mkdir -p cache/tls
 	@if [[ -n "$$(./$(PROGRAM_NAME) config tls)" ]]; then \
-		CONSUL_IMAGE="$$(./$(PROGRAM_NAME) config image)" ; \
-		docker run \
-			--rm \
-			--net=none \
-			-v "$$(pwd)/cache/tls:/out" \
-			-v "$$(pwd)/tls-init.sh:/bin/tls-init.sh:ro" \
-			-w /out \
-			-e N_SERVERS_DC1="$$(./$(PROGRAM_NAME) config topologyServersDatacenter1)" \
-			-e N_SERVERS_DC2="$$(./$(PROGRAM_NAME) config topologyServersDatacenter2)" \
-			-e N_SERVERS_DC3="$$(./$(PROGRAM_NAME) config topologyServersDatacenter3)" \
-			-e N_CLIENTS_DC1="$$(./$(PROGRAM_NAME) config topologyClientsDatacenter1)" \
-			-e N_CLIENTS_DC2="$$(./$(PROGRAM_NAME) config topologyClientsDatacenter2)" \
-			-e N_CLIENTS_DC3="$$(./$(PROGRAM_NAME) config topologyClientsDatacenter3)" \
-			-u "$$(id -u):$$(id -g)" \
-			--entrypoint /bin/tls-init.sh \
-			$${CONSUL_IMAGE} ; \
+		./scripts/tls-init.sh ; \
 	fi
 	@touch cache/tls/done
 

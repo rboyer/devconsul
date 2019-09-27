@@ -1,72 +1,57 @@
 package main
 
 import (
-	"errors"
 	"fmt"
+	"io/ioutil"
 
 	"github.com/hashicorp/consul/api"
-	"github.com/hashicorp/hcl"
 )
 
-func DefaultConfig() Config {
-	return Config{
-		ConsulImage: "consul:1.5.0",
-		Envoy: ConfigEnvoy{
-			LogLevel: "info",
-		},
-		Topology: ConfigTopology{
-			Servers: ConfigTopologyDatacenter{
-				Datacenter1: 1,
-				Datacenter2: 1,
-			},
-			Clients: ConfigTopologyDatacenter{
-				Datacenter1: 2,
-				Datacenter2: 2,
-			},
-			NodeConfig: map[string]ConfigTopologyNodeConfig{},
-		},
-	}
+type FlatConfig struct {
+	ConsulImage        string
+	EncryptionTLS      bool
+	EncryptionGossip   bool
+	KubernetesEnabled  bool
+	EnvoyLogLevel      string
+	PrometheusEnabled  bool
+	InitialMasterToken string
+	ConfigEntries      []api.ConfigEntry
+	GossipKey          string
+	AgentMasterToken   string
 }
 
-type Config struct {
-	ConsulImage        string            `hcl:"consul_image"`
-	Encryption         ConfigEncryption  `hcl:"encryption"`
-	Kubernetes         ConfigKubernetes  `hcl:"kubernetes"`
-	Envoy              ConfigEnvoy       `hcl:"envoy"`
-	Monitor            ConfigMonitor     `hcl:"monitor"`
-	Topology           ConfigTopology    `hcl:"topology"`
-	InitialMasterToken string            `hcl:"initial_master_token"`
-	RawConfigEntries   []string          `hcl:"config_entries"`
-	ConfigEntries      []api.ConfigEntry `hcl:"-"`
-}
-type ConfigEncryption struct {
-	TLS    bool `hcl:"tls"`
-	Gossip bool `hcl:"gossip"`
-}
-type ConfigKubernetes struct {
-	Enabled bool `hcl:"enabled"`
-}
-type ConfigEnvoy struct {
-	LogLevel string `hcl:"log_level"`
-}
-type ConfigMonitor struct {
-	Prometheus bool `hcl:"prometheus"`
+type userConfig struct {
+	ConsulImage string `hcl:"consul_image"`
+	Encryption  struct {
+		TLS    bool `hcl:"tls"`
+		Gossip bool `hcl:"gossip"`
+	} `hcl:"encryption"`
+	Kubernetes struct {
+		Enabled bool `hcl:"enabled"`
+	} `hcl:"kubernetes"`
+	Envoy struct {
+		LogLevel string `hcl:"log_level"`
+	} `hcl:"envoy"`
+	Monitor struct {
+		Prometheus bool `hcl:"prometheus"`
+	} `hcl:"monitor"`
+	Topology           userConfigTopology `hcl:"topology"`
+	InitialMasterToken string             `hcl:"initial_master_token"`
+	RawConfigEntries   []string           `hcl:"config_entries"`
 }
 
-type ConfigTopology struct {
-	NetworkShape string                              `hcl:"network_shape"`
-	Servers      ConfigTopologyDatacenter            `hcl:"servers"`
-	Clients      ConfigTopologyDatacenter            `hcl:"clients"`
-	NodeConfig   map[string]ConfigTopologyNodeConfig `hcl:"node_config"` // node -> data
+type userConfigTopology struct {
+	NetworkShape string                                  `hcl:"network_shape"`
+	Datacenters  map[string]userConfigTopologyDatacenter `hcl:"datacenters"`
+	NodeConfig   map[string]userConfigTopologyNodeConfig `hcl:"node_config"` // node -> data
 }
 
-type ConfigTopologyDatacenter struct {
-	Datacenter1 int `hcl:"dc1"`
-	Datacenter2 int `hcl:"dc2"`
-	Datacenter3 int `hcl:"dc3"`
+type userConfigTopologyDatacenter struct {
+	Servers int `hcl:"servers"`
+	Clients int `hcl:"clients"`
 }
 
-type ConfigTopologyNodeConfig struct {
+type userConfigTopologyNodeConfig struct {
 	UpstreamName       string            `hcl:"upstream_name"`
 	UpstreamDatacenter string            `hcl:"upstream_datacenter"`
 	UpstreamExtraHCL   string            `hcl:"upstream_extra_hcl"`
@@ -75,51 +60,79 @@ type ConfigTopologyNodeConfig struct {
 	UseBuiltinProxy    bool              `hcl:"use_builtin_proxy"`
 }
 
-func (c *ConfigTopologyNodeConfig) Meta() map[string]string {
+func (c *userConfigTopologyNodeConfig) Meta() map[string]string {
 	if c.ServiceMeta == nil {
 		return map[string]string{}
 	}
 	return c.ServiceMeta
 }
 
-func LoadConfig() (*Config, error) {
-	n, err := parseHCLFile("config.hcl")
+func LoadConfig() (*FlatConfig, *Topology, error) {
+	contents, err := ioutil.ReadFile("config.hcl")
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	cfg := DefaultConfig()
-	if err := hcl.DecodeObject(&cfg, n); err != nil {
-		return nil, err
+	var uc userConfig
+	err = serialDecodeHCL(&uc, []string{
+		defaultUserConfig,
+		string(contents),
+	})
+	if err != nil {
+		return nil, nil, err
 	}
 
-	if cfg.Topology.Servers.Datacenter1 <= 0 {
-		return nil, errors.New("dc1: must always have at least one server")
-	}
-	if cfg.Topology.Servers.Datacenter2 <= 0 {
-		return nil, errors.New("dc2: must always have at least one server")
-	}
-	if cfg.Topology.Servers.Datacenter3 <= 0 {
-		return nil, errors.New("dc3: must always have at least one server")
-	}
-
-	if cfg.Topology.Clients.Datacenter1 <= 0 {
-		return nil, errors.New("dc1: must always have at least one client")
-	}
-	if cfg.Topology.Clients.Datacenter2 <= 0 {
-		return nil, errors.New("dc2: must always have at least one client")
-	}
-	if cfg.Topology.Clients.Datacenter3 <= 0 {
-		return nil, errors.New("dc3: must always have at least one client")
+	cfg := &FlatConfig{
+		ConsulImage:        uc.ConsulImage,
+		EncryptionTLS:      uc.Encryption.TLS,
+		EncryptionGossip:   uc.Encryption.Gossip,
+		KubernetesEnabled:  uc.Kubernetes.Enabled,
+		EnvoyLogLevel:      uc.Envoy.LogLevel,
+		PrometheusEnabled:  uc.Monitor.Prometheus,
+		InitialMasterToken: uc.InitialMasterToken,
 	}
 
-	for i, raw := range cfg.RawConfigEntries {
+	for i, raw := range uc.RawConfigEntries {
 		entry, err := api.DecodeConfigEntryFromJSON([]byte(raw))
 		if err != nil {
-			return nil, fmt.Errorf("invalid config entry [%d]: %v", i, err)
+			return nil, nil, fmt.Errorf("invalid config entry [%d]: %v", i, err)
 		}
 		cfg.ConfigEntries = append(cfg.ConfigEntries, entry)
 	}
 
-	return &cfg, nil
+	topology, err := InferTopology(&uc)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return cfg, topology, nil
 }
+
+const defaultUserConfig = `
+consul_image = "consul-dev:latest"
+envoy {
+  log_level = "info"
+}
+kubernetes {
+  enabled = false
+}
+monitor {
+  prometheus = false
+}
+topology {
+  datacenters {
+    dc1 {
+      servers = 1
+      clients = 2
+    }
+    dc2 {
+      servers = 1
+      clients = 2
+    }
+    dc3 {
+      servers = 1
+      clients = 2
+    }
+  }
+}
+`

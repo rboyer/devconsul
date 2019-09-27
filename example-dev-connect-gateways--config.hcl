@@ -44,14 +44,19 @@ EOF
 ]
 
 topology {
-  servers {
-    dc1 = 1
-    dc2 = 1
-  }
-
-  clients {
-    dc1 = 5
-    dc2 = 5
+  datacenters {
+    dc1 {
+      servers = 1
+      clients = 5
+    }
+    dc2 {
+      servers = 1
+      clients = 5
+    }
+    dc3 {
+      servers = 1
+      clients = 5
+    }
   }
 
   node_config {
@@ -61,6 +66,10 @@ topology {
     }
 
     "dc2-client5" = {
+      mesh_gateway = true
+    }
+
+    "dc3-client5" = {
       mesh_gateway = true
     }
 

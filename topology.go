@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+	"regexp"
+	"sort"
 	"strconv"
 )
 
@@ -24,19 +26,24 @@ func (s NetworkShape) GetNetworkName(dc string) string {
 	}
 }
 
-func InferTopology(c *Config) (*Topology, error) {
+func InferTopology(uc *userConfig) (*Topology, error) {
+	t := &uc.Topology
+
 	topology := &Topology{
 		nm: make(map[string]Node),
 	}
 
-	switch c.Topology.NetworkShape {
+	switch uc.Topology.NetworkShape {
 	case "dual":
-		topology.netShape = NetworkShapeDual
+		topology.NetworkShape = NetworkShapeDual
 	case "flat", "":
-		topology.netShape = NetworkShapeFlat
+		topology.NetworkShape = NetworkShapeFlat
 	default:
-		return nil, fmt.Errorf("unknown network_shape: %s", c.Topology.NetworkShape)
+		return nil, fmt.Errorf("unknown network_shape: %s", uc.Topology.NetworkShape)
 	}
+
+	rawTopology := uc.Topology
+	nodeConfigs := rawTopology.NodeConfig
 
 	addNode := func(node Node) {
 		topology.nm[node.Name] = node
@@ -59,14 +66,14 @@ func InferTopology(c *Config) (*Topology, error) {
 				Server:     true,
 				Addresses: []Address{
 					{
-						Network:   topology.netShape.GetNetworkName(dc),
+						Network:   topology.NetworkShape.GetNetworkName(dc),
 						IPAddress: ip,
 					},
 				},
 				Index: idx - 1,
 			}
 
-			switch topology.netShape {
+			switch topology.NetworkShape {
 			case NetworkShapeDual:
 				node.Addresses = append(node.Addresses, Address{
 					Network:   "wan",
@@ -74,12 +81,10 @@ func InferTopology(c *Config) (*Topology, error) {
 				})
 			case NetworkShapeFlat:
 			default:
-				panic("unknown shape: " + topology.netShape)
+				panic("unknown shape: " + topology.NetworkShape)
 			}
 			addNode(node)
 		}
-
-		nodeConfigs := c.Topology.NodeConfig
 
 		for idx := 1; idx <= clients; idx++ {
 			id := strconv.Itoa(idx)
@@ -93,14 +98,14 @@ func InferTopology(c *Config) (*Topology, error) {
 				Server:     false,
 				Addresses: []Address{
 					{
-						Network:   topology.netShape.GetNetworkName(dc),
+						Network:   topology.NetworkShape.GetNetworkName(dc),
 						IPAddress: ip,
 					},
 				},
 				Index: idx - 1,
 			}
 
-			nodeConfig := ConfigTopologyNodeConfig{} // yay zero value!
+			nodeConfig := userConfigTopologyNodeConfig{} // yay zero value!
 			if nodeConfigs != nil {
 				if c, ok := nodeConfigs[nodeName]; ok {
 					nodeConfig = c
@@ -110,7 +115,7 @@ func InferTopology(c *Config) (*Topology, error) {
 			if nodeConfig.MeshGateway {
 				node.MeshGateway = true
 
-				switch topology.netShape {
+				switch topology.NetworkShape {
 				case NetworkShapeDual:
 					node.Addresses = append(node.Addresses, Address{
 						Network:   "wan",
@@ -118,7 +123,7 @@ func InferTopology(c *Config) (*Topology, error) {
 					})
 				case NetworkShapeFlat:
 				default:
-					panic("unknown shape: " + topology.netShape)
+					panic("unknown shape: " + topology.NetworkShape)
 				}
 			} else {
 				if nodeConfig.UseBuiltinProxy {
@@ -152,18 +157,64 @@ func InferTopology(c *Config) (*Topology, error) {
 		}
 	}
 
-	forDC("dc1", "10.0.1", "10.1.1", c.Topology.Servers.Datacenter1, c.Topology.Clients.Datacenter1)
-	forDC("dc2", "10.0.2", "10.1.2", c.Topology.Servers.Datacenter2, c.Topology.Clients.Datacenter2)
-	forDC("dc3", "10.0.3", "10.1.3", c.Topology.Servers.Datacenter3, c.Topology.Clients.Datacenter3)
+	if _, ok := t.Datacenters[PrimaryDC]; !ok {
+		return nil, fmt.Errorf("primary datacenter %q is missing from config", PrimaryDC)
+	}
+
+	dcPatt := regexp.MustCompile(`^dc([0-9]+)$`)
+
+	for dc, v := range t.Datacenters {
+		if v.Servers <= 0 {
+			return nil, fmt.Errorf("%s: must always have at least one server", dc)
+		}
+		if v.Clients <= 0 {
+			return nil, fmt.Errorf("%s: must always have at least one client", dc)
+		}
+
+		m := dcPatt.FindStringSubmatch(dc)
+		if m == nil {
+			return nil, fmt.Errorf("%s: not a valid datacenter name", dc)
+		}
+		i, err := strconv.Atoi(m[1])
+		if err != nil {
+			return nil, fmt.Errorf("%s: not a valid datacenter name", dc)
+		}
+
+		topology.dcs = append(topology.dcs, &Datacenter{
+			Name:      dc,
+			Primary:   dc == PrimaryDC,
+			Index:     i,
+			Servers:   v.Servers,
+			Clients:   v.Clients,
+			BaseIP:    fmt.Sprintf("10.0.%d", i),
+			WANBaseIP: fmt.Sprintf("10.1.%d", i),
+		})
+	}
+	sort.Slice(topology.dcs, func(i, j int) bool {
+		return topology.dcs[i].Name < topology.dcs[j].Name
+	})
+
+	for _, dc := range topology.dcs {
+		forDC(dc.Name, dc.BaseIP, dc.WANBaseIP, dc.Servers, dc.Clients)
+	}
 
 	return topology, nil
 }
 
 type Topology struct {
-	servers  []string // node names
-	clients  []string // node names
-	nm       map[string]Node
-	netShape NetworkShape
+	servers      []string // node names
+	clients      []string // node names
+	nm           map[string]Node
+	dcs          []*Datacenter
+	NetworkShape NetworkShape
+}
+
+func (t *Topology) LeaderIP_new(datacenter string, wan bool) string {
+	if wan {
+		return t.WANLeaderIP(datacenter)
+	} else {
+		return t.LeaderIP(datacenter)
+	}
 }
 
 func (t *Topology) LeaderIP(datacenter string) string {
@@ -181,6 +232,23 @@ func (t *Topology) WANLeaderIP(datacenter string) string {
 		n := t.Node(name)
 		if n.Datacenter == datacenter {
 			return n.PublicAddress()
+		}
+	}
+	panic("no such dc")
+}
+
+func (t *Topology) Datacenters() []Datacenter {
+	out := make([]Datacenter, len(t.dcs))
+	for i, dc := range t.dcs {
+		out[i] = *dc
+	}
+	return out
+}
+
+func (t *Topology) DC(name string) *Datacenter {
+	for _, dc := range t.dcs {
+		if dc.Name == name {
+			return dc
 		}
 	}
 	panic("no such dc")
@@ -229,6 +297,18 @@ func (t *Topology) WalkSilent(f func(n Node)) {
 		node := t.Node(nodeName)
 		f(node)
 	}
+}
+
+type Datacenter struct {
+	Name    string
+	Primary bool
+
+	Index   int
+	Servers int
+	Clients int
+
+	BaseIP    string
+	WANBaseIP string
 }
 
 type Node struct {

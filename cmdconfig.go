@@ -3,30 +3,51 @@ package main
 import (
 	"flag"
 	"fmt"
-	"strconv"
 )
 
-func (t *Tool) commandConfig() error {
+type CommandConfig struct {
+	*Core
+}
+
+func (c *CommandConfig) Run() error {
 	flag.Parse()
 	args := flag.Args()
 
-	topoConfig := t.config.Topology
+	var (
+		servers     = make(map[string]int)
+		clients     = make(map[string]int)
+		localAddrs  = make(map[string]string)
+		datacenters []string
+	)
+	c.topology.WalkSilent(func(n Node) {
+		if n.Server {
+			servers[n.Datacenter]++
+		} else {
+			clients[n.Datacenter]++
+		}
+		localAddrs[n.Name] = n.LocalAddress()
+	})
 
-	m := map[string]string{
-		"image":            t.runtimeConfig.ConsulImage,
-		"rawImage":         t.config.ConsulImage,
-		"tls":              bool2str(t.config.Encryption.TLS),
-		"gossip":           bool2str(t.config.Encryption.Gossip),
-		"k8s":              bool2str(t.config.Kubernetes.Enabled),
-		"gossipKey":        t.runtimeConfig.GossipKey,
-		"agentMasterToken": t.runtimeConfig.AgentMasterToken,
+	for _, dc := range c.topology.Datacenters() {
+		datacenters = append(datacenters, dc.Name)
+	}
 
-		"topologyServersDatacenter1": int2str(topoConfig.Servers.Datacenter1),
-		"topologyServersDatacenter2": int2str(topoConfig.Servers.Datacenter2),
-		"topologyServersDatacenter3": int2str(topoConfig.Servers.Datacenter3),
-		"topologyClientsDatacenter1": int2str(topoConfig.Clients.Datacenter1),
-		"topologyClientsDatacenter2": int2str(topoConfig.Clients.Datacenter2),
-		"topologyClientsDatacenter3": int2str(topoConfig.Clients.Datacenter3),
+	m := map[string]interface{}{
+		"image":            c.config2.ConsulImage,
+		"tls":              bool2str(c.config2.EncryptionTLS),
+		"gossip":           bool2str(c.config2.EncryptionGossip),
+		"k8s":              bool2str(c.config2.KubernetesEnabled),
+		"gossipKey":        c.config2.GossipKey,
+		"agentMasterToken": c.config2.AgentMasterToken,
+		"localAddrs":       localAddrs,
+		"datacenters":      datacenters,
+	}
+
+	for dc, n := range servers {
+		m["topology.servers."+dc] = n
+	}
+	for dc, n := range clients {
+		m["topology.clients."+dc] = n
 	}
 
 	if len(args) == 0 {
@@ -46,8 +67,4 @@ func bool2str(b bool) string {
 		return "1"
 	}
 	return ""
-}
-
-func int2str(v int) string {
-	return strconv.Itoa(v)
 }

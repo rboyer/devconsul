@@ -4,6 +4,11 @@ set -euo pipefail
 
 cd "$(dirname "$0")"
 
+if ! command -v consul >/dev/null 2>&1 ; then
+    echo "ERROR: no 'consul' binary on PATH. Please run 'make dev' from your consul checkout" >&2
+    exit 1
+fi
+
 readonly master_token_file=./cache/master-token.val
 
 master_token() {
@@ -27,20 +32,16 @@ fi
 datacenter=$1
 shift
 
-case "$datacenter" in
-    dc1)
-        container=dc1-server1
-        ;;
-    dc2)
-        container=dc2-server1
-        ;;
-    dc3)
-        container=dc3-server1
-        ;;
-    *)
-        echo "unknown dc: ${datacenter}" >&2
-        exit 1
-        ;;
-esac
 
-exec docker-compose exec -e CONSUL_HTTP_TOKEN="$(master_token)" "${container}" consul "$@"
+node="${datacenter}-server1"
+ip="$(./devconsul config | jq -r ".localAddrs[\"${node}\"]")"
+if [[ "$ip" = "null" ]]; then
+    echo "unknown dc: ${datacenter}" >&2
+    exit 1
+fi
+
+
+export CONSUL_HTTP_TOKEN="$(master_token)"
+export CONSUL_HTTP_ADDR="http://${ip}:8500"
+
+exec consul "$@"

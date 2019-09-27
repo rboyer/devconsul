@@ -13,19 +13,13 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/hashicorp/consul/api"
 	"github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/go-uuid"
 	"github.com/rboyer/devconsul/cachestore"
 )
 
 const programName = "devconsul"
-
-const (
-	PrimaryDC   = "dc1"
-	SecondaryDC = "dc2"
-	TertiaryDC  = "dc3"
-)
+const PrimaryDC = "dc1"
 
 func main() {
 	log.SetOutput(ioutil.Discard)
@@ -46,27 +40,30 @@ func main() {
 	os.Args = os.Args[1:]
 	os.Args[0] = programName
 
-	tool := &Tool{
+	core := &Core{
 		logger: logger,
 	}
-	if err := tool.Init(); err != nil {
+	if err := core.Init(); err != nil {
 		logger.Error(err.Error())
 		os.Exit(1)
 	}
 
-	var err error
+	var runner interface {
+		Run() error
+	}
 	switch subcommand {
 	case "config":
-		err = tool.commandConfig()
+		runner = &CommandConfig{Core: core}
 	case "gen":
-		err = tool.commandGen()
+		runner = &CommandGenerate{Core: core}
 	case "boot":
-		err = tool.commandBoot()
+		runner = &CommandBoot{Core: core}
 	default:
 		logger.Error("Unknown subcommand", "subcommand", subcommand)
 		os.Exit(1)
 	}
 
+	err := runner.Run()
 	if err != nil {
 		logger.Error(err.Error())
 		os.Exit(1)
@@ -75,44 +72,16 @@ func main() {
 	os.Exit(0)
 }
 
-type Tool struct {
+type Core struct {
 	logger hclog.Logger
 
-	cache         *cachestore.Store
-	config        *Config
-	runtimeConfig RuntimeConfig
+	cache   *cachestore.Store
+	config2 *FlatConfig
 
 	topology *Topology // for boot/gen
-
-	masterToken         string      // for boot
-	clientDC1           *api.Client // for boot
-	clientDC2           *api.Client // for boot
-	clientDC3           *api.Client // for boot
-	replicationSecretID string      // for boot
-
-	tokens map[string]string
 }
 
-func (t *Tool) clientForDC(dc string) *api.Client {
-	switch dc {
-	case PrimaryDC:
-		return t.clientDC1
-	case SecondaryDC:
-		return t.clientDC2
-	case TertiaryDC:
-		return t.clientDC3
-	default:
-		panic("illegal dc name '" + dc + "'")
-	}
-}
-
-type RuntimeConfig struct {
-	GossipKey        string
-	AgentMasterToken string
-	ConsulImage      string // this may be a resolved value if :latest were used
-}
-
-func (t *Tool) Init() error {
+func (c *Core) Init() error {
 	// this needs to run from the same directory as the config.hcl file
 	// for the project
 	cwd, err := os.Getwd()
@@ -125,41 +94,37 @@ func (t *Tool) Init() error {
 
 	cacheDir := filepath.Join(cwd, "cache")
 
-	t.cache, err = cachestore.New(cacheDir)
+	c.cache, err = cachestore.New(cacheDir)
 	if err != nil {
 		return err
 	}
 
-	t.config, err = LoadConfig()
+	c.config2, c.topology, err = LoadConfig()
 	if err != nil {
 		return err
 	}
 
 	// t.logger.Info("File config:\n" + jsonPretty(t.config))
 
-	if t.config.Encryption.Gossip {
-		if err := t.initGossipKey(); err != nil {
+	if c.config2.EncryptionGossip {
+		if err := c.initGossipKey(); err != nil {
 			return err
 		}
 	}
 
-	if err := t.initAgentMasterToken(); err != nil {
+	if err := c.initAgentMasterToken(); err != nil {
 		return err
 	}
 
-	if err := t.initConsulImage(); err != nil {
+	if err := c.initConsulImage(); err != nil {
 		return err
 	}
-
-	// t.logger.Info("Runtime config:\n" + jsonPretty(&t.runtimeConfig))
-	// $(docker image inspect consul-dev:latest | jq -r '.[0].Id' | cut -d':' -f2-)
 
 	return nil
 }
 
-func (t *Tool) initConsulImage() error {
-	if !strings.HasSuffix(t.config.ConsulImage, ":latest") {
-		t.runtimeConfig.ConsulImage = t.config.ConsulImage
+func (c *Core) initConsulImage() error {
+	if !strings.HasSuffix(c.config2.ConsulImage, ":latest") {
 		return nil
 	}
 
@@ -171,7 +136,7 @@ func (t *Tool) initConsulImage() error {
 	var errWriter bytes.Buffer
 	var outWriter bytes.Buffer
 
-	cmd := exec.Command(dockerBin, "image", "inspect", t.config.ConsulImage)
+	cmd := exec.Command(dockerBin, "image", "inspect", c.config2.ConsulImage)
 	cmd.Stdout = &outWriter
 	cmd.Stderr = &errWriter
 	cmd.Stdin = nil
@@ -196,81 +161,31 @@ func (t *Tool) initConsulImage() error {
 		return fmt.Errorf("unexpected docker output: %q", obj[0].Id)
 	}
 
-	t.runtimeConfig.ConsulImage = strings.TrimPrefix(obj[0].Id, "sha256:")
+	c.config2.ConsulImage = strings.TrimPrefix(obj[0].Id, "sha256:")
 	return nil
 }
 
-func (t *Tool) initAgentMasterToken() error {
-	agentMasterToken, err := t.cache.LoadValue("agent-master-token")
-	if err != nil {
-		return err
-	}
-	if agentMasterToken != "" {
-		t.runtimeConfig.AgentMasterToken = agentMasterToken
-		return nil
-	}
-
-	agentMasterToken, err = uuid.GenerateUUID()
-	if err != nil {
-		return err
-	}
-
-	if err := t.cache.SaveValue("agent-master-token", agentMasterToken); err != nil {
-		return err
-	}
-	t.runtimeConfig.AgentMasterToken = agentMasterToken
-
-	return nil
+func (c *Core) initAgentMasterToken() error {
+	var err error
+	c.config2.AgentMasterToken, err = c.cache.LoadOrSaveValue("agent-master-token", func() (string, error) {
+		return uuid.GenerateUUID()
+	})
+	return err
 }
 
-func (t *Tool) initGossipKey() error {
-	gossipKey, err := t.cache.LoadValue("gossip-key")
-	if err != nil {
-		return err
-	}
-	if gossipKey != "" {
-		t.runtimeConfig.GossipKey = gossipKey
-		return nil
-	}
+func (c *Core) initGossipKey() error {
+	var err error
+	c.config2.GossipKey, err = c.cache.LoadOrSaveValue("gossip-key", func() (string, error) {
+		key := make([]byte, 16)
+		n, err := rand.Reader.Read(key)
+		if err != nil {
+			return "", fmt.Errorf("Error reading random data: %s", err)
+		}
+		if n != 16 {
+			return "", fmt.Errorf("Couldn't read enough entropy. Generate more entropy!")
+		}
 
-	key := make([]byte, 16)
-	n, err := rand.Reader.Read(key)
-	if err != nil {
-		return fmt.Errorf("Error reading random data: %s", err)
-	}
-	if n != 16 {
-		return fmt.Errorf("Couldn't read enough entropy. Generate more entropy!")
-	}
-
-	gossipKey = base64.StdEncoding.EncodeToString(key)
-
-	if err := t.cache.SaveValue("gossip-key", gossipKey); err != nil {
-		return err
-	}
-
-	t.runtimeConfig.GossipKey = gossipKey
-
-	return nil
-}
-
-func (t *Tool) setToken(typ, k, v string) {
-	if t.tokens == nil {
-		t.tokens = make(map[string]string)
-	}
-	t.tokens[typ+"/"+k] = v
-}
-
-func (t *Tool) getToken(typ, k string) string {
-	if t.tokens == nil {
-		return ""
-	}
-	return t.tokens[typ+"/"+k]
-}
-
-func (t *Tool) mustGetToken(typ, k string) string {
-	tok := t.getToken(typ, k)
-	if tok == "" {
-		panic("token for '" + typ + "/" + k + "' not set:" + jsonPretty(t.tokens))
-	}
-	return tok
+		return base64.StdEncoding.EncodeToString(key), nil
+	})
+	return err
 }

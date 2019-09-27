@@ -27,21 +27,13 @@ fi
 datacenter=$1
 shift
 
-case "$datacenter" in
-    dc1)
-        ip="10.0.1.11"
-        ;;
-    dc2)
-        ip="10.0.2.11"
-        ;;
-    dc3)
-        ip="10.0.3.11"
-        ;;
-    *)
-        echo "unknown dc: ${datacenter}" >&2
-        exit 1
-        ;;
-esac
+
+node="${datacenter}-server1"
+ip="$(./devconsul config | jq -r ".localAddrs[\"${node}\"]")"
+if [[ "$ip" = "null" ]]; then
+    echo "unknown dc: ${datacenter}" >&2
+    exit 1
+fi
 
 if [[ $# -lt 1 ]]; then
     echo "missing required path portion" >&2

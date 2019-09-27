@@ -18,21 +18,19 @@ import (
 	"github.com/rboyer/safeio"
 )
 
-func (t *Tool) commandGen() error {
+type CommandGenerate struct {
+	*Core
+}
+
+func (c *CommandGenerate) Run() error {
 	var verbose bool
 
 	flag.BoolVar(&verbose, "v", false, "verbose")
 	flag.Parse()
 
-	var err error
-	t.topology, err = InferTopology(t.config)
-	if err != nil {
-		return err
-	}
-
 	if verbose {
-		t.topology.WalkSilent(func(node Node) {
-			t.logger.Info("Generating node",
+		c.topology.WalkSilent(func(node Node) {
+			c.logger.Info("Generating node",
 				"name", node.Name,
 				"server", node.Server,
 				"dc", node.Datacenter,
@@ -41,15 +39,15 @@ func (t *Tool) commandGen() error {
 		})
 	}
 
-	if err := t.generateComposeFile(); err != nil {
+	if err := c.generateComposeFile(); err != nil {
 		return err
 	}
 
-	if t.config.Monitor.Prometheus {
-		if err := t.generatePrometheusConfigFile(); err != nil {
+	if c.config2.PrometheusEnabled {
+		if err := c.generatePrometheusConfigFile(); err != nil {
 			return err
 		}
-		if err := t.generateGrafanaConfigFiles(); err != nil {
+		if err := c.generateGrafanaConfigFiles(); err != nil {
 			return err
 		}
 	}
@@ -57,36 +55,29 @@ func (t *Tool) commandGen() error {
 	return nil
 }
 
-func (t *Tool) generateComposeFile() error {
+func (c *CommandGenerate) generateComposeFile() error {
 	info := composeInfo{
-		Config:        t.config,
-		RuntimeConfig: t.runtimeConfig,
+		Config2: c.config2,
 	}
 
-	if t.config.Monitor.Prometheus {
+	if c.config2.PrometheusEnabled {
 		info.Volumes = append(info.Volumes, "prometheus-data")
 		info.Volumes = append(info.Volumes, "grafana-data")
 	}
 
-	switch t.topology.netShape {
+	switch c.topology.NetworkShape {
 	case NetworkShapeDual:
 		info.Networks = []composeNetwork{
 			{
 				Name: "wan",
 				CIDR: "10.1.0.0/16",
 			},
-			{
-				Name: "dc1",
-				CIDR: "10.0.1.0/24",
-			},
-			{
-				Name: "dc2",
-				CIDR: "10.0.2.0/24",
-			},
-			{
-				Name: "dc3",
-				CIDR: "10.0.3.0/24",
-			},
+		}
+		for _, dc := range c.topology.Datacenters() {
+			info.Networks = append(info.Networks, composeNetwork{
+				Name: dc.Name,
+				CIDR: dc.BaseIP + ".0/24",
+			})
 		}
 	case NetworkShapeFlat:
 		info.Networks = []composeNetwork{
@@ -96,23 +87,23 @@ func (t *Tool) generateComposeFile() error {
 			},
 		}
 	default:
-		panic("unknown shape: " + t.topology.netShape)
+		panic("unknown shape: " + c.topology.NetworkShape)
 	}
 
-	err := t.topology.Walk(func(node Node) error {
+	err := c.topology.Walk(func(node Node) error {
 		podName := node.Name + "-pod"
 
-		podHCL, err := t.generateAgentHCL(node)
+		podHCL, err := c.generateAgentHCL(node)
 		if err != nil {
 			return err
 		}
 
-		extraYAML_1, err := t.generateMeshGatewayYAML(podName, node)
+		extraYAML_1, err := c.generateMeshGatewayYAML(podName, node)
 		if err != nil {
 			return err
 		}
 
-		extraYAML_2, err := t.generatePingPongYAML(podName, node)
+		extraYAML_2, err := c.generatePingPongYAML(podName, node)
 		if err != nil {
 			return err
 		}
@@ -121,7 +112,7 @@ func (t *Tool) generateComposeFile() error {
 
 		pod := composePod{
 			PodName:        podName,
-			ConsulImage:    t.runtimeConfig.ConsulImage,
+			ConsulImage:    c.config2.ConsulImage,
 			Node:           node,
 			HCL:            indent(podHCL, 8),
 			AgentDependsOn: []string{podName},
@@ -147,12 +138,11 @@ func (t *Tool) generateComposeFile() error {
 		return err
 	}
 
-	return t.updateFileIfDifferent(out.Bytes(), "docker-compose.yml", 0644)
+	return c.updateFileIfDifferent(out.Bytes(), "docker-compose.yml", 0644)
 }
 
 type composeInfo struct {
-	Config        *Config
-	RuntimeConfig RuntimeConfig
+	Config2 *FlatConfig
 
 	Volumes  []string
 	Pods     []composePod
@@ -199,7 +189,7 @@ volumes:
 
 # https://yipee.io/2017/06/getting-kubernetes-pod-features-using-native-docker-commands/
 services:
-{{- if .Config.Monitor.Prometheus }}
+{{- if .Config2.PrometheusEnabled }}
   prometheus:
     image: prom/prometheus:latest
     restart: always
@@ -252,7 +242,7 @@ services:
 {{- end}}
 `))
 
-func (t *Tool) generatePingPongYAML(podName string, node Node) (string, error) {
+func (c *CommandGenerate) generatePingPongYAML(podName string, node Node) (string, error) {
 	var extraYAML bytes.Buffer
 	if node.Service != nil {
 		svc := node.Service
@@ -268,7 +258,7 @@ func (t *Tool) generatePingPongYAML(podName string, node Node) (string, error) {
 			NodeName:        node.Name,
 			PingPong:        svc.Name,
 			UseBuiltinProxy: node.UseBuiltinProxy,
-			EnvoyLogLevel:   t.config.Envoy.LogLevel,
+			EnvoyLogLevel:   c.config2.EnvoyLogLevel,
 		}
 		if len(svc.Meta) > 0 {
 			ppi.MetaString = fmt.Sprintf("--%q", svc.Meta)
@@ -279,7 +269,7 @@ func (t *Tool) generatePingPongYAML(podName string, node Node) (string, error) {
 			proxyType = "builtin"
 		}
 
-		if t.config.Kubernetes.Enabled {
+		if c.config2.KubernetesEnabled {
 			ppi.SidecarBootArgs = []string{
 				"/secrets/ready.val",
 				proxyType,
@@ -366,7 +356,7 @@ var pingpongT = template.Must(template.New("pingpong").Parse(`  ################
 {{- end }}
 `))
 
-func (t *Tool) generateMeshGatewayYAML(podName string, node Node) (string, error) {
+func (c *CommandGenerate) generateMeshGatewayYAML(podName string, node Node) (string, error) {
 	if !node.MeshGateway {
 		return "", nil
 	}
@@ -374,15 +364,15 @@ func (t *Tool) generateMeshGatewayYAML(podName string, node Node) (string, error
 	mgi := meshGatewayInfo{
 		PodName:       podName,
 		NodeName:      node.Name,
-		EnvoyLogLevel: t.config.Envoy.LogLevel,
+		EnvoyLogLevel: c.config2.EnvoyLogLevel,
 	}
 
-	switch t.topology.netShape {
+	switch c.topology.NetworkShape {
 	case NetworkShapeDual:
 		mgi.EnableWAN = true
 	case NetworkShapeFlat:
 	default:
-		panic("unknown shape: " + t.topology.netShape)
+		panic("unknown shape: " + c.topology.NetworkShape)
 	}
 
 	var extraYAML bytes.Buffer
@@ -429,39 +419,35 @@ var meshGatewayT = template.Must(template.New("mesh-gateway").Parse(`  #########
       - '{{ .EnvoyLogLevel }}'
 `))
 
-func (t *Tool) generateAgentHCL(node Node) (string, error) {
+func (c *CommandGenerate) generateAgentHCL(node Node) (string, error) {
 	configInfo := consulAgentConfigInfo{
 		AdvertiseAddr:    node.LocalAddress(),
-		RetryJoin:        `"` + strings.Join(t.topology.ServerIPs(node.Datacenter), `", "`) + `"`,
+		RetryJoin:        `"` + strings.Join(c.topology.ServerIPs(node.Datacenter), `", "`) + `"`,
 		Datacenter:       node.Datacenter,
-		AgentMasterToken: t.runtimeConfig.AgentMasterToken,
+		AgentMasterToken: c.config2.AgentMasterToken,
 		Server:           node.Server,
-		GossipKey:        t.runtimeConfig.GossipKey,
-		TLS:              t.config.Encryption.TLS,
-		Prometheus:       t.config.Monitor.Prometheus,
+		GossipKey:        c.config2.GossipKey,
+		TLS:              c.config2.EncryptionTLS,
+		Prometheus:       c.config2.PrometheusEnabled,
 	}
 
 	if node.Server {
-		configInfo.MasterToken = t.config.InitialMasterToken
+		configInfo.MasterToken = c.config2.InitialMasterToken
 
-		switch t.topology.netShape {
-		case NetworkShapeDual:
-			leaderDC1 := t.topology.WANLeaderIP("dc1")
-			leaderDC2 := t.topology.WANLeaderIP("dc2")
-			leaderDC3 := t.topology.WANLeaderIP("dc3")
-			configInfo.RetryJoinWAN = `"` + leaderDC1 + `", "` + leaderDC2 + `", "` + leaderDC3 + `"`
+		wanIP := false
+		if c.topology.NetworkShape == NetworkShapeDual {
+			wanIP = true
 			configInfo.AdvertiseAddrWAN = node.PublicAddress()
-		case NetworkShapeFlat:
-			leaderDC1 := t.topology.LeaderIP("dc1")
-			leaderDC2 := t.topology.LeaderIP("dc2")
-			leaderDC3 := t.topology.LeaderIP("dc3")
-			configInfo.RetryJoinWAN = `"` + leaderDC1 + `", "` + leaderDC2 + `", "` + leaderDC3 + `"`
-		default:
-			panic("unknown shape: " + t.topology.netShape)
 		}
 
-		configInfo.SecondaryServer = node.Datacenter != "dc1"
-		configInfo.BootstrapExpect = len(t.topology.ServerIPs(node.Datacenter))
+		var ips []string
+		for _, dc := range c.topology.Datacenters() {
+			ips = append(ips, c.topology.LeaderIP_new(dc.Name, wanIP))
+		}
+		configInfo.RetryJoinWAN = `"` + strings.Join(ips, `", "`) + `"`
+
+		configInfo.SecondaryServer = node.Datacenter != PrimaryDC
+		configInfo.BootstrapExpect = len(c.topology.ServerIPs(node.Datacenter))
 
 		configInfo.TLSFilePrefix = node.Datacenter + "-server-consul-" + strconv.Itoa(node.Index)
 	} else {
@@ -584,7 +570,7 @@ func indent(s string, n int) string {
 	return buf.String()
 }
 
-func (t *Tool) generatePrometheusConfigFile() error {
+func (c *CommandGenerate) generatePrometheusConfigFile() error {
 	type kv struct {
 		Key, Val string
 	}
@@ -612,14 +598,14 @@ func (t *Tool) generatePrometheusConfigFile() error {
 		sort.Strings(j.Targets)
 	}
 
-	err := t.topology.Walk(func(node Node) error {
+	err := c.topology.Walk(func(node Node) error {
 		if node.Server {
 			add(&job{
 				Name:        "consul-servers-" + node.Datacenter,
 				MetricsPath: "/v1/agent/metrics",
 				Params: map[string][]string{
 					"format": []string{"prometheus"},
-					"token":  []string{t.runtimeConfig.AgentMasterToken},
+					"token":  []string{c.config2.AgentMasterToken},
 				},
 				Targets: []string{
 					net.JoinHostPort(node.LocalAddress(), "8500"),
@@ -636,7 +622,7 @@ func (t *Tool) generatePrometheusConfigFile() error {
 				MetricsPath: "/v1/agent/metrics",
 				Params: map[string][]string{
 					"format": []string{"prometheus"},
-					"token":  []string{t.runtimeConfig.AgentMasterToken},
+					"token":  []string{c.config2.AgentMasterToken},
 				},
 				Targets: []string{
 					net.JoinHostPort(node.LocalAddress(), "8500"),
@@ -698,7 +684,7 @@ func (t *Tool) generatePrometheusConfigFile() error {
 		return err
 	}
 
-	return t.updateFileIfDifferent(out.Bytes(), "cache/prometheus.yml", 0644)
+	return c.updateFileIfDifferent(out.Bytes(), "cache/prometheus.yml", 0644)
 }
 
 var prometheusConfigT = template.Must(template.New("prometheus").Parse(`
@@ -753,7 +739,7 @@ scrape_configs:
 {{- end }}
 `))
 
-func (t *Tool) generateGrafanaConfigFiles() error {
+func (c *CommandGenerate) generateGrafanaConfigFiles() error {
 	files := map[string]string{
 		"grafana-prometheus.yml": `
 apiVersion: 1
@@ -780,26 +766,26 @@ org_role = Admin
 	}
 
 	for name, body := range files {
-		if err := t.updateFileIfDifferent([]byte(body), filepath.Join("cache", name), 0644); err != nil {
+		if err := c.updateFileIfDifferent([]byte(body), filepath.Join("cache", name), 0644); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (t *Tool) updateFileIfDifferent(body []byte, path string, perm os.FileMode) error {
+func (c *CommandGenerate) updateFileIfDifferent(body []byte, path string, perm os.FileMode) error {
 	prev, err := ioutil.ReadFile(path)
 	if err != nil {
 		if !os.IsNotExist(err) {
 			return err
 		}
-		t.logger.Info("writing new file", "path", path)
+		c.logger.Info("writing new file", "path", path)
 	} else {
 		// loaded
 		if bytes.Equal(body, prev) {
 			return nil
 		}
-		t.logger.Info("file has changed", "path", path)
+		c.logger.Info("file has changed", "path", path)
 	}
 
 	_, err = safeio.WriteToFile(bytes.NewReader(body), path, perm)
