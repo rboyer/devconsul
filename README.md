@@ -68,11 +68,11 @@ topology {
 
 ## Topology
 
-Two datacenters are configured using "machines" configured in the manner of a
-Kubernetes pod by anchoring a network namespace to a single placeholder
-container (running `google/pause:latest`) and then attaching any additional
-containers to it that should be colocated and share network things such as
-`127.0.0.1` and the `lo0` adapter.
+By default, two datacenters are configured using "machines" configured in the
+manner of a Kubernetes pod by anchoring a network namespace to a single
+placeholder container (running `google/pause:latest`) and then attaching any
+additional containers to it that should be colocated and share network things
+such as `127.0.0.1` and the `lo0` adapter.
 
 An example using a topology of `servers { dc1=1 dc2=1 } clients { dc1=2
 dc2=2}`:
