@@ -148,16 +148,13 @@ func (c *Core) initTLS() error {
 		return err
 	}
 
-	if err := os.Chdir(tlsDir); err != nil {
-		return err
-	}
-
-	if exists, err := filesExist("consul-agent-ca-key.pem", "consul-agent-ca.pem"); err != nil {
+	if exists, err := filesExist(tlsDir, "consul-agent-ca-key.pem", "consul-agent-ca.pem"); err != nil {
 		return err
 	} else if !exists {
 		var errWriter bytes.Buffer
 
 		cmd := exec.Command(consulBin, "tls", "ca", "create")
+		cmd.Dir = tlsDir
 		cmd.Stdout = nil
 		cmd.Stderr = &errWriter
 		cmd.Stdin = nil
@@ -175,7 +172,7 @@ func (c *Core) initTLS() error {
 
 		prefix := fmt.Sprintf("%s-%s-consul-%d", dc.Name, typ, idx)
 
-		exists, err := filesExist(prefix+"-key.pem", prefix+".pem")
+		exists, err := filesExist(tlsDir, prefix+"-key.pem", prefix+".pem")
 		if err != nil {
 			return err
 		} else if exists {
@@ -187,6 +184,7 @@ func (c *Core) initTLS() error {
 		var errWriter bytes.Buffer
 
 		cmd := exec.Command(consulBin, "tls", "cert", "create", "-"+typ, "-dc="+dc.Name)
+		cmd.Dir = tlsDir
 		cmd.Stdout = nil
 		cmd.Stderr = &errWriter
 		cmd.Stdin = nil
@@ -213,9 +211,9 @@ func (c *Core) initTLS() error {
 	return nil
 }
 
-func filesExist(paths ...string) (bool, error) {
+func filesExist(parent string, paths ...string) (bool, error) {
 	for _, p := range paths {
-		ok, err := fileExists(p)
+		ok, err := fileExists(filepath.Join(parent, p))
 		if err != nil {
 			return false, err
 		}
