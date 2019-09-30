@@ -12,7 +12,7 @@ $(PROGRAM_NAME): *.go cachestore/*.go consulfunc/*.go go.mod go.sum
 	@go build
 
 .PHONY: init
-init: crypto docker k8s
+init: docker k8s
 
 .PHONY: force-docker
 force-docker:
@@ -26,15 +26,6 @@ cache/docker.done: $(PROGRAM_NAME) config.hcl Dockerfile-envoy
 	docker build -t local/consul-envoy -f Dockerfile-envoy .
 	@touch cache/docker.done
 
-.PHONY: crypto
-crypto: cache/tls/done
-cache/tls/done: $(PROGRAM_NAME) config.hcl scripts/tls-init.sh
-	@mkdir -p cache/tls
-	@if [[ -n "$$(./$(PROGRAM_NAME) config tls)" ]]; then \
-		./scripts/tls-init.sh ; \
-	fi
-	@touch cache/tls/done
-
 .PHONY: k8s
 k8s: cache/k8s/done
 cache/k8s/done: $(PROGRAM_NAME) config.hcl scripts/k8s-rbac.sh
@@ -45,7 +36,7 @@ cache/k8s/done: $(PROGRAM_NAME) config.hcl scripts/k8s-rbac.sh
 	@touch cache/k8s/done
 
 .PHONY: gen
-gen: crypto docker-compose.yml cache/agent-master-token.val cache/gossip-key.val
+gen: docker-compose.yml cache/agent-master-token.val cache/gossip-key.val
 docker-compose.yml: $(PROGRAM_NAME) config.hcl cache/docker.done
 	./$(PROGRAM_NAME) gen
 

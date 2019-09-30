@@ -73,7 +73,8 @@ func main() {
 }
 
 type Core struct {
-	logger hclog.Logger
+	logger  hclog.Logger
+	rootDir string
 
 	cache  *cachestore.Store
 	config *FlatConfig
@@ -88,11 +89,13 @@ func (c *Core) Init() error {
 	if err != nil {
 		return err
 	}
-	if _, err := os.Stat(filepath.Join(cwd, "config.hcl")); err != nil {
+	c.rootDir = cwd
+
+	if _, err := os.Stat(filepath.Join(c.rootDir, "config.hcl")); err != nil {
 		return fmt.Errorf("Missing required config.hcl file", err)
 	}
 
-	cacheDir := filepath.Join(cwd, "cache")
+	cacheDir := filepath.Join(c.rootDir, "cache")
 
 	c.cache, err = cachestore.New(cacheDir)
 	if err != nil {
@@ -105,6 +108,11 @@ func (c *Core) Init() error {
 	}
 
 	// t.logger.Info("File config:\n" + jsonPretty(t.config))
+	if c.config.EncryptionTLS {
+		if err := c.initTLS(); err != nil {
+			return err
+		}
+	}
 
 	if c.config.EncryptionGossip {
 		if err := c.initGossipKey(); err != nil {
@@ -121,6 +129,112 @@ func (c *Core) Init() error {
 	}
 
 	return nil
+}
+
+func (c *Core) initTLS() error {
+	consulBin, err := exec.LookPath("consul")
+	if err != nil {
+		if execErr, ok := err.(*exec.Error); ok {
+			if execErr == exec.ErrNotFound {
+				return fmt.Errorf("no 'consul' binary on PATH. Please run 'make dev' from your consul checkout")
+			}
+		}
+		return err
+	}
+
+	cacheDir := filepath.Join(c.rootDir, "cache")
+	tlsDir := filepath.Join(cacheDir, "tls")
+	if err := os.MkdirAll(tlsDir, 0755); err != nil {
+		return err
+	}
+
+	if err := os.Chdir(tlsDir); err != nil {
+		return err
+	}
+
+	if exists, err := filesExist("consul-agent-ca-key.pem", "consul-agent-ca.pem"); err != nil {
+		return err
+	} else if !exists {
+		var errWriter bytes.Buffer
+
+		cmd := exec.Command(consulBin, "tls", "ca", "create")
+		cmd.Stdout = nil
+		cmd.Stderr = &errWriter
+		cmd.Stdin = nil
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("could not invoke 'consul': %v : %s", err, errWriter.String())
+		}
+		c.logger.Info("created cluster CA")
+	}
+
+	genCert := func(dc *Datacenter, server bool, idx int) error {
+		typ := "client"
+		if server {
+			typ = "server"
+		}
+
+		prefix := fmt.Sprintf("%s-%s-consul-%d", dc.Name, typ, idx)
+
+		exists, err := filesExist(prefix+"-key.pem", prefix+".pem")
+		if err != nil {
+			return err
+		} else if exists {
+			return nil
+		}
+
+		c.logger.Info("creating certs", "prefix", prefix)
+
+		var errWriter bytes.Buffer
+
+		cmd := exec.Command(consulBin, "tls", "cert", "create", "-"+typ, "-dc="+dc.Name)
+		cmd.Stdout = nil
+		cmd.Stderr = &errWriter
+		cmd.Stdin = nil
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("could not invoke 'consul tls cert create': %v : %s", err, errWriter.String())
+		}
+
+		return nil
+	}
+
+	for _, dc := range c.topology.Datacenters() {
+		for i := 0; i < dc.Servers; i++ {
+			if err := genCert(&dc, true, i); err != nil {
+				return err
+			}
+		}
+		for i := 0; i < dc.Clients; i++ {
+			if err := genCert(&dc, false, i); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+func filesExist(paths ...string) (bool, error) {
+	for _, p := range paths {
+		ok, err := fileExists(p)
+		if err != nil {
+			return false, err
+		}
+		if !ok {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
+func fileExists(path string) (bool, error) {
+	_, err := os.Stat(path)
+	if os.IsNotExist(err) {
+		return false, nil
+	} else if err != nil {
+		return false, err
+	} else {
+		return true, nil
+	}
 }
 
 func (c *Core) initConsulImage() error {
