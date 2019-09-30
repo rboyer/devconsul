@@ -15,6 +15,8 @@ import (
 type CommandBoot struct {
 	*Core
 
+	primaryOnly bool
+
 	masterToken         string
 	clients             map[string]*api.Client
 	replicationSecretID string
@@ -23,12 +25,20 @@ type CommandBoot struct {
 }
 
 func (c *CommandBoot) Run() error {
+	flag.BoolVar(&c.primaryOnly, "primary", false, "primary only")
 	flag.Parse()
+
+	if c.primaryOnly {
+		c.logger.Info("only bootstrapping the primary datacenter", "dc", PrimaryDC)
+	}
 
 	var err error
 
 	c.clients = make(map[string]*api.Client)
 	for _, dc := range c.topology.Datacenters() {
+		if c.primaryOnly && !dc.Primary {
+			continue
+		}
 		c.clients[dc.Name], err = consulfunc.GetClient(c.topology.LeaderIP(dc.Name, false), "" /*no token yet*/)
 		if err != nil {
 			return fmt.Errorf("error creating initial bootstrap client for dc=%s: %v", dc.Name, err)
@@ -62,15 +72,17 @@ func (c *CommandBoot) Run() error {
 		return fmt.Errorf("injectReplicationToken: %v", err)
 	}
 
-	for _, dc := range c.topology.Datacenters() {
-		if dc.Primary {
-			continue
+	if !c.primaryOnly {
+		for _, dc := range c.topology.Datacenters() {
+			if dc.Primary {
+				continue
+			}
+			c.clients[dc.Name], err = consulfunc.GetClient(c.topology.LeaderIP(dc.Name, false), c.masterToken)
+			if err != nil {
+				return fmt.Errorf("error creating final client for dc=%s: %v", dc.Name, err)
+			}
+			c.waitForUpgrade(dc.Name)
 		}
-		c.clients[dc.Name], err = consulfunc.GetClient(c.topology.LeaderIP(dc.Name, false), c.masterToken)
-		if err != nil {
-			return fmt.Errorf("error creating final client for dc=%s: %v", dc.Name, err)
-		}
-		c.waitForUpgrade(dc.Name)
 	}
 
 	err = c.createAgentTokens()
@@ -694,6 +706,9 @@ func GetServiceRegistrationHCL(s Service) (string, error) {
 
 func (c *CommandBoot) waitForNodeUpdates() {
 	for _, dc := range c.topology.Datacenters() {
+		if c.primaryOnly && !dc.Primary {
+			continue
+		}
 		c.waitForNodeUpdatesDC(c.clients[dc.Name], dc.Name)
 	}
 }

@@ -45,6 +45,11 @@ up: gen
 	docker-compose up -d
 	./$(PROGRAM_NAME) boot
 
+.PHONY: primary
+primary: gen
+	docker-compose up -d
+	./$(PROGRAM_NAME) boot -primary
+
 .PHONY: down
 down: gen
 	docker-compose down -v --remove-orphans
