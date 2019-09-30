@@ -40,8 +40,11 @@ if [[ "$ip" = "null" ]]; then
     exit 1
 fi
 
-
 export CONSUL_HTTP_TOKEN="$(master_token)"
 export CONSUL_HTTP_ADDR="http://${ip}:8500"
+
+if [[ -z "$CONSUL_HTTP_TOKEN" ]]; then
+    exit 1
+fi
 
 exec consul "$@"

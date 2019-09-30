@@ -43,4 +43,9 @@ fi
 path="$1"
 shift
 
-exec curl -sL -H "x-consul-token: $(master_token)" "http://${ip}:8500/${path}" "$@"
+CONSUL_HTTP_TOKEN="$(master_token)"
+if [[ -z "$CONSUL_HTTP_TOKEN" ]]; then
+    exit 1
+fi
+
+exec curl -sL -H "x-consul-token: $CONSUL_HTTP_TOKEN" "http://${ip}:8500/${path}" "$@"
