@@ -367,6 +367,9 @@ func (c *CommandGenerate) generateMeshGatewayYAML(podName string, node Node) (st
 		EnvoyLogLevel: c.config.EnvoyLogLevel,
 	}
 
+	// TODO:
+	mgi.ExposeServers = true
+
 	switch c.topology.NetworkShape {
 	case NetworkShapeIslands, NetworkShapeDual:
 		mgi.EnableWAN = true
@@ -387,6 +390,7 @@ type meshGatewayInfo struct {
 	NodeName      string
 	EnvoyLogLevel string
 	EnableWAN     bool
+	ExposeServers bool
 }
 
 var meshGatewayT = template.Must(template.New("mesh-gateway").Parse(`  #####################
@@ -407,6 +411,9 @@ var meshGatewayT = template.Must(template.New("mesh-gateway").Parse(`  #########
       - "/secrets/mesh-gateway.val"
       - '--'
       #################
+{{- if .ExposeServers }}
+      - '-expose-servers'
+{{- end }}
 {{- if .EnableWAN }}
       - '-wan-address'
       - '{{ "{{ GetInterfaceIP \"eth1\" }}:443" }}'
