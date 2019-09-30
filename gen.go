@@ -43,7 +43,7 @@ func (c *CommandGenerate) Run() error {
 		return err
 	}
 
-	if c.config2.PrometheusEnabled {
+	if c.config.PrometheusEnabled {
 		if err := c.generatePrometheusConfigFile(); err != nil {
 			return err
 		}
@@ -57,10 +57,10 @@ func (c *CommandGenerate) Run() error {
 
 func (c *CommandGenerate) generateComposeFile() error {
 	info := composeInfo{
-		Config2: c.config2,
+		Config: c.config,
 	}
 
-	if c.config2.PrometheusEnabled {
+	if c.config.PrometheusEnabled {
 		info.Volumes = append(info.Volumes, "prometheus-data")
 		info.Volumes = append(info.Volumes, "grafana-data")
 	}
@@ -112,7 +112,7 @@ func (c *CommandGenerate) generateComposeFile() error {
 
 		pod := composePod{
 			PodName:        podName,
-			ConsulImage:    c.config2.ConsulImage,
+			ConsulImage:    c.config.ConsulImage,
 			Node:           node,
 			HCL:            indent(podHCL, 8),
 			AgentDependsOn: []string{podName},
@@ -142,7 +142,7 @@ func (c *CommandGenerate) generateComposeFile() error {
 }
 
 type composeInfo struct {
-	Config2 *FlatConfig
+	Config *FlatConfig
 
 	Volumes  []string
 	Pods     []composePod
@@ -189,7 +189,7 @@ volumes:
 
 # https://yipee.io/2017/06/getting-kubernetes-pod-features-using-native-docker-commands/
 services:
-{{- if .Config2.PrometheusEnabled }}
+{{- if .Config.PrometheusEnabled }}
   prometheus:
     image: prom/prometheus:latest
     restart: always
@@ -258,7 +258,7 @@ func (c *CommandGenerate) generatePingPongYAML(podName string, node Node) (strin
 			NodeName:        node.Name,
 			PingPong:        svc.Name,
 			UseBuiltinProxy: node.UseBuiltinProxy,
-			EnvoyLogLevel:   c.config2.EnvoyLogLevel,
+			EnvoyLogLevel:   c.config.EnvoyLogLevel,
 		}
 		if len(svc.Meta) > 0 {
 			ppi.MetaString = fmt.Sprintf("--%q", svc.Meta)
@@ -269,7 +269,7 @@ func (c *CommandGenerate) generatePingPongYAML(podName string, node Node) (strin
 			proxyType = "builtin"
 		}
 
-		if c.config2.KubernetesEnabled {
+		if c.config.KubernetesEnabled {
 			ppi.SidecarBootArgs = []string{
 				"/secrets/ready.val",
 				proxyType,
@@ -364,7 +364,7 @@ func (c *CommandGenerate) generateMeshGatewayYAML(podName string, node Node) (st
 	mgi := meshGatewayInfo{
 		PodName:       podName,
 		NodeName:      node.Name,
-		EnvoyLogLevel: c.config2.EnvoyLogLevel,
+		EnvoyLogLevel: c.config.EnvoyLogLevel,
 	}
 
 	switch c.topology.NetworkShape {
@@ -424,15 +424,15 @@ func (c *CommandGenerate) generateAgentHCL(node Node) (string, error) {
 		AdvertiseAddr:    node.LocalAddress(),
 		RetryJoin:        `"` + strings.Join(c.topology.ServerIPs(node.Datacenter), `", "`) + `"`,
 		Datacenter:       node.Datacenter,
-		AgentMasterToken: c.config2.AgentMasterToken,
+		AgentMasterToken: c.config.AgentMasterToken,
 		Server:           node.Server,
-		GossipKey:        c.config2.GossipKey,
-		TLS:              c.config2.EncryptionTLS,
-		Prometheus:       c.config2.PrometheusEnabled,
+		GossipKey:        c.config.GossipKey,
+		TLS:              c.config.EncryptionTLS,
+		Prometheus:       c.config.PrometheusEnabled,
 	}
 
 	if node.Server {
-		configInfo.MasterToken = c.config2.InitialMasterToken
+		configInfo.MasterToken = c.config.InitialMasterToken
 
 		wanIP := false
 		if c.topology.NetworkShape == NetworkShapeDual {
@@ -605,7 +605,7 @@ func (c *CommandGenerate) generatePrometheusConfigFile() error {
 				MetricsPath: "/v1/agent/metrics",
 				Params: map[string][]string{
 					"format": []string{"prometheus"},
-					"token":  []string{c.config2.AgentMasterToken},
+					"token":  []string{c.config.AgentMasterToken},
 				},
 				Targets: []string{
 					net.JoinHostPort(node.LocalAddress(), "8500"),
@@ -622,7 +622,7 @@ func (c *CommandGenerate) generatePrometheusConfigFile() error {
 				MetricsPath: "/v1/agent/metrics",
 				Params: map[string][]string{
 					"format": []string{"prometheus"},
-					"token":  []string{c.config2.AgentMasterToken},
+					"token":  []string{c.config.AgentMasterToken},
 				},
 				Targets: []string{
 					net.JoinHostPort(node.LocalAddress(), "8500"),

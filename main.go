@@ -75,8 +75,8 @@ func main() {
 type Core struct {
 	logger hclog.Logger
 
-	cache   *cachestore.Store
-	config2 *FlatConfig
+	cache  *cachestore.Store
+	config *FlatConfig
 
 	topology *Topology // for boot/gen
 }
@@ -99,14 +99,14 @@ func (c *Core) Init() error {
 		return err
 	}
 
-	c.config2, c.topology, err = LoadConfig()
+	c.config, c.topology, err = LoadConfig()
 	if err != nil {
 		return err
 	}
 
 	// t.logger.Info("File config:\n" + jsonPretty(t.config))
 
-	if c.config2.EncryptionGossip {
+	if c.config.EncryptionGossip {
 		if err := c.initGossipKey(); err != nil {
 			return err
 		}
@@ -124,7 +124,7 @@ func (c *Core) Init() error {
 }
 
 func (c *Core) initConsulImage() error {
-	if !strings.HasSuffix(c.config2.ConsulImage, ":latest") {
+	if !strings.HasSuffix(c.config.ConsulImage, ":latest") {
 		return nil
 	}
 
@@ -136,7 +136,7 @@ func (c *Core) initConsulImage() error {
 	var errWriter bytes.Buffer
 	var outWriter bytes.Buffer
 
-	cmd := exec.Command(dockerBin, "image", "inspect", c.config2.ConsulImage)
+	cmd := exec.Command(dockerBin, "image", "inspect", c.config.ConsulImage)
 	cmd.Stdout = &outWriter
 	cmd.Stderr = &errWriter
 	cmd.Stdin = nil
@@ -161,13 +161,13 @@ func (c *Core) initConsulImage() error {
 		return fmt.Errorf("unexpected docker output: %q", obj[0].Id)
 	}
 
-	c.config2.ConsulImage = strings.TrimPrefix(obj[0].Id, "sha256:")
+	c.config.ConsulImage = strings.TrimPrefix(obj[0].Id, "sha256:")
 	return nil
 }
 
 func (c *Core) initAgentMasterToken() error {
 	var err error
-	c.config2.AgentMasterToken, err = c.cache.LoadOrSaveValue("agent-master-token", func() (string, error) {
+	c.config.AgentMasterToken, err = c.cache.LoadOrSaveValue("agent-master-token", func() (string, error) {
 		return uuid.GenerateUUID()
 	})
 	return err
@@ -175,7 +175,7 @@ func (c *Core) initAgentMasterToken() error {
 
 func (c *Core) initGossipKey() error {
 	var err error
-	c.config2.GossipKey, err = c.cache.LoadOrSaveValue("gossip-key", func() (string, error) {
+	c.config.GossipKey, err = c.cache.LoadOrSaveValue("gossip-key", func() (string, error) {
 		key := make([]byte, 16)
 		n, err := rand.Reader.Read(key)
 		if err != nil {

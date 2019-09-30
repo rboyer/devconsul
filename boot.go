@@ -100,7 +100,7 @@ func (c *CommandBoot) Run() error {
 		return fmt.Errorf("writeServiceRegistrationFiles: %v", err)
 	}
 
-	if c.config2.KubernetesEnabled {
+	if c.config.KubernetesEnabled {
 		err = c.initializeKubernetes()
 		if err != nil {
 			return fmt.Errorf("initializeKubernetes: %v", err)
@@ -143,8 +143,8 @@ func (c *CommandBoot) bootstrap(client *api.Client) error {
 		return err
 	}
 
-	if c.masterToken == "" && c.config2.InitialMasterToken != "" {
-		c.masterToken = c.config2.InitialMasterToken
+	if c.masterToken == "" && c.config.InitialMasterToken != "" {
+		c.masterToken = c.config.InitialMasterToken
 		if err := c.cache.SaveValue("master-token", c.masterToken); err != nil {
 			return err
 		}
@@ -260,7 +260,7 @@ func (c *CommandBoot) createMeshGatewayToken() error {
 func (c *CommandBoot) injectReplicationToken() error {
 	token := c.mustGetToken("replication", "")
 
-	agentMasterToken := c.config2.AgentMasterToken
+	agentMasterToken := c.config.AgentMasterToken
 
 	return c.topology.Walk(func(node Node) error {
 		if node.Datacenter == PrimaryDC || !node.Server {
@@ -455,8 +455,8 @@ func (c *CommandBoot) writeCentralConfigs() error {
 
 	ce := client.ConfigEntries()
 
-	entries := c.config2.ConfigEntries
-	if c.config2.PrometheusEnabled {
+	entries := c.config.ConfigEntries
+	if c.config.PrometheusEnabled {
 		found := false
 		for _, entry := range entries {
 			if entry.GetKind() != api.ProxyDefaults {

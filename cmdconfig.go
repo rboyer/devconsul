@@ -33,12 +33,12 @@ func (c *CommandConfig) Run() error {
 	}
 
 	m := map[string]interface{}{
-		"image":            c.config2.ConsulImage,
-		"tls":              bool2str(c.config2.EncryptionTLS),
-		"gossip":           bool2str(c.config2.EncryptionGossip),
-		"k8s":              bool2str(c.config2.KubernetesEnabled),
-		"gossipKey":        c.config2.GossipKey,
-		"agentMasterToken": c.config2.AgentMasterToken,
+		"image":            c.config.ConsulImage,
+		"tls":              bool2str(c.config.EncryptionTLS),
+		"gossip":           bool2str(c.config.EncryptionGossip),
+		"k8s":              bool2str(c.config.KubernetesEnabled),
+		"gossipKey":        c.config.GossipKey,
+		"agentMasterToken": c.config.AgentMasterToken,
 		"localAddrs":       localAddrs,
 		"datacenters":      datacenters,
 	}
