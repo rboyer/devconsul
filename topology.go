@@ -209,29 +209,15 @@ type Topology struct {
 	NetworkShape NetworkShape
 }
 
-func (t *Topology) LeaderIP_new(datacenter string, wan bool) string {
-	if wan {
-		return t.WANLeaderIP(datacenter)
-	} else {
-		return t.LeaderIP(datacenter)
-	}
-}
-
-func (t *Topology) LeaderIP(datacenter string) string {
+func (t *Topology) LeaderIP(datacenter string, wan bool) string {
 	for _, name := range t.servers {
 		n := t.Node(name)
 		if n.Datacenter == datacenter {
-			return n.LocalAddress()
-		}
-	}
-	panic("no such dc")
-}
-
-func (t *Topology) WANLeaderIP(datacenter string) string {
-	for _, name := range t.servers {
-		n := t.Node(name)
-		if n.Datacenter == datacenter {
-			return n.PublicAddress()
+			if wan {
+				return n.PublicAddress()
+			} else {
+				return n.LocalAddress()
+			}
 		}
 	}
 	panic("no such dc")

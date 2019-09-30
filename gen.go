@@ -442,7 +442,7 @@ func (c *CommandGenerate) generateAgentHCL(node Node) (string, error) {
 
 		var ips []string
 		for _, dc := range c.topology.Datacenters() {
-			ips = append(ips, c.topology.LeaderIP_new(dc.Name, wanIP))
+			ips = append(ips, c.topology.LeaderIP(dc.Name, wanIP))
 		}
 		configInfo.RetryJoinWAN = `"` + strings.Join(ips, `", "`) + `"`
 

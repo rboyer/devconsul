@@ -29,7 +29,7 @@ func (c *CommandBoot) Run() error {
 
 	c.clients = make(map[string]*api.Client)
 	for _, dc := range c.topology.Datacenters() {
-		c.clients[dc.Name], err = consulfunc.GetClient(c.topology.LeaderIP(dc.Name), "" /*no token yet*/)
+		c.clients[dc.Name], err = consulfunc.GetClient(c.topology.LeaderIP(dc.Name, false), "" /*no token yet*/)
 		if err != nil {
 			return fmt.Errorf("error creating initial bootstrap client for dc=%s: %v", dc.Name, err)
 		}
@@ -41,7 +41,7 @@ func (c *CommandBoot) Run() error {
 	}
 
 	// now we have master token set we can do anything
-	c.clients[PrimaryDC], err = consulfunc.GetClient(c.topology.LeaderIP(PrimaryDC), c.masterToken)
+	c.clients[PrimaryDC], err = consulfunc.GetClient(c.topology.LeaderIP(PrimaryDC, false), c.masterToken)
 	if err != nil {
 		return fmt.Errorf("error creating final client for dc=%s: %v", PrimaryDC, err)
 	}
@@ -66,7 +66,7 @@ func (c *CommandBoot) Run() error {
 		if dc.Primary {
 			continue
 		}
-		c.clients[dc.Name], err = consulfunc.GetClient(c.topology.LeaderIP(dc.Name), c.masterToken)
+		c.clients[dc.Name], err = consulfunc.GetClient(c.topology.LeaderIP(dc.Name, false), c.masterToken)
 		if err != nil {
 			return fmt.Errorf("error creating final client for dc=%s: %v", dc.Name, err)
 		}
