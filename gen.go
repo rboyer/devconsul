@@ -66,7 +66,7 @@ func (c *CommandGenerate) generateComposeFile() error {
 	}
 
 	switch c.topology.NetworkShape {
-	case NetworkShapeDual:
+	case NetworkShapeIslands, NetworkShapeDual:
 		info.Networks = []composeNetwork{
 			{
 				Name: "wan",
@@ -368,7 +368,7 @@ func (c *CommandGenerate) generateMeshGatewayYAML(podName string, node Node) (st
 	}
 
 	switch c.topology.NetworkShape {
-	case NetworkShapeDual:
+	case NetworkShapeIslands, NetworkShapeDual:
 		mgi.EnableWAN = true
 	case NetworkShapeFlat:
 	default:
@@ -435,9 +435,19 @@ func (c *CommandGenerate) generateAgentHCL(node Node) (string, error) {
 		configInfo.MasterToken = c.config.InitialMasterToken
 
 		wanIP := false
-		if c.topology.NetworkShape == NetworkShapeDual {
+		switch c.topology.NetworkShape {
+		case NetworkShapeIslands:
+			if node.MeshGateway {
+				wanIP = true
+				configInfo.AdvertiseAddrWAN = node.PublicAddress()
+			}
+		case NetworkShapeDual:
 			wanIP = true
 			configInfo.AdvertiseAddrWAN = node.PublicAddress()
+		case NetworkShapeFlat:
+			// n/a
+		default:
+			panic("unknown shape: " + c.topology.NetworkShape)
 		}
 
 		var ips []string

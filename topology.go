@@ -10,14 +10,23 @@ import (
 type NetworkShape string
 
 const (
-	// NetworkShapeSplit = NetworkShape("split")
+	// NetworkShapeIslands describes an isolated island topology where only the
+	// mesh gateways are on the WAN.
+	NetworkShapeIslands = NetworkShape("islands")
+
+	// NetworkShapeDual describes a private/public lan/wan split where the
+	// servers/meshGateways can route to all other servers/meshGateways and the
+	// clients are isolated.
 	NetworkShapeDual = NetworkShape("dual")
+
+	// NetworkShapeFlat describes a flat network where every agent has a single
+	// ip address and they all are routable.
 	NetworkShapeFlat = NetworkShape("flat")
 )
 
 func (s NetworkShape) GetNetworkName(dc string) string {
 	switch s {
-	case NetworkShapeDual:
+	case NetworkShapeIslands, NetworkShapeDual:
 		return dc
 	case NetworkShapeFlat:
 		return "lan"
@@ -34,6 +43,8 @@ func InferTopology(uc *userConfig) (*Topology, error) {
 	}
 
 	switch uc.Topology.NetworkShape {
+	case "islands":
+		topology.NetworkShape = NetworkShapeIslands
 	case "dual":
 		topology.NetworkShape = NetworkShapeDual
 	case "flat", "":
@@ -74,6 +85,7 @@ func InferTopology(uc *userConfig) (*Topology, error) {
 			}
 
 			switch topology.NetworkShape {
+			case NetworkShapeIslands:
 			case NetworkShapeDual:
 				node.Addresses = append(node.Addresses, Address{
 					Network:   "wan",
@@ -116,7 +128,7 @@ func InferTopology(uc *userConfig) (*Topology, error) {
 				node.MeshGateway = true
 
 				switch topology.NetworkShape {
-				case NetworkShapeDual:
+				case NetworkShapeIslands, NetworkShapeDual:
 					node.Addresses = append(node.Addresses, Address{
 						Network:   "wan",
 						IPAddress: wanIP,
