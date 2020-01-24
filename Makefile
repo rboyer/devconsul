@@ -46,9 +46,14 @@ up: gen
 	./$(PROGRAM_NAME) boot
 
 .PHONY: primary
-primary: gen
-	docker-compose up -d
+primary: pods
+	docker-compose up -d $$(./$(PROGRAM_NAME) config | jq -r '.localAddrs | keys | .[]' | grep "^dc1-\(server\|client\)")
 	./$(PROGRAM_NAME) boot -primary
+
+.PHONY: pods
+pods: gen
+	$(info bringing up just the empty pods...)
+	docker-compose up -d $$(./$(PROGRAM_NAME) config | jq -r '.localAddrs | keys | .[] | . + "-pod"')
 
 .PHONY: down
 down: gen

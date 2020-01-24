@@ -45,6 +45,12 @@ func InferTopology(uc *userConfig) (*Topology, error) {
 	switch uc.Topology.NetworkShape {
 	case "islands":
 		topology.NetworkShape = NetworkShapeIslands
+		if !uc.Encryption.TLS {
+			return nil, fmt.Errorf("network_shape=%q requires TLS to be enabled to function", "islands")
+		}
+		if !uc.Encryption.Gossip {
+			return nil, fmt.Errorf("network_shape=%q requires Gossip Encryption to be enabled for sanity", "islands")
+		}
 	case "dual":
 		topology.NetworkShape = NetworkShapeDual
 	case "flat", "":
@@ -86,6 +92,12 @@ func InferTopology(uc *userConfig) (*Topology, error) {
 
 			switch topology.NetworkShape {
 			case NetworkShapeIslands:
+				if dc != PrimaryDC { // Needed for initial join
+					node.Addresses = append(node.Addresses, Address{
+						Network:   "wan",
+						IPAddress: wanIP,
+					})
+				}
 			case NetworkShapeDual:
 				node.Addresses = append(node.Addresses, Address{
 					Network:   "wan",
@@ -263,6 +275,17 @@ func (t *Topology) ServerIPs(datacenter string) []string {
 	return out
 }
 
+func (t *Topology) GatewayAddrs(datacenter string) []string {
+	var out []string
+	for _, name := range t.clients {
+		n := t.Node(name)
+		if n.Datacenter == datacenter && n.MeshGateway {
+			out = append(out, n.PublicAddress()+":443")
+		}
+	}
+	return out
+}
+
 func (t *Topology) all() []string {
 	o := make([]string, 0, len(t.servers)+len(t.clients))
 	o = append(o, t.servers...)
@@ -318,6 +341,20 @@ type Node struct {
 	MeshGateway     bool
 	UseBuiltinProxy bool
 	Index           int
+}
+
+func (n *Node) AddLabels(m map[string]string) {
+	m["devconsul.datacenter"] = n.Datacenter
+
+	var agentType string
+	if n.Server {
+		agentType = "server"
+	} else {
+		agentType = "client"
+	}
+	m["devconsul.agentType"] = agentType
+
+	m["devconsul.node"] = n.Name
 }
 
 func (n *Node) TokenName() string { return "agent--" + n.Name }

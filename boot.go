@@ -55,6 +55,27 @@ func (c *CommandBoot) Run() error {
 	if err != nil {
 		return fmt.Errorf("error creating final client for dc=%s: %v", PrimaryDC, err)
 	}
+
+	if err := c.initPrimaryDC(); err != nil {
+		return err
+	}
+
+	if !c.primaryOnly {
+		if err := c.initSecondaryDCs(); err != nil {
+			return err
+		}
+	}
+
+	if err := c.cache.SaveValue("ready", "1"); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (c *CommandBoot) initPrimaryDC() error {
+	var err error
+
 	c.waitForUpgrade(PrimaryDC)
 
 	err = c.createReplicationToken()
@@ -67,35 +88,17 @@ func (c *CommandBoot) Run() error {
 		return fmt.Errorf("createMeshGatewayToken: %v", err)
 	}
 
-	err = c.injectReplicationToken()
-	if err != nil {
-		return fmt.Errorf("injectReplicationToken: %v", err)
-	}
-
-	if !c.primaryOnly {
-		for _, dc := range c.topology.Datacenters() {
-			if dc.Primary {
-				continue
-			}
-			c.clients[dc.Name], err = consulfunc.GetClient(c.topology.LeaderIP(dc.Name, false), c.masterToken)
-			if err != nil {
-				return fmt.Errorf("error creating final client for dc=%s: %v", dc.Name, err)
-			}
-			c.waitForUpgrade(dc.Name)
-		}
-	}
-
 	err = c.createAgentTokens()
 	if err != nil {
 		return fmt.Errorf("createAgentTokens: %v", err)
 	}
 
-	err = c.injectAgentTokens()
+	err = c.injectAgentTokens(PrimaryDC)
 	if err != nil {
-		return fmt.Errorf("injectAgentTokens: %v", err)
+		return fmt.Errorf("injectAgentTokens[%s]: %v", PrimaryDC, err)
 	}
 
-	c.waitForNodeUpdates()
+	c.waitForNodeUpdates(PrimaryDC)
 
 	err = c.createAnonymousToken()
 	if err != nil {
@@ -129,8 +132,33 @@ func (c *CommandBoot) Run() error {
 		return fmt.Errorf("createIntentions: %v", err)
 	}
 
-	if err := c.cache.SaveValue("ready", "1"); err != nil {
-		return err
+	return nil
+}
+
+func (c *CommandBoot) initSecondaryDCs() error {
+	var err error
+
+	err = c.injectReplicationToken()
+	if err != nil {
+		return fmt.Errorf("injectReplicationToken: %v", err)
+	}
+
+	for _, dc := range c.topology.Datacenters() {
+		if dc.Primary {
+			continue
+		}
+		c.clients[dc.Name], err = consulfunc.GetClient(c.topology.LeaderIP(dc.Name, false), c.masterToken)
+		if err != nil {
+			return fmt.Errorf("error creating final client for dc=%s: %v", dc.Name, err)
+		}
+		c.waitForUpgrade(dc.Name)
+
+		err = c.injectAgentTokens(dc.Name)
+		if err != nil {
+			return fmt.Errorf("injectAgentTokens[%s]: %v", dc.Name, err)
+		}
+
+		c.waitForNodeUpdates(dc.Name)
 	}
 
 	return nil
@@ -342,8 +370,11 @@ service_prefix "" { policy = "read" }
 }
 
 // TALK TO EACH AGENT
-func (c *CommandBoot) injectAgentTokens() error {
+func (c *CommandBoot) injectAgentTokens(datacenter string) error {
 	return c.topology.Walk(func(node Node) error {
+		if node.Datacenter != datacenter {
+			return nil
+		}
 		agentClient, err := consulfunc.GetClient(node.LocalAddress(), c.masterToken)
 		if err != nil {
 			return err
@@ -704,9 +735,9 @@ func GetServiceRegistrationHCL(s Service) (string, error) {
 	return buf.String(), nil
 }
 
-func (c *CommandBoot) waitForNodeUpdates() {
+func (c *CommandBoot) waitForNodeUpdates(datacenter string) {
 	for _, dc := range c.topology.Datacenters() {
-		if c.primaryOnly && !dc.Primary {
+		if dc.Name != datacenter {
 			continue
 		}
 		c.waitForNodeUpdatesDC(c.clients[dc.Name], dc.Name)

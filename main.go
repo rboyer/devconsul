@@ -183,7 +183,26 @@ func (c *Core) initTLS() error {
 
 		var errWriter bytes.Buffer
 
-		cmd := exec.Command(consulBin, "tls", "cert", "create", "-"+typ, "-dc="+dc.Name)
+		var args []string
+		if server {
+			args = []string{
+				"tls", "cert", "create",
+				"-server",
+				"-dc=" + dc.Name,
+				"-additional-dnsname=" + fmt.Sprintf(
+					"%s-server%d-pod.server.%s.consul",
+					dc.Name, idx+1, dc.Name,
+				),
+			}
+		} else {
+			args = []string{
+				"tls", "cert", "create",
+				"-client",
+				"-dc=" + dc.Name,
+			}
+		}
+
+		cmd := exec.Command(consulBin, args...)
 		cmd.Dir = tlsDir
 		cmd.Stdout = nil
 		cmd.Stderr = &errWriter
