@@ -75,15 +75,6 @@ func InferTopology(uc *userConfig) (*Topology, error) {
 	rawTopology := uc.Topology
 	nodeConfigs := rawTopology.NodeConfig
 
-	addNode := func(node Node) {
-		topology.nm[node.Name] = node
-		if node.Server {
-			topology.servers = append(topology.servers, node.Name)
-		} else {
-			topology.clients = append(topology.clients, node.Name)
-		}
-	}
-
 	forDC := func(dc, baseIP, wanBaseIP string, servers, clients, meshGateways int) {
 		for idx := 1; idx <= servers; idx++ {
 			id := strconv.Itoa(idx)
@@ -120,7 +111,7 @@ func InferTopology(uc *userConfig) (*Topology, error) {
 			default:
 				panic("unknown shape: " + topology.NetworkShape)
 			}
-			addNode(node)
+			topology.AddNode(node)
 		}
 
 		numServiceClients := clients - meshGateways
@@ -193,7 +184,7 @@ func InferTopology(uc *userConfig) (*Topology, error) {
 				node.Service = &svc
 			}
 
-			addNode(node)
+			topology.AddNode(node)
 		}
 	}
 
@@ -369,6 +360,15 @@ func (t *Topology) AddNetwork(n *Network) {
 		t.networks = make(map[string]*Network)
 	}
 	t.networks[n.Name] = n
+}
+
+func (t *Topology) AddNode(node Node) {
+	t.nm[node.Name] = node
+	if node.Server {
+		t.servers = append(t.servers, node.Name)
+	} else {
+		t.clients = append(t.clients, node.Name)
+	}
 }
 
 type Datacenter struct {
