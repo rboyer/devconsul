@@ -39,24 +39,38 @@ func InferTopology(uc *userConfig) (*Topology, error) {
 	t := &uc.Topology
 
 	topology := &Topology{
-		nm: make(map[string]Node),
+		nm:       make(map[string]Node),
+		networks: make(map[string]Network),
 	}
 
+	needsAllNetworks := false
 	switch uc.Topology.NetworkShape {
 	case "islands":
 		topology.NetworkShape = NetworkShapeIslands
 		if !uc.Encryption.TLS {
 			return nil, fmt.Errorf("network_shape=%q requires TLS to be enabled to function", "islands")
 		}
-		if !uc.Encryption.Gossip {
-			return nil, fmt.Errorf("network_shape=%q requires Gossip Encryption to be enabled for sanity", "islands")
-		}
+		needsAllNetworks = true
 	case "dual":
 		topology.NetworkShape = NetworkShapeDual
+		needsAllNetworks = true
 	case "flat", "":
 		topology.NetworkShape = NetworkShapeFlat
+		needsAllNetworks = false
 	default:
 		return nil, fmt.Errorf("unknown network_shape: %s", uc.Topology.NetworkShape)
+	}
+
+	if needsAllNetworks {
+		topology.AddNetwork(Network{
+			Name: "wan",
+			CIDR: "10.1.0.0/16",
+		})
+	} else {
+		topology.AddNetwork(Network{
+			Name: "lan",
+			CIDR: "10.0.0.0/16",
+		})
 	}
 
 	rawTopology := uc.Topology
@@ -204,7 +218,7 @@ func InferTopology(uc *userConfig) (*Topology, error) {
 			return nil, fmt.Errorf("%s: not a valid datacenter name", dc)
 		}
 
-		topology.dcs = append(topology.dcs, &Datacenter{
+		thisDC := &Datacenter{
 			Name:      dc,
 			Primary:   dc == PrimaryDC,
 			Index:     i,
@@ -212,7 +226,15 @@ func InferTopology(uc *userConfig) (*Topology, error) {
 			Clients:   v.Clients,
 			BaseIP:    fmt.Sprintf("10.0.%d", i),
 			WANBaseIP: fmt.Sprintf("10.1.%d", i),
-		})
+		}
+		topology.dcs = append(topology.dcs, thisDC)
+
+		if needsAllNetworks {
+			topology.AddNetwork(Network{
+				Name: thisDC.Name,
+				CIDR: thisDC.BaseIP + ".0/24",
+			})
+		}
 	}
 	sort.Slice(topology.dcs, func(i, j int) bool {
 		return topology.dcs[i].Name < topology.dcs[j].Name
@@ -231,6 +253,8 @@ type Topology struct {
 	nm           map[string]Node
 	dcs          []*Datacenter
 	NetworkShape NetworkShape
+
+	networks map[string]Network
 }
 
 func (t *Topology) LeaderIP(datacenter string, wan bool) string {
@@ -252,6 +276,17 @@ func (t *Topology) Datacenters() []Datacenter {
 	for i, dc := range t.dcs {
 		out[i] = *dc
 	}
+	return out
+}
+
+func (t *Topology) Networks() []Network {
+	out := make([]Network, 0, len(t.networks))
+	for _, n := range t.networks {
+		out = append(out, n)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].Name < out[j].Name
+	})
 	return out
 }
 
@@ -320,6 +355,13 @@ func (t *Topology) WalkSilent(f func(n Node)) {
 	}
 }
 
+func (t *Topology) AddNetwork(n Network) {
+	if t.networks == nil {
+		t.networks = make(map[string]Network)
+	}
+	t.networks[n.Name] = n
+}
+
 type Datacenter struct {
 	Name    string
 	Primary bool
@@ -330,6 +372,11 @@ type Datacenter struct {
 
 	BaseIP    string
 	WANBaseIP string
+}
+
+type Network struct {
+	Name string
+	CIDR string
 }
 
 type Node struct {

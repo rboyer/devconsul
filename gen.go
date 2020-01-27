@@ -57,37 +57,13 @@ func (c *CommandGenerate) Run() error {
 
 func (c *CommandGenerate) generateComposeFile() error {
 	info := composeInfo{
-		Config: c.config,
+		Config:   c.config,
+		Networks: c.topology.Networks(),
 	}
 
 	if c.config.PrometheusEnabled {
 		info.Volumes = append(info.Volumes, "prometheus-data")
 		info.Volumes = append(info.Volumes, "grafana-data")
-	}
-
-	switch c.topology.NetworkShape {
-	case NetworkShapeIslands, NetworkShapeDual:
-		info.Networks = []composeNetwork{
-			{
-				Name: "wan",
-				CIDR: "10.1.0.0/16",
-			},
-		}
-		for _, dc := range c.topology.Datacenters() {
-			info.Networks = append(info.Networks, composeNetwork{
-				Name: dc.Name,
-				CIDR: dc.BaseIP + ".0/24",
-			})
-		}
-	case NetworkShapeFlat:
-		info.Networks = []composeNetwork{
-			{
-				Name: "lan",
-				CIDR: "10.0.0.0/16",
-			},
-		}
-	default:
-		panic("unknown shape: " + c.topology.NetworkShape)
 	}
 
 	err := c.topology.Walk(func(node Node) error {
@@ -150,12 +126,7 @@ type composeInfo struct {
 
 	Volumes  []string
 	Pods     []composePod
-	Networks []composeNetwork
-}
-
-type composeNetwork struct {
-	Name string
-	CIDR string
+	Networks []Network
 }
 
 type composePod struct {
