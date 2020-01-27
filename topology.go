@@ -39,8 +39,7 @@ func InferTopology(uc *userConfig) (*Topology, error) {
 	t := &uc.Topology
 
 	topology := &Topology{
-		nm:       make(map[string]Node),
-		networks: make(map[string]Network),
+		nm: make(map[string]Node),
 	}
 
 	needsAllNetworks := false
@@ -62,12 +61,12 @@ func InferTopology(uc *userConfig) (*Topology, error) {
 	}
 
 	if needsAllNetworks {
-		topology.AddNetwork(Network{
+		topology.AddNetwork(&Network{
 			Name: "wan",
 			CIDR: "10.1.0.0/16",
 		})
 	} else {
-		topology.AddNetwork(Network{
+		topology.AddNetwork(&Network{
 			Name: "lan",
 			CIDR: "10.0.0.0/16",
 		})
@@ -85,7 +84,7 @@ func InferTopology(uc *userConfig) (*Topology, error) {
 		}
 	}
 
-	forDC := func(dc, baseIP, wanBaseIP string, servers, clients int) {
+	forDC := func(dc, baseIP, wanBaseIP string, servers, clients, meshGateways int) {
 		for idx := 1; idx <= servers; idx++ {
 			id := strconv.Itoa(idx)
 			ip := baseIP + "." + strconv.Itoa(10+idx)
@@ -124,7 +123,10 @@ func InferTopology(uc *userConfig) (*Topology, error) {
 			addNode(node)
 		}
 
+		numServiceClients := clients - meshGateways
 		for idx := 1; idx <= clients; idx++ {
+			isGatewayClient := (idx > numServiceClients)
+
 			id := strconv.Itoa(idx)
 			ip := baseIP + "." + strconv.Itoa(20+idx)
 			wanIP := wanBaseIP + "." + strconv.Itoa(20+idx)
@@ -150,7 +152,7 @@ func InferTopology(uc *userConfig) (*Topology, error) {
 				}
 			}
 
-			if nodeConfig.MeshGateway {
+			if isGatewayClient {
 				node.MeshGateway = true
 
 				switch topology.NetworkShape {
@@ -202,6 +204,11 @@ func InferTopology(uc *userConfig) (*Topology, error) {
 	dcPatt := regexp.MustCompile(`^dc([0-9]+)$`)
 
 	for dc, v := range t.Datacenters {
+		if v.MeshGateways < 0 {
+			return nil, fmt.Errorf("%s: mesh gateways must be non-negative", dc)
+		}
+		v.Clients += v.MeshGateways // the gateways are just fancy clients
+
 		if v.Servers <= 0 {
 			return nil, fmt.Errorf("%s: must always have at least one server", dc)
 		}
@@ -219,18 +226,19 @@ func InferTopology(uc *userConfig) (*Topology, error) {
 		}
 
 		thisDC := &Datacenter{
-			Name:      dc,
-			Primary:   dc == PrimaryDC,
-			Index:     i,
-			Servers:   v.Servers,
-			Clients:   v.Clients,
-			BaseIP:    fmt.Sprintf("10.0.%d", i),
-			WANBaseIP: fmt.Sprintf("10.1.%d", i),
+			Name:         dc,
+			Primary:      dc == PrimaryDC,
+			Index:        i,
+			Servers:      v.Servers,
+			Clients:      v.Clients,
+			MeshGateways: v.MeshGateways,
+			BaseIP:       fmt.Sprintf("10.0.%d", i),
+			WANBaseIP:    fmt.Sprintf("10.1.%d", i),
 		}
 		topology.dcs = append(topology.dcs, thisDC)
 
 		if needsAllNetworks {
-			topology.AddNetwork(Network{
+			topology.AddNetwork(&Network{
 				Name: thisDC.Name,
 				CIDR: thisDC.BaseIP + ".0/24",
 			})
@@ -241,20 +249,21 @@ func InferTopology(uc *userConfig) (*Topology, error) {
 	})
 
 	for _, dc := range topology.dcs {
-		forDC(dc.Name, dc.BaseIP, dc.WANBaseIP, dc.Servers, dc.Clients)
+		forDC(dc.Name, dc.BaseIP, dc.WANBaseIP, dc.Servers, dc.Clients, dc.MeshGateways)
 	}
 
 	return topology, nil
 }
 
 type Topology struct {
-	servers      []string // node names
-	clients      []string // node names
-	nm           map[string]Node
-	dcs          []*Datacenter
 	NetworkShape NetworkShape
 
-	networks map[string]Network
+	networks map[string]*Network
+	dcs      []*Datacenter
+
+	nm      map[string]Node
+	servers []string // node names
+	clients []string // node names
 }
 
 func (t *Topology) LeaderIP(datacenter string, wan bool) string {
@@ -279,8 +288,8 @@ func (t *Topology) Datacenters() []Datacenter {
 	return out
 }
 
-func (t *Topology) Networks() []Network {
-	out := make([]Network, 0, len(t.networks))
+func (t *Topology) Networks() []*Network {
+	out := make([]*Network, 0, len(t.networks))
 	for _, n := range t.networks {
 		out = append(out, n)
 	}
@@ -355,9 +364,9 @@ func (t *Topology) WalkSilent(f func(n Node)) {
 	}
 }
 
-func (t *Topology) AddNetwork(n Network) {
+func (t *Topology) AddNetwork(n *Network) {
 	if t.networks == nil {
-		t.networks = make(map[string]Network)
+		t.networks = make(map[string]*Network)
 	}
 	t.networks[n.Name] = n
 }
@@ -366,9 +375,10 @@ type Datacenter struct {
 	Name    string
 	Primary bool
 
-	Index   int
-	Servers int
-	Clients int
+	Index        int
+	Servers      int
+	Clients      int
+	MeshGateways int
 
 	BaseIP    string
 	WANBaseIP string

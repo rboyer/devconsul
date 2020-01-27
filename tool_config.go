@@ -47,8 +47,9 @@ type userConfigTopology struct {
 }
 
 type userConfigTopologyDatacenter struct {
-	Servers int `hcl:"servers"`
-	Clients int `hcl:"clients"`
+	Servers      int `hcl:"servers"`
+	Clients      int `hcl:"clients"`
+	MeshGateways int `hcl:"mesh_gateways"`
 }
 
 type userConfigTopologyNodeConfig struct {
@@ -56,7 +57,6 @@ type userConfigTopologyNodeConfig struct {
 	UpstreamDatacenter string            `hcl:"upstream_datacenter"`
 	UpstreamExtraHCL   string            `hcl:"upstream_extra_hcl"`
 	ServiceMeta        map[string]string `hcl:"service_meta"` // key -> val
-	MeshGateway        bool              `hcl:"mesh_gateway"`
 	UseBuiltinProxy    bool              `hcl:"use_builtin_proxy"`
 }
 
@@ -124,6 +124,7 @@ topology {
     dc1 {
       servers = 1
       clients = 2
+      mesh_gateways = 0
     }
   }
 }

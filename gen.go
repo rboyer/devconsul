@@ -126,7 +126,7 @@ type composeInfo struct {
 
 	Volumes  []string
 	Pods     []composePod
-	Networks []Network
+	Networks []*Network
 }
 
 type composePod struct {
