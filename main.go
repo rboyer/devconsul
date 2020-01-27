@@ -92,7 +92,7 @@ func (c *Core) Init() error {
 	c.rootDir = cwd
 
 	if _, err := os.Stat(filepath.Join(c.rootDir, "config.hcl")); err != nil {
-		return fmt.Errorf("Missing required config.hcl file", err)
+		return fmt.Errorf("Missing required config.hcl file: %v", err)
 	}
 
 	cacheDir := filepath.Join(c.rootDir, "cache")

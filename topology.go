@@ -35,18 +35,13 @@ func (s NetworkShape) GetNetworkName(dc string) string {
 	}
 }
 
-func InferTopology(uc *userConfig) (*Topology, error) {
-	t := &uc.Topology
-
+func InferTopology(uct *userConfigTopology) (*Topology, error) {
 	topology := &Topology{}
 
 	needsAllNetworks := false
-	switch uc.Topology.NetworkShape {
+	switch uct.NetworkShape {
 	case "islands":
 		topology.NetworkShape = NetworkShapeIslands
-		if !uc.Encryption.TLS {
-			return nil, fmt.Errorf("network_shape=%q requires TLS to be enabled to function", "islands")
-		}
 		needsAllNetworks = true
 	case "dual":
 		topology.NetworkShape = NetworkShapeDual
@@ -55,7 +50,7 @@ func InferTopology(uc *userConfig) (*Topology, error) {
 		topology.NetworkShape = NetworkShapeFlat
 		needsAllNetworks = false
 	default:
-		return nil, fmt.Errorf("unknown network_shape: %s", uc.Topology.NetworkShape)
+		return nil, fmt.Errorf("unknown network_shape: %s", uct.NetworkShape)
 	}
 
 	if needsAllNetworks {
@@ -70,8 +65,7 @@ func InferTopology(uc *userConfig) (*Topology, error) {
 		})
 	}
 
-	rawTopology := uc.Topology
-	nodeConfigs := rawTopology.NodeConfig
+	nodeConfigs := uct.NodeConfig
 
 	forDC := func(dc, baseIP, wanBaseIP string, servers, clients, meshGateways int) {
 		for idx := 1; idx <= servers; idx++ {
@@ -186,13 +180,13 @@ func InferTopology(uc *userConfig) (*Topology, error) {
 		}
 	}
 
-	if _, ok := t.Datacenters[PrimaryDC]; !ok {
+	if _, ok := uct.Datacenters[PrimaryDC]; !ok {
 		return nil, fmt.Errorf("primary datacenter %q is missing from config", PrimaryDC)
 	}
 
 	dcPatt := regexp.MustCompile(`^dc([0-9]+)$`)
 
-	for dc, v := range t.Datacenters {
+	for dc, v := range uct.Datacenters {
 		if v.MeshGateways < 0 {
 			return nil, fmt.Errorf("%s: mesh gateways must be non-negative", dc)
 		}
@@ -335,6 +329,24 @@ func (t *Topology) Node(name string) *Node {
 		panic("node not found: " + name)
 	}
 	return n
+}
+
+func (t *Topology) Nodes() []*Node {
+	out := make([]*Node, 0, len(t.nm))
+	t.WalkSilent(func(n *Node) {
+		out = append(out, n)
+	})
+	return out
+}
+
+func (t *Topology) DatacenterNodes(dc string) []*Node {
+	out := make([]*Node, 0, len(t.nm))
+	t.WalkSilent(func(n *Node) {
+		if n.Datacenter == dc {
+			out = append(out, n)
+		}
+	})
+	return out
 }
 
 func (t *Topology) Walk(f func(n *Node) error) error {

@@ -73,8 +73,30 @@ func LoadConfig() (*FlatConfig, *Topology, error) {
 		return nil, nil, err
 	}
 
+	return parseConfig(contents)
+}
+
+func parseConfig(contents []byte) (*FlatConfig, *Topology, error) {
+	cfg, uct, err := parseConfigPartial(contents)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	topology, err := InferTopology(uct)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	if topology.NetworkShape == NetworkShapeIslands && !cfg.EncryptionTLS {
+		return nil, nil, fmt.Errorf("network_shape=%q requires TLS to be enabled to function", topology.NetworkShape)
+	}
+
+	return cfg, topology, nil
+}
+
+func parseConfigPartial(contents []byte) (*FlatConfig, *userConfigTopology, error) {
 	var uc userConfig
-	err = serialDecodeHCL(&uc, []string{
+	err := serialDecodeHCL(&uc, []string{
 		defaultUserConfig,
 		string(contents),
 	})
@@ -100,12 +122,7 @@ func LoadConfig() (*FlatConfig, *Topology, error) {
 		cfg.ConfigEntries = append(cfg.ConfigEntries, entry)
 	}
 
-	topology, err := InferTopology(&uc)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	return cfg, topology, nil
+	return cfg, &uc.Topology, nil
 }
 
 const defaultUserConfig = `
@@ -120,6 +137,7 @@ monitor {
   prometheus = false
 }
 topology {
+  network_shape = "flat"
   datacenters {
     dc1 {
       servers = 1
