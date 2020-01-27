@@ -19,7 +19,7 @@ func (c *CommandConfig) Run() error {
 		localAddrs  = make(map[string]string)
 		datacenters []string
 	)
-	c.topology.WalkSilent(func(n Node) {
+	c.topology.WalkSilent(func(n *Node) {
 		if n.Server {
 			servers[n.Datacenter]++
 		} else {

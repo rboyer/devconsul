@@ -29,7 +29,7 @@ func (c *CommandGenerate) Run() error {
 	flag.Parse()
 
 	if verbose {
-		c.topology.WalkSilent(func(node Node) {
+		c.topology.WalkSilent(func(node *Node) {
 			c.logger.Info("Generating node",
 				"name", node.Name,
 				"server", node.Server,
@@ -66,7 +66,7 @@ func (c *CommandGenerate) generateComposeFile() error {
 		info.Volumes = append(info.Volumes, "grafana-data")
 	}
 
-	err := c.topology.Walk(func(node Node) error {
+	err := c.topology.Walk(func(node *Node) error {
 		podName := node.Name + "-pod"
 
 		podHCL, err := c.generateAgentHCL(node)
@@ -132,7 +132,7 @@ type composeInfo struct {
 type composePod struct {
 	PodName        string
 	ConsulImage    string
-	Node           Node
+	Node           *Node
 	HCL            string
 	AgentDependsOn []string
 	ExtraYAML      string
@@ -232,7 +232,7 @@ services:
 {{- end}}
 `))
 
-func (c *CommandGenerate) generatePingPongYAML(podName string, node Node) (string, error) {
+func (c *CommandGenerate) generatePingPongYAML(podName string, node *Node) (string, error) {
 	var extraYAML bytes.Buffer
 	if node.Service != nil {
 		svc := node.Service
@@ -350,7 +350,7 @@ var pingpongT = template.Must(template.New("pingpong").Parse(`  ################
 {{- end }}
 `))
 
-func (c *CommandGenerate) generateMeshGatewayYAML(podName string, node Node) (string, error) {
+func (c *CommandGenerate) generateMeshGatewayYAML(podName string, node *Node) (string, error) {
 	if !node.MeshGateway {
 		return "", nil
 	}
@@ -365,12 +365,10 @@ func (c *CommandGenerate) generateMeshGatewayYAML(podName string, node Node) (st
 	}
 	node.AddLabels(mgi.Labels)
 
-	// TODO:
-	mgi.ExposeServers = true
-
 	switch c.topology.NetworkShape {
 	case NetworkShapeIslands, NetworkShapeDual:
 		mgi.EnableWAN = true
+		mgi.ExposeServers = true
 	case NetworkShapeFlat:
 	default:
 		panic("unknown shape: " + c.topology.NetworkShape)
@@ -430,7 +428,7 @@ var meshGatewayT = template.Must(template.New("mesh-gateway").Parse(`  #########
       - '{{ .EnvoyLogLevel }}'
 `))
 
-func (c *CommandGenerate) generateAgentHCL(node Node) (string, error) {
+func (c *CommandGenerate) generateAgentHCL(node *Node) (string, error) {
 	configInfo := consulAgentConfigInfo{
 		AdvertiseAddr:    node.LocalAddress(),
 		RetryJoin:        `"` + strings.Join(c.topology.ServerIPs(node.Datacenter), `", "`) + `"`,
@@ -643,7 +641,7 @@ func (c *CommandGenerate) generatePrometheusConfigFile() error {
 		sort.Strings(j.Targets)
 	}
 
-	err := c.topology.Walk(func(node Node) error {
+	err := c.topology.Walk(func(node *Node) error {
 		if node.Server {
 			add(&job{
 				Name:        "consul-servers-" + node.Datacenter,

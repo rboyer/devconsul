@@ -302,7 +302,7 @@ func (c *CommandBoot) injectReplicationToken() error {
 
 	agentMasterToken := c.config.AgentMasterToken
 
-	return c.topology.Walk(func(node Node) error {
+	return c.topology.Walk(func(node *Node) error {
 		if node.Datacenter == PrimaryDC || !node.Server {
 			return nil
 		}
@@ -331,7 +331,7 @@ func (c *CommandBoot) injectReplicationToken() error {
 
 // each agent will get a minimal policy configured
 func (c *CommandBoot) createAgentTokens() error {
-	return c.topology.Walk(func(node Node) error {
+	return c.topology.Walk(func(node *Node) error {
 		policyName := "agent--" + node.Name
 
 		p := &api.ACLPolicy{
@@ -371,7 +371,7 @@ service_prefix "" { policy = "read" }
 
 // TALK TO EACH AGENT
 func (c *CommandBoot) injectAgentTokens(datacenter string) error {
-	return c.topology.Walk(func(node Node) error {
+	return c.topology.Walk(func(node *Node) error {
 		if node.Datacenter != datacenter {
 			return nil
 		}
@@ -448,7 +448,7 @@ service_prefix "" { policy = "read" }
 func (c *CommandBoot) createServiceTokens() error {
 	done := make(map[string]struct{})
 
-	return c.topology.Walk(func(n Node) error {
+	return c.topology.Walk(func(n *Node) error {
 		if n.Service == nil {
 			return nil
 		}
@@ -573,7 +573,7 @@ func (c *CommandBoot) writeCentralConfigs() error {
 }
 
 func (c *CommandBoot) writeServiceRegistrationFiles() error {
-	return c.topology.Walk(func(n Node) error {
+	return c.topology.Walk(func(n *Node) error {
 		if n.Service == nil {
 			return nil
 		}
@@ -594,7 +594,7 @@ func (c *CommandBoot) writeServiceRegistrationFiles() error {
 }
 
 func (c *CommandBoot) createIntentions() error {
-	return c.topology.Walk(func(n Node) error {
+	return c.topology.Walk(func(n *Node) error {
 		if n.Service == nil {
 			return nil
 		}
@@ -772,7 +772,7 @@ func (c *CommandBoot) determineNodeUpdateStragglers(nodes []*api.Node, datacente
 	}
 
 	var out []string
-	c.topology.WalkSilent(func(n Node) {
+	c.topology.WalkSilent(func(n *Node) {
 		if n.Datacenter != datacenter {
 			return
 		}

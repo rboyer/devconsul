@@ -38,9 +38,7 @@ func (s NetworkShape) GetNetworkName(dc string) string {
 func InferTopology(uc *userConfig) (*Topology, error) {
 	t := &uc.Topology
 
-	topology := &Topology{
-		nm: make(map[string]Node),
-	}
+	topology := &Topology{}
 
 	needsAllNetworks := false
 	switch uc.Topology.NetworkShape {
@@ -81,7 +79,7 @@ func InferTopology(uc *userConfig) (*Topology, error) {
 			ip := baseIP + "." + strconv.Itoa(10+idx)
 			wanIP := wanBaseIP + "." + strconv.Itoa(10+idx)
 
-			node := Node{
+			node := &Node{
 				Datacenter: dc,
 				Name:       dc + "-server" + id,
 				Server:     true,
@@ -123,7 +121,7 @@ func InferTopology(uc *userConfig) (*Topology, error) {
 			wanIP := wanBaseIP + "." + strconv.Itoa(20+idx)
 
 			nodeName := dc + "-client" + id
-			node := Node{
+			node := &Node{
 				Datacenter: dc,
 				Name:       nodeName,
 				Server:     false,
@@ -252,7 +250,7 @@ type Topology struct {
 	networks map[string]*Network
 	dcs      []*Datacenter
 
-	nm      map[string]Node
+	nm      map[string]*Node
 	servers []string // node names
 	clients []string // node names
 }
@@ -328,7 +326,7 @@ func (t *Topology) all() []string {
 	return o
 }
 
-func (t *Topology) Node(name string) Node {
+func (t *Topology) Node(name string) *Node {
 	if t.nm == nil {
 		panic("node not found: " + name)
 	}
@@ -339,7 +337,7 @@ func (t *Topology) Node(name string) Node {
 	return n
 }
 
-func (t *Topology) Walk(f func(n Node) error) error {
+func (t *Topology) Walk(f func(n *Node) error) error {
 	for _, nodeName := range t.all() {
 		node := t.Node(nodeName)
 		if err := f(node); err != nil {
@@ -348,7 +346,7 @@ func (t *Topology) Walk(f func(n Node) error) error {
 	}
 	return nil
 }
-func (t *Topology) WalkSilent(f func(n Node)) {
+func (t *Topology) WalkSilent(f func(n *Node)) {
 	for _, nodeName := range t.all() {
 		node := t.Node(nodeName)
 		f(node)
@@ -362,7 +360,10 @@ func (t *Topology) AddNetwork(n *Network) {
 	t.networks[n.Name] = n
 }
 
-func (t *Topology) AddNode(node Node) {
+func (t *Topology) AddNode(node *Node) {
+	if t.nm == nil {
+		t.nm = make(map[string]*Node)
+	}
 	t.nm[node.Name] = node
 	if node.Server {
 		t.servers = append(t.servers, node.Name)
