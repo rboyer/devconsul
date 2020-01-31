@@ -41,14 +41,20 @@ docker-compose.yml: $(PROGRAM_NAME) config.hcl cache/docker.done
 	./$(PROGRAM_NAME) gen
 
 .PHONY: up
-up: gen
-	docker-compose up -d
+up: up-no-boot
 	./$(PROGRAM_NAME) boot
 
+.PHONY: up-no-boot
+up-no-boot: gen
+	docker-compose up -d
+
 .PHONY: primary
-primary: pods
-	docker-compose up -d $$(./$(PROGRAM_NAME) config | jq -r '.localAddrs | keys | .[]' | grep "^dc1-\(server\|client\)")
+primary: primary-no-boot
 	./$(PROGRAM_NAME) boot -primary
+
+.PHONY: primary-no-boot
+primary-no-boot: pods
+	docker-compose up -d $$(./$(PROGRAM_NAME) config | jq -r '.localAddrs | keys | .[]' | grep "^dc1-\(server\|client\)")
 
 .PHONY: pods
 pods: gen

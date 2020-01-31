@@ -185,14 +185,12 @@ func (c *Core) initTLS() error {
 
 		var args []string
 		if server {
+			nodeName := fmt.Sprintf("%s-server%d-pod", dc.Name, idx+1)
 			args = []string{
 				"tls", "cert", "create",
 				"-server",
 				"-dc=" + dc.Name,
-				"-additional-dnsname=" + fmt.Sprintf(
-					"%s-server%d-pod.server.%s.consul",
-					dc.Name, idx+1, dc.Name,
-				),
+				"-node=" + nodeName,
 			}
 		} else {
 			args = []string{

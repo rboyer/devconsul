@@ -586,7 +586,7 @@ acl {
   enable_token_replication = true
   {{- end}}
   tokens {
-    {{ if .MasterToken -}}
+    {{ if and .MasterToken .Server (not .SecondaryServer) -}}
     master       = "{{.MasterToken}}"
     {{- end }}
     agent_master = "{{.AgentMasterToken}}"
