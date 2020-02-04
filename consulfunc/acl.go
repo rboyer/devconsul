@@ -1,12 +1,9 @@
 package consulfunc
 
 import (
-	"fmt"
 	"strconv"
-	"time"
 
 	"github.com/hashicorp/consul/api"
-	"github.com/hashicorp/go-hclog"
 )
 
 func GetClient(ip, token string) (*api.Client, error) {
@@ -98,34 +95,6 @@ func ListExistingBindingRuleIDsForAuthMethod(client *api.Client, authMethod stri
 	return m, nil
 }
 
-func WaitForLeader(logger hclog.Logger, client *api.Client, name string) {
-	sc := client.Status()
-
-	for {
-		leader, err := sc.Leader()
-		if leader != "" && err == nil {
-			logger.Info(fmt.Sprintf("[%s] leader is %q", name, leader))
-			return
-		}
-		logger.Info(fmt.Sprintf("[%s] no leader yet", name))
-		time.Sleep(500 * time.Millisecond)
-	}
-}
-
-func WaitForUpgrade(logger hclog.Logger, client *api.Client, name string) {
-	for {
-		// map[string]map[string]interface{}
-		mode, err := getSelfACLMode(client, name)
-		if err == nil && mode == 1 {
-			logger.Info(fmt.Sprintf("[%s] acl mode is now in v2 mode", name))
-			return
-		}
-		logger.Info(fmt.Sprintf("[%s] acl mode not upgraded to v2 yet", name))
-
-		time.Sleep(500 * time.Millisecond)
-	}
-}
-
 func HasAllNodeUpdates(nodes []*api.Node) bool {
 	for _, n := range nodes {
 		if len(n.TaggedAddresses) == 0 {
@@ -136,7 +105,7 @@ func HasAllNodeUpdates(nodes []*api.Node) bool {
 }
 
 // unknown is "3"
-func getSelfACLMode(client *api.Client, name string) (int, error) {
+func GetACLMode(client *api.Client, name string) (int, error) {
 	ac := client.Agent()
 
 	// map[string]map[string]interface{}

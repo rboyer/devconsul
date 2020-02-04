@@ -22,6 +22,8 @@ type CommandBoot struct {
 	replicationSecretID string
 
 	tokens map[string]string
+
+	upgradedACLs map[string]map[string]struct{}
 }
 
 func (c *CommandBoot) Run() error {
@@ -43,7 +45,17 @@ func (c *CommandBoot) Run() error {
 		if err != nil {
 			return fmt.Errorf("error creating initial bootstrap client for dc=%s: %v", dc.Name, err)
 		}
-		consulfunc.WaitForLeader(c.logger, c.clients[dc.Name], dc.Name+"-server1")
+
+		client := c.clients[dc.Name]
+		for {
+			leader, err := client.Status().Leader()
+			if leader != "" && err == nil {
+				c.logger.Info("datacenter has leader", "datacenter", dc.Name, "leader_addr", leader)
+				break
+			}
+			c.logger.Info("datacenter has no leader yet", "datacenter", dc.Name)
+			time.Sleep(500 * time.Millisecond)
+		}
 	}
 
 	if err := c.bootstrap(c.primaryClient()); err != nil {
@@ -93,12 +105,10 @@ func (c *CommandBoot) initPrimaryDC() error {
 		return fmt.Errorf("createAgentTokens: %v", err)
 	}
 
-	err = c.injectAgentTokens(PrimaryDC)
+	err = c.injectAgentTokensAndWaitForNodeUpdates(PrimaryDC)
 	if err != nil {
-		return fmt.Errorf("injectAgentTokens[%s]: %v", PrimaryDC, err)
+		return fmt.Errorf("injectAgentTokensAndWaitForNodeUpdates[%s]: %v", PrimaryDC, err)
 	}
-
-	c.waitForNodeUpdates(PrimaryDC)
 
 	err = c.createAnonymousToken()
 	if err != nil {
@@ -153,19 +163,13 @@ func (c *CommandBoot) initSecondaryDCs() error {
 		}
 		c.waitForUpgrade(dc.Name)
 
-		err = c.injectAgentTokens(dc.Name)
+		err = c.injectAgentTokensAndWaitForNodeUpdates(dc.Name)
 		if err != nil {
-			return fmt.Errorf("injectAgentTokens[%s]: %v", dc.Name, err)
+			return fmt.Errorf("injectAgentTokensAndWaitForNodeUpdates[%s]: %v", dc.Name, err)
 		}
-
-		c.waitForNodeUpdates(dc.Name)
 	}
 
 	return nil
-}
-
-func (c *CommandBoot) waitForUpgrade(dc string) {
-	consulfunc.WaitForUpgrade(c.logger, c.clients[dc], dc+"-server1")
 }
 
 func (c *CommandBoot) primaryClient() *api.Client {
@@ -198,15 +202,15 @@ func (c *CommandBoot) bootstrap(client *api.Client) error {
 		_, _, err := ac.TokenReadSelf(&api.QueryOptions{Token: c.masterToken})
 		if err != nil {
 			if strings.Index(err.Error(), "The ACL system is currently in legacy mode") != -1 {
-				c.logger.Warn(fmt.Sprintf("system is rebooting: %v", err))
+				c.logger.Warn("system is rebooting", "error", err)
 				time.Sleep(250 * time.Millisecond)
 				goto TRYAGAIN
 			}
 
-			c.logger.Warn(fmt.Sprintf("master token doesn't work anymore: %v", err))
+			c.logger.Warn("master token doesn't work anymore", "error", err)
 			return c.cache.DelValue("master-token")
 		}
-		c.logger.Info(fmt.Sprintf("Master Token is: %s", c.masterToken))
+		c.logger.Info("current master token", "token", c.masterToken)
 		return nil
 	}
 
@@ -215,7 +219,7 @@ TRYAGAIN2:
 	tok, _, err := ac.Bootstrap()
 	if err != nil {
 		if strings.Index(err.Error(), "The ACL system is currently in legacy mode") != -1 {
-			c.logger.Warn(fmt.Sprintf("system is rebooting: %v", err))
+			c.logger.Warn("system is rebooting", "error", err)
 			time.Sleep(250 * time.Millisecond)
 			goto TRYAGAIN2
 		}
@@ -227,7 +231,7 @@ TRYAGAIN2:
 		return err
 	}
 
-	c.logger.Info(fmt.Sprintf("Master Token is: %s", c.masterToken))
+	c.logger.Info("current master token", "token", c.masterToken)
 
 	return nil
 }
@@ -251,7 +255,7 @@ service_prefix "" {
 		return err
 	}
 
-	c.logger.Info(fmt.Sprintf("replication policy id for %q is: %s", p.Name, p.ID))
+	c.logger.Info("replication policy", "name", p.Name, "id", p.ID)
 
 	token := &api.ACLToken{
 		Description: replicationName,
@@ -265,7 +269,7 @@ service_prefix "" {
 	}
 	c.setToken("replication", "", token.SecretID)
 
-	c.logger.Info(fmt.Sprintf("replication token secretID is: %s", token.SecretID))
+	c.logger.Info("replication token", "secretID", token.SecretID)
 
 	return nil
 }
@@ -292,7 +296,7 @@ func (c *CommandBoot) createMeshGatewayToken() error {
 
 	c.setToken("mesh-gateway", "", token.SecretID)
 
-	c.logger.Info(fmt.Sprintf("mesh-gateway token secretID is: %s", token.SecretID))
+	c.logger.Info("mesh-gateway token", "secretID", token.SecretID)
 
 	return nil
 }
@@ -317,13 +321,13 @@ func (c *CommandBoot) injectReplicationToken() error {
 		_, err = ac.UpdateReplicationACLToken(token, nil)
 		if err != nil {
 			if strings.Index(err.Error(), "Unexpected response code: 403 (ACL not found)") != -1 {
-				c.logger.Warn(fmt.Sprintf("system is coming up: %v", err))
+				c.logger.Warn("system is coming up", "error", err)
 				time.Sleep(250 * time.Millisecond)
 				goto TRYAGAIN
 			}
 			return err
 		}
-		c.logger.Info(fmt.Sprintf("[%s] agent was given its replication token", node.Name))
+		c.logger.Info("agent was given its replication token", "node", node.Name)
 
 		return nil
 	})
@@ -348,7 +352,7 @@ service_prefix "" { policy = "read" }
 			return err
 		}
 
-		c.logger.Info(fmt.Sprintf("agent policy id for %q is: %s", node.Name, op.ID))
+		c.logger.Info("agent policy", "name", node.Name, "id", op.ID)
 
 		token := &api.ACLToken{
 			Description: node.TokenName(),
@@ -361,7 +365,7 @@ service_prefix "" { policy = "read" }
 			return err
 		}
 
-		c.logger.Info(fmt.Sprintf("agent token secretID for %q is: %s", node.Name, token.SecretID))
+		c.logger.Info("agent token", "secretID", token.SecretID, "node", node.Name)
 
 		c.setToken("agent", node.Name, token.SecretID)
 
@@ -380,7 +384,7 @@ func (c *CommandBoot) injectAgentTokens(datacenter string) error {
 			return err
 		}
 
-		consulfunc.WaitForUpgrade(c.logger, agentClient, node.Name)
+		c.waitForACLUpgrade(agentClient, node.Datacenter, node.Name)
 
 		ac := agentClient.Agent()
 
@@ -390,10 +394,58 @@ func (c *CommandBoot) injectAgentTokens(datacenter string) error {
 		if err != nil {
 			return err
 		}
-		c.logger.Info(fmt.Sprintf("[%s] agent was given its token", node.Name))
+		c.logger.Info("agent was given its token", "node", node.Name)
 
 		return nil
 	})
+}
+
+func (c *CommandBoot) waitForUpgrade(dc string) {
+	c.waitForACLUpgrade(c.clients[dc], dc, dc+"-server1")
+}
+
+func (c *CommandBoot) waitForACLUpgrade(client *api.Client, dc, node string) error {
+	if c.isUpgradedACLs(dc, node) {
+		return nil
+	}
+
+	for {
+		mode, err := consulfunc.GetACLMode(client, node)
+		if err == nil && mode == 1 {
+			c.logger.Info("acl mode is now in v2 mode", "node", node)
+			break
+		}
+		c.logger.Info("acl mode not upgraded to v2 yet", "node", node)
+
+		time.Sleep(500 * time.Millisecond)
+	}
+
+	c.markUpgradedACLs(dc, node)
+	return nil
+}
+
+func (c *CommandBoot) isUpgradedACLs(dc, node string) bool {
+	if len(c.upgradedACLs) == 0 {
+		return false
+	}
+	m, ok := c.upgradedACLs[dc]
+	if !ok {
+		return false
+	}
+	_, ok = m[node]
+	return ok
+}
+
+func (c *CommandBoot) markUpgradedACLs(dc, node string) {
+	if c.upgradedACLs == nil {
+		c.upgradedACLs = make(map[string]map[string]struct{})
+	}
+	m, ok := c.upgradedACLs[dc]
+	if !ok {
+		m = make(map[string]struct{})
+		c.upgradedACLs[dc] = m
+	}
+	m[node] = struct{}{}
 }
 
 const anonymousTokenAccessorID = "00000000-0000-0000-0000-000000000002"
@@ -440,7 +492,7 @@ service_prefix "" { policy = "read" }
 		return err
 	}
 
-	c.logger.Info(fmt.Sprintf("anonymous policy id for %q is: %s", p.Name, op.ID))
+	c.logger.Info("anonymous policy", "name", p.Name, "id", op.ID)
 
 	return nil
 }
@@ -558,7 +610,10 @@ func (c *CommandBoot) writeCentralConfigs() error {
 				continue
 			}
 
-			c.logger.Info(fmt.Sprintf("nuking config entry %s/%s", ckn.Kind, ckn.Name))
+			c.logger.Info("nuking config entry",
+				"kind", ckn.Kind,
+				"name", ckn.Name,
+			)
 
 			_, err = ce.Delete(ckn.Kind, ckn.Name, nil)
 			if err != nil {
@@ -588,7 +643,7 @@ func (c *CommandBoot) writeServiceRegistrationFiles() error {
 		if err := c.cache.WriteStringFile(filename, regHCL); err != nil {
 			return err
 		}
-		c.logger.Info("Generated", "filename", filename)
+		c.logger.Info("Generated service registration", "filename", filename)
 		return nil
 	})
 }
@@ -610,8 +665,11 @@ func (c *CommandBoot) createIntentions() error {
 			return err
 		}
 
-		c.logger.Info("created/updated intention", "src", oi.SourceName,
-			"dst", oi.DestinationName, "action", oi.Action)
+		c.logger.Info("created/updated intention",
+			"src", oi.SourceName,
+			"dst", oi.DestinationName,
+			"action", oi.Action,
+		)
 
 		return nil
 	})
@@ -644,7 +702,7 @@ func (c *CommandBoot) createBindingRulesForK8s() error {
 		return err
 	}
 
-	c.logger.Info("binding rule created", "auth method", rule.AuthMethod, "ID", orule.ID)
+	c.logger.Info("binding rule created", "authMethod", rule.AuthMethod, "ID", orule.ID)
 
 	return nil
 }
@@ -735,6 +793,36 @@ func GetServiceRegistrationHCL(s Service) (string, error) {
 	return buf.String(), nil
 }
 
+func (c *CommandBoot) injectAgentTokensAndWaitForNodeUpdates(datacenter string) error {
+	client := c.clientForDC(datacenter)
+	if client == nil {
+		return fmt.Errorf("unknown datacenter: %s", datacenter)
+	}
+	cc := client.Catalog()
+
+	for {
+		if err := c.injectAgentTokens(datacenter); err != nil {
+			return fmt.Errorf("injectAgentTokens[%s]: %v", datacenter, err)
+		}
+
+		// Injecting a token should bump the agent to do anti-entropy sync.
+		nodes, _, err := cc.Nodes(&api.QueryOptions{Datacenter: datacenter})
+		if err != nil {
+			nodes = nil
+		}
+
+		stragglers := c.determineNodeUpdateStragglers(nodes, datacenter)
+		if len(stragglers) == 0 {
+			c.logger.Info("all nodes have posted node updates, so agent acl tokens are working", "datacenter", datacenter)
+			return nil
+		}
+		c.logger.Info("not all client nodes have posted node updates yet", "datacenter", datacenter, "nodes", stragglers)
+
+		// takes like 90s to actually right itself
+		time.Sleep(5 * time.Second)
+	}
+}
+
 func (c *CommandBoot) waitForNodeUpdates(datacenter string) {
 	for _, dc := range c.topology.Datacenters() {
 		if dc.Name != datacenter {
@@ -755,10 +843,10 @@ func (c *CommandBoot) waitForNodeUpdatesDC(client *api.Client, datacenter string
 
 		stragglers := c.determineNodeUpdateStragglers(nodes, datacenter)
 		if len(stragglers) == 0 {
-			c.logger.Info(fmt.Sprintf("[dc=%s] all nodes have posted node updates, so agent acl tokens are working", datacenter))
+			c.logger.Info("all nodes have posted node updates, so agent acl tokens are working", "datacenter", datacenter)
 			return
 		}
-		c.logger.Info(fmt.Sprintf("[dc=%s] not all client nodes have posted node updates yet: %v", datacenter, stragglers))
+		c.logger.Info("not all client nodes have posted node updates yet", "datacenter", datacenter, "nodes", stragglers)
 
 		// takes like 90s to actually right itself
 		time.Sleep(5 * time.Second)
