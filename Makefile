@@ -54,12 +54,12 @@ primary: primary-no-boot
 
 .PHONY: primary-no-boot
 primary-no-boot: pods
-	docker-compose up -d $$(./$(PROGRAM_NAME) config | jq -r '.localAddrs | keys | .[]' | grep "^dc1-\(server\|client\)")
+	docker-compose up -d $$(./$(PROGRAM_NAME) config | jq -r '.containers.dc1[]')
 
 .PHONY: pods
 pods: gen
 	$(info bringing up just the empty pods...)
-	docker-compose up -d $$(./$(PROGRAM_NAME) config | jq -r '.localAddrs | keys | .[] | . + "-pod"')
+	@docker-compose up -d $$(./$(PROGRAM_NAME) config | jq -r '.pods[][]')
 
 .PHONY: down
 down: gen
