@@ -1,6 +1,6 @@
 module github.com/rboyer/devconsul
 
-go 1.12
+go 1.13
 
 require (
 	github.com/armon/go-metrics v0.0.0-20190423201044-2801d9688273 // indirect
