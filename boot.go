@@ -417,11 +417,12 @@ service_prefix "" { policy = "read" }
 
 // TALK TO EACH AGENT
 func (c *CommandBoot) injectAgentTokens(datacenter string) error {
+	agentMasterToken := c.config.AgentMasterToken
 	return c.topology.Walk(func(node *Node) error {
 		if node.Datacenter != datacenter {
 			return nil
 		}
-		agentClient, err := consulfunc.GetClient(node.LocalAddress(), c.masterToken)
+		agentClient, err := consulfunc.GetClient(node.LocalAddress(), agentMasterToken)
 		if err != nil {
 			return err
 		}
