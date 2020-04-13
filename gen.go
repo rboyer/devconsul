@@ -29,7 +29,7 @@ func (c *CommandGenerate) Run() error {
 	flag.Parse()
 
 	if verbose {
-		c.topology.WalkSilent(func(node Node) {
+		c.topology.WalkSilent(func(node *Node) {
 			c.logger.Info("Generating node",
 				"name", node.Name,
 				"server", node.Server,
@@ -57,7 +57,8 @@ func (c *CommandGenerate) Run() error {
 
 func (c *CommandGenerate) generateComposeFile() error {
 	info := composeInfo{
-		Config: c.config,
+		Config:   c.config,
+		Networks: c.topology.Networks(),
 	}
 
 	if c.config.PrometheusEnabled {
@@ -65,32 +66,7 @@ func (c *CommandGenerate) generateComposeFile() error {
 		info.Volumes = append(info.Volumes, "grafana-data")
 	}
 
-	switch c.topology.NetworkShape {
-	case NetworkShapeDual:
-		info.Networks = []composeNetwork{
-			{
-				Name: "wan",
-				CIDR: "10.1.0.0/16",
-			},
-		}
-		for _, dc := range c.topology.Datacenters() {
-			info.Networks = append(info.Networks, composeNetwork{
-				Name: dc.Name,
-				CIDR: dc.BaseIP + ".0/24",
-			})
-		}
-	case NetworkShapeFlat:
-		info.Networks = []composeNetwork{
-			{
-				Name: "lan",
-				CIDR: "10.0.0.0/16",
-			},
-		}
-	default:
-		panic("unknown shape: " + c.topology.NetworkShape)
-	}
-
-	err := c.topology.Walk(func(node Node) error {
+	err := c.topology.Walk(func(node *Node) error {
 		podName := node.Name + "-pod"
 
 		podHCL, err := c.generateAgentHCL(node)
@@ -117,7 +93,11 @@ func (c *CommandGenerate) generateComposeFile() error {
 			HCL:            indent(podHCL, 8),
 			AgentDependsOn: []string{podName},
 			ExtraYAML:      extraYAML,
+			Labels:         map[string]string{
+				//
+			},
 		}
+		node.AddLabels(pod.Labels)
 
 		if !node.Server {
 			pod.AgentDependsOn = append(pod.AgentDependsOn,
@@ -146,21 +126,17 @@ type composeInfo struct {
 
 	Volumes  []string
 	Pods     []composePod
-	Networks []composeNetwork
-}
-
-type composeNetwork struct {
-	Name string
-	CIDR string
+	Networks []*Network
 }
 
 type composePod struct {
 	PodName        string
 	ConsulImage    string
-	Node           Node
+	Node           *Node
 	HCL            string
 	AgentDependsOn []string
 	ExtraYAML      string
+	Labels         map[string]string
 }
 
 var dockerComposeT = template.Must(template.New("docker").Parse(`version: '3.7'
@@ -192,9 +168,11 @@ services:
 {{- if .Config.PrometheusEnabled }}
   prometheus:
     image: prom/prometheus:latest
+    labels:
+      devconsul.type: "infra"
     restart: always
     dns: 8.8.8.8
-	network_mode: host
+    network_mode: host
     volumes:
       - 'prometheus-data:/prometheus-data'
       - './cache/prometheus.yml:/etc/prometheus/prometheus.yml:ro'
@@ -202,6 +180,8 @@ services:
   grafana:
     network_mode: 'service:prometheus'
     image: grafana/grafana:latest
+    labels:
+      devconsul.type: "infra"
     restart: always
     init: true
     volumes:
@@ -215,6 +195,11 @@ services:
     container_name: '{{.PodName}}'
     hostname: '{{.PodName}}'
     image: gcr.io/google_containers/pause:1.0
+    labels:
+      devconsul.type: "pod"
+{{- range $k, $v := .Labels }}
+      {{ $k }}: "{{ $v }}"
+{{- end }}
     restart: always
     dns: 8.8.8.8
     networks:
@@ -233,6 +218,11 @@ services:
       - '{{.Node.Name}}:/consul/data'
       - './cache/tls:/tls:ro'
     image: '{{.ConsulImage}}'
+    labels:
+      devconsul.type: "consul"
+{{- range $k, $v := .Labels }}
+      {{ $k }}: "{{ $v }}"
+{{- end }}
     command:
       - 'agent'
       - '-hcl'
@@ -242,7 +232,7 @@ services:
 {{- end}}
 `))
 
-func (c *CommandGenerate) generatePingPongYAML(podName string, node Node) (string, error) {
+func (c *CommandGenerate) generatePingPongYAML(podName string, node *Node) (string, error) {
 	var extraYAML bytes.Buffer
 	if node.Service != nil {
 		svc := node.Service
@@ -317,6 +307,8 @@ var pingpongT = template.Must(template.New("pingpong").Parse(`  ################
     depends_on:
       - {{.NodeName}}
     image: rboyer/pingpong:latest
+    labels:
+      devconsul.type: "app"
     init: true
     command:
       - '-bind'
@@ -332,6 +324,8 @@ var pingpongT = template.Must(template.New("pingpong").Parse(`  ################
     depends_on:
       - {{.NodeName}}-{{.PingPong}}
     image: local/consul-envoy
+    labels:
+      devconsul.type: "sidecar"
     init: true
     restart: on-failure
     volumes:
@@ -356,7 +350,7 @@ var pingpongT = template.Must(template.New("pingpong").Parse(`  ################
 {{- end }}
 `))
 
-func (c *CommandGenerate) generateMeshGatewayYAML(podName string, node Node) (string, error) {
+func (c *CommandGenerate) generateMeshGatewayYAML(podName string, node *Node) (string, error) {
 	if !node.MeshGateway {
 		return "", nil
 	}
@@ -365,11 +359,16 @@ func (c *CommandGenerate) generateMeshGatewayYAML(podName string, node Node) (st
 		PodName:       podName,
 		NodeName:      node.Name,
 		EnvoyLogLevel: c.config.EnvoyLogLevel,
+		Labels:        map[string]string{
+			//
+		},
 	}
+	node.AddLabels(mgi.Labels)
 
 	switch c.topology.NetworkShape {
-	case NetworkShapeDual:
+	case NetworkShapeIslands, NetworkShapeDual:
 		mgi.EnableWAN = true
+		mgi.ExposeServers = true
 	case NetworkShapeFlat:
 	default:
 		panic("unknown shape: " + c.topology.NetworkShape)
@@ -387,6 +386,8 @@ type meshGatewayInfo struct {
 	NodeName      string
 	EnvoyLogLevel string
 	EnableWAN     bool
+	ExposeServers bool
+	Labels        map[string]string
 }
 
 var meshGatewayT = template.Must(template.New("mesh-gateway").Parse(`  #####################
@@ -395,6 +396,11 @@ var meshGatewayT = template.Must(template.New("mesh-gateway").Parse(`  #########
     depends_on:
       - {{.NodeName}}
     image: local/consul-envoy
+    labels:
+      devconsul.type: "gateway"
+{{- range $k, $v := .Labels }}
+      {{ $k }}: "{{ $v }}"
+{{- end }}
     init: true
     restart: on-failure
     volumes:
@@ -407,6 +413,9 @@ var meshGatewayT = template.Must(template.New("mesh-gateway").Parse(`  #########
       - "/secrets/mesh-gateway.val"
       - '--'
       #################
+{{- if .ExposeServers }}
+      - '-expose-servers'
+{{- end }}
 {{- if .EnableWAN }}
       - '-wan-address'
       - '{{ "{{ GetInterfaceIP \"eth1\" }}:443" }}'
@@ -419,7 +428,7 @@ var meshGatewayT = template.Must(template.New("mesh-gateway").Parse(`  #########
       - '{{ .EnvoyLogLevel }}'
 `))
 
-func (c *CommandGenerate) generateAgentHCL(node Node) (string, error) {
+func (c *CommandGenerate) generateAgentHCL(node *Node) (string, error) {
 	configInfo := consulAgentConfigInfo{
 		AdvertiseAddr:    node.LocalAddress(),
 		RetryJoin:        `"` + strings.Join(c.topology.ServerIPs(node.Datacenter), `", "`) + `"`,
@@ -435,16 +444,37 @@ func (c *CommandGenerate) generateAgentHCL(node Node) (string, error) {
 		configInfo.MasterToken = c.config.InitialMasterToken
 
 		wanIP := false
-		if c.topology.NetworkShape == NetworkShapeDual {
+		wanfed := false
+		switch c.topology.NetworkShape {
+		case NetworkShapeIslands:
+			wanfed = true
+			if node.MeshGateway {
+				wanIP = true
+				configInfo.AdvertiseAddrWAN = node.PublicAddress()
+			}
+		case NetworkShapeDual:
 			wanIP = true
 			configInfo.AdvertiseAddrWAN = node.PublicAddress()
+		case NetworkShapeFlat:
+			// n/a
+		default:
+			panic("unknown shape: " + c.topology.NetworkShape)
 		}
 
 		var ips []string
 		for _, dc := range c.topology.Datacenters() {
 			ips = append(ips, c.topology.LeaderIP(dc.Name, wanIP))
 		}
-		configInfo.RetryJoinWAN = `"` + strings.Join(ips, `", "`) + `"`
+
+		if wanfed {
+			configInfo.FederateViaGateway = true
+			if node.Datacenter != PrimaryDC {
+				primaryGateways := c.topology.GatewayAddrs(PrimaryDC)
+				configInfo.PrimaryGateways = `"` + strings.Join(primaryGateways, `", "`) + `"`
+			}
+		} else {
+			configInfo.RetryJoinWAN = `"` + strings.Join(ips, `", "`) + `"`
+		}
 
 		configInfo.SecondaryServer = node.Datacenter != PrimaryDC
 		configInfo.BootstrapExpect = len(c.topology.ServerIPs(node.Datacenter))
@@ -477,6 +507,9 @@ type consulAgentConfigInfo struct {
 	TLS              bool
 	TLSFilePrefix    string
 	Prometheus       bool
+
+	FederateViaGateway bool
+	PrimaryGateways    string
 }
 
 var consulAgentConfigT = template.Must(template.New("consul-agent-config").Parse(`
@@ -499,8 +532,15 @@ enable_central_service_config = true
 
 primary_datacenter     = "dc1"
 retry_join             = [ {{.RetryJoin}} ]
+{{ if .FederateViaGateway -}}
+{{ if .SecondaryServer -}}
+primary_gateways          = [ {{ .PrimaryGateways }} ]
+primary_gateways_interval = "5s"
+{{- end}}
+{{ else -}}
 {{ if .Server -}}
 retry_join_wan         = [ {{.RetryJoinWAN}} ]
+{{- end}}
 {{- end}}
 server                 = {{.Server}}
 ui                     = true
@@ -526,6 +566,9 @@ verify_server_hostname = true
 
 connect {
   enabled = true
+  {{ if .FederateViaGateway -}}
+  enable_mesh_gateway_wan_federation = true
+  {{- end}}
 }
 
 {{ if not .Server -}}
@@ -543,7 +586,7 @@ acl {
   enable_token_replication = true
   {{- end}}
   tokens {
-    {{ if .MasterToken -}}
+    {{ if and .MasterToken .Server (not .SecondaryServer) -}}
     master       = "{{.MasterToken}}"
     {{- end }}
     agent_master = "{{.AgentMasterToken}}"
@@ -598,7 +641,7 @@ func (c *CommandGenerate) generatePrometheusConfigFile() error {
 		sort.Strings(j.Targets)
 	}
 
-	err := c.topology.Walk(func(node Node) error {
+	err := c.topology.Walk(func(node *Node) error {
 		if node.Server {
 			add(&job{
 				Name:        "consul-servers-" + node.Datacenter,

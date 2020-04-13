@@ -41,9 +41,25 @@ docker-compose.yml: $(PROGRAM_NAME) config.hcl cache/docker.done
 	./$(PROGRAM_NAME) gen
 
 .PHONY: up
-up: gen
-	docker-compose up -d
+up: up-no-boot
 	./$(PROGRAM_NAME) boot
+
+.PHONY: up-no-boot
+up-no-boot: gen
+	docker-compose up -d
+
+.PHONY: primary
+primary: primary-no-boot
+	./$(PROGRAM_NAME) boot -primary
+
+.PHONY: primary-no-boot
+primary-no-boot: pods
+	docker-compose up -d $$(./$(PROGRAM_NAME) config | jq -r '.containers.dc1[]')
+
+.PHONY: pods
+pods: gen
+	$(info bringing up just the empty pods...)
+	@docker-compose up -d $$(./$(PROGRAM_NAME) config | jq -r '.pods[][]')
 
 .PHONY: down
 down: gen

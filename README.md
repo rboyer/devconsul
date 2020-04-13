@@ -4,7 +4,7 @@ This project helps bring up a local Consul Connect cluster using Docker.
 
 ## Prerequisites
 
-* `go v1.12.1` or newer
+* `go v1.13.7` or newer
 * `docker`
 * `docker-compose`
 * `automake`

@@ -1,11 +1,11 @@
 module github.com/rboyer/devconsul
 
-go 1.12
+go 1.13
 
 require (
 	github.com/armon/go-metrics v0.0.0-20190423201044-2801d9688273 // indirect
 	github.com/google/btree v1.0.0 // indirect
-	github.com/hashicorp/consul/api v1.1.1-0.20190807163521-3a3086ecd22d
+	github.com/hashicorp/consul/api v1.3.0
 	github.com/hashicorp/go-hclog v0.9.2
 	github.com/hashicorp/go-msgpack v0.5.4 // indirect
 	github.com/hashicorp/go-sockaddr v1.0.2 // indirect
@@ -16,6 +16,7 @@ require (
 	github.com/miekg/dns v1.1.8 // indirect
 	github.com/mitchellh/go-homedir v1.1.0 // indirect
 	github.com/rboyer/safeio v0.1.0
+	github.com/stretchr/testify v1.3.0
 	golang.org/x/crypto v0.0.0-20190426145343-a29dc8fdc734 // indirect
 	golang.org/x/net v0.0.0-20190424112056-4829fb13d2c6 // indirect
 	golang.org/x/sync v0.0.0-20190423024810-112230192c58 // indirect

@@ -18,14 +18,22 @@ func (c *CommandConfig) Run() error {
 		clients     = make(map[string]int)
 		localAddrs  = make(map[string]string)
 		datacenters []string
+		pods        = make(map[string][]string)
+		containers  = make(map[string][]string)
 	)
-	c.topology.WalkSilent(func(n Node) {
+	c.topology.WalkSilent(func(n *Node) {
 		if n.Server {
 			servers[n.Datacenter]++
 		} else {
 			clients[n.Datacenter]++
 		}
 		localAddrs[n.Name] = n.LocalAddress()
+
+		pods[n.Datacenter] = append(pods[n.Datacenter], n.Name+"-pod")
+		containers[n.Datacenter] = append(containers[n.Datacenter], n.Name)
+		if n.MeshGateway {
+			containers[n.Datacenter] = append(containers[n.Datacenter], n.Name+"-mesh-gateway")
+		}
 	})
 
 	for _, dc := range c.topology.Datacenters() {
@@ -41,6 +49,8 @@ func (c *CommandConfig) Run() error {
 		"agentMasterToken": c.config.AgentMasterToken,
 		"localAddrs":       localAddrs,
 		"datacenters":      datacenters,
+		"pods":             pods,
+		"containers":       containers,
 	}
 
 	for dc, n := range servers {

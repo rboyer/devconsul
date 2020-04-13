@@ -10,14 +10,23 @@ import (
 type NetworkShape string
 
 const (
-	// NetworkShapeSplit = NetworkShape("split")
+	// NetworkShapeIslands describes an isolated island topology where only the
+	// mesh gateways are on the WAN.
+	NetworkShapeIslands = NetworkShape("islands")
+
+	// NetworkShapeDual describes a private/public lan/wan split where the
+	// servers/meshGateways can route to all other servers/meshGateways and the
+	// clients are isolated.
 	NetworkShapeDual = NetworkShape("dual")
+
+	// NetworkShapeFlat describes a flat network where every agent has a single
+	// ip address and they all are routable.
 	NetworkShapeFlat = NetworkShape("flat")
 )
 
 func (s NetworkShape) GetNetworkName(dc string) string {
 	switch s {
-	case NetworkShapeDual:
+	case NetworkShapeIslands, NetworkShapeDual:
 		return dc
 	case NetworkShapeFlat:
 		return "lan"
@@ -26,41 +35,45 @@ func (s NetworkShape) GetNetworkName(dc string) string {
 	}
 }
 
-func InferTopology(uc *userConfig) (*Topology, error) {
-	t := &uc.Topology
+func InferTopology(uct *userConfigTopology) (*Topology, error) {
+	topology := &Topology{}
 
-	topology := &Topology{
-		nm: make(map[string]Node),
-	}
-
-	switch uc.Topology.NetworkShape {
+	needsAllNetworks := false
+	switch uct.NetworkShape {
+	case "islands":
+		topology.NetworkShape = NetworkShapeIslands
+		needsAllNetworks = true
 	case "dual":
 		topology.NetworkShape = NetworkShapeDual
+		needsAllNetworks = true
 	case "flat", "":
 		topology.NetworkShape = NetworkShapeFlat
+		needsAllNetworks = false
 	default:
-		return nil, fmt.Errorf("unknown network_shape: %s", uc.Topology.NetworkShape)
+		return nil, fmt.Errorf("unknown network_shape: %s", uct.NetworkShape)
 	}
 
-	rawTopology := uc.Topology
-	nodeConfigs := rawTopology.NodeConfig
-
-	addNode := func(node Node) {
-		topology.nm[node.Name] = node
-		if node.Server {
-			topology.servers = append(topology.servers, node.Name)
-		} else {
-			topology.clients = append(topology.clients, node.Name)
-		}
+	if needsAllNetworks {
+		topology.AddNetwork(&Network{
+			Name: "wan",
+			CIDR: "10.1.0.0/16",
+		})
+	} else {
+		topology.AddNetwork(&Network{
+			Name: "lan",
+			CIDR: "10.0.0.0/16",
+		})
 	}
 
-	forDC := func(dc, baseIP, wanBaseIP string, servers, clients int) {
+	nodeConfigs := uct.NodeConfig
+
+	forDC := func(dc, baseIP, wanBaseIP string, servers, clients, meshGateways int) {
 		for idx := 1; idx <= servers; idx++ {
 			id := strconv.Itoa(idx)
 			ip := baseIP + "." + strconv.Itoa(10+idx)
 			wanIP := wanBaseIP + "." + strconv.Itoa(10+idx)
 
-			node := Node{
+			node := &Node{
 				Datacenter: dc,
 				Name:       dc + "-server" + id,
 				Server:     true,
@@ -74,6 +87,13 @@ func InferTopology(uc *userConfig) (*Topology, error) {
 			}
 
 			switch topology.NetworkShape {
+			case NetworkShapeIslands:
+				if dc != PrimaryDC { // Needed for initial join
+					node.Addresses = append(node.Addresses, Address{
+						Network:   "wan",
+						IPAddress: wanIP,
+					})
+				}
 			case NetworkShapeDual:
 				node.Addresses = append(node.Addresses, Address{
 					Network:   "wan",
@@ -83,16 +103,19 @@ func InferTopology(uc *userConfig) (*Topology, error) {
 			default:
 				panic("unknown shape: " + topology.NetworkShape)
 			}
-			addNode(node)
+			topology.AddNode(node)
 		}
 
+		numServiceClients := clients - meshGateways
 		for idx := 1; idx <= clients; idx++ {
+			isGatewayClient := (idx > numServiceClients)
+
 			id := strconv.Itoa(idx)
 			ip := baseIP + "." + strconv.Itoa(20+idx)
 			wanIP := wanBaseIP + "." + strconv.Itoa(20+idx)
 
 			nodeName := dc + "-client" + id
-			node := Node{
+			node := &Node{
 				Datacenter: dc,
 				Name:       nodeName,
 				Server:     false,
@@ -112,11 +135,11 @@ func InferTopology(uc *userConfig) (*Topology, error) {
 				}
 			}
 
-			if nodeConfig.MeshGateway {
+			if isGatewayClient {
 				node.MeshGateway = true
 
 				switch topology.NetworkShape {
-				case NetworkShapeDual:
+				case NetworkShapeIslands, NetworkShapeDual:
 					node.Addresses = append(node.Addresses, Address{
 						Network:   "wan",
 						IPAddress: wanIP,
@@ -153,17 +176,22 @@ func InferTopology(uc *userConfig) (*Topology, error) {
 				node.Service = &svc
 			}
 
-			addNode(node)
+			topology.AddNode(node)
 		}
 	}
 
-	if _, ok := t.Datacenters[PrimaryDC]; !ok {
+	if _, ok := uct.Datacenters[PrimaryDC]; !ok {
 		return nil, fmt.Errorf("primary datacenter %q is missing from config", PrimaryDC)
 	}
 
 	dcPatt := regexp.MustCompile(`^dc([0-9]+)$`)
 
-	for dc, v := range t.Datacenters {
+	for dc, v := range uct.Datacenters {
+		if v.MeshGateways < 0 {
+			return nil, fmt.Errorf("%s: mesh gateways must be non-negative", dc)
+		}
+		v.Clients += v.MeshGateways // the gateways are just fancy clients
+
 		if v.Servers <= 0 {
 			return nil, fmt.Errorf("%s: must always have at least one server", dc)
 		}
@@ -180,33 +208,45 @@ func InferTopology(uc *userConfig) (*Topology, error) {
 			return nil, fmt.Errorf("%s: not a valid datacenter name", dc)
 		}
 
-		topology.dcs = append(topology.dcs, &Datacenter{
-			Name:      dc,
-			Primary:   dc == PrimaryDC,
-			Index:     i,
-			Servers:   v.Servers,
-			Clients:   v.Clients,
-			BaseIP:    fmt.Sprintf("10.0.%d", i),
-			WANBaseIP: fmt.Sprintf("10.1.%d", i),
-		})
+		thisDC := &Datacenter{
+			Name:         dc,
+			Primary:      dc == PrimaryDC,
+			Index:        i,
+			Servers:      v.Servers,
+			Clients:      v.Clients,
+			MeshGateways: v.MeshGateways,
+			BaseIP:       fmt.Sprintf("10.0.%d", i),
+			WANBaseIP:    fmt.Sprintf("10.1.%d", i),
+		}
+		topology.dcs = append(topology.dcs, thisDC)
+
+		if needsAllNetworks {
+			topology.AddNetwork(&Network{
+				Name: thisDC.Name,
+				CIDR: thisDC.BaseIP + ".0/24",
+			})
+		}
 	}
 	sort.Slice(topology.dcs, func(i, j int) bool {
 		return topology.dcs[i].Name < topology.dcs[j].Name
 	})
 
 	for _, dc := range topology.dcs {
-		forDC(dc.Name, dc.BaseIP, dc.WANBaseIP, dc.Servers, dc.Clients)
+		forDC(dc.Name, dc.BaseIP, dc.WANBaseIP, dc.Servers, dc.Clients, dc.MeshGateways)
 	}
 
 	return topology, nil
 }
 
 type Topology struct {
-	servers      []string // node names
-	clients      []string // node names
-	nm           map[string]Node
-	dcs          []*Datacenter
 	NetworkShape NetworkShape
+
+	networks map[string]*Network
+	dcs      []*Datacenter
+
+	nm      map[string]*Node
+	servers []string // node names
+	clients []string // node names
 }
 
 func (t *Topology) LeaderIP(datacenter string, wan bool) string {
@@ -231,6 +271,17 @@ func (t *Topology) Datacenters() []Datacenter {
 	return out
 }
 
+func (t *Topology) Networks() []*Network {
+	out := make([]*Network, 0, len(t.networks))
+	for _, n := range t.networks {
+		out = append(out, n)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].Name < out[j].Name
+	})
+	return out
+}
+
 func (t *Topology) DC(name string) *Datacenter {
 	for _, dc := range t.dcs {
 		if dc.Name == name {
@@ -251,6 +302,17 @@ func (t *Topology) ServerIPs(datacenter string) []string {
 	return out
 }
 
+func (t *Topology) GatewayAddrs(datacenter string) []string {
+	var out []string
+	for _, name := range t.clients {
+		n := t.Node(name)
+		if n.Datacenter == datacenter && n.MeshGateway {
+			out = append(out, n.PublicAddress()+":443")
+		}
+	}
+	return out
+}
+
 func (t *Topology) all() []string {
 	o := make([]string, 0, len(t.servers)+len(t.clients))
 	o = append(o, t.servers...)
@@ -258,7 +320,7 @@ func (t *Topology) all() []string {
 	return o
 }
 
-func (t *Topology) Node(name string) Node {
+func (t *Topology) Node(name string) *Node {
 	if t.nm == nil {
 		panic("node not found: " + name)
 	}
@@ -269,7 +331,25 @@ func (t *Topology) Node(name string) Node {
 	return n
 }
 
-func (t *Topology) Walk(f func(n Node) error) error {
+func (t *Topology) Nodes() []*Node {
+	out := make([]*Node, 0, len(t.nm))
+	t.WalkSilent(func(n *Node) {
+		out = append(out, n)
+	})
+	return out
+}
+
+func (t *Topology) DatacenterNodes(dc string) []*Node {
+	out := make([]*Node, 0, len(t.nm))
+	t.WalkSilent(func(n *Node) {
+		if n.Datacenter == dc {
+			out = append(out, n)
+		}
+	})
+	return out
+}
+
+func (t *Topology) Walk(f func(n *Node) error) error {
 	for _, nodeName := range t.all() {
 		node := t.Node(nodeName)
 		if err := f(node); err != nil {
@@ -278,10 +358,29 @@ func (t *Topology) Walk(f func(n Node) error) error {
 	}
 	return nil
 }
-func (t *Topology) WalkSilent(f func(n Node)) {
+func (t *Topology) WalkSilent(f func(n *Node)) {
 	for _, nodeName := range t.all() {
 		node := t.Node(nodeName)
 		f(node)
+	}
+}
+
+func (t *Topology) AddNetwork(n *Network) {
+	if t.networks == nil {
+		t.networks = make(map[string]*Network)
+	}
+	t.networks[n.Name] = n
+}
+
+func (t *Topology) AddNode(node *Node) {
+	if t.nm == nil {
+		t.nm = make(map[string]*Node)
+	}
+	t.nm[node.Name] = node
+	if node.Server {
+		t.servers = append(t.servers, node.Name)
+	} else {
+		t.clients = append(t.clients, node.Name)
 	}
 }
 
@@ -289,12 +388,18 @@ type Datacenter struct {
 	Name    string
 	Primary bool
 
-	Index   int
-	Servers int
-	Clients int
+	Index        int
+	Servers      int
+	Clients      int
+	MeshGateways int
 
 	BaseIP    string
 	WANBaseIP string
+}
+
+type Network struct {
+	Name string
+	CIDR string
 }
 
 type Node struct {
@@ -306,6 +411,20 @@ type Node struct {
 	MeshGateway     bool
 	UseBuiltinProxy bool
 	Index           int
+}
+
+func (n *Node) AddLabels(m map[string]string) {
+	m["devconsul.datacenter"] = n.Datacenter
+
+	var agentType string
+	if n.Server {
+		agentType = "server"
+	} else {
+		agentType = "client"
+	}
+	m["devconsul.agentType"] = agentType
+
+	m["devconsul.node"] = n.Name
 }
 
 func (n *Node) TokenName() string { return "agent--" + n.Name }

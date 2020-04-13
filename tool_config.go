@@ -47,8 +47,9 @@ type userConfigTopology struct {
 }
 
 type userConfigTopologyDatacenter struct {
-	Servers int `hcl:"servers"`
-	Clients int `hcl:"clients"`
+	Servers      int `hcl:"servers"`
+	Clients      int `hcl:"clients"`
+	MeshGateways int `hcl:"mesh_gateways"`
 }
 
 type userConfigTopologyNodeConfig struct {
@@ -56,7 +57,6 @@ type userConfigTopologyNodeConfig struct {
 	UpstreamDatacenter string            `hcl:"upstream_datacenter"`
 	UpstreamExtraHCL   string            `hcl:"upstream_extra_hcl"`
 	ServiceMeta        map[string]string `hcl:"service_meta"` // key -> val
-	MeshGateway        bool              `hcl:"mesh_gateway"`
 	UseBuiltinProxy    bool              `hcl:"use_builtin_proxy"`
 }
 
@@ -73,8 +73,30 @@ func LoadConfig() (*FlatConfig, *Topology, error) {
 		return nil, nil, err
 	}
 
+	return parseConfig(contents)
+}
+
+func parseConfig(contents []byte) (*FlatConfig, *Topology, error) {
+	cfg, uct, err := parseConfigPartial(contents)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	topology, err := InferTopology(uct)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	if topology.NetworkShape == NetworkShapeIslands && !cfg.EncryptionTLS {
+		return nil, nil, fmt.Errorf("network_shape=%q requires TLS to be enabled to function", topology.NetworkShape)
+	}
+
+	return cfg, topology, nil
+}
+
+func parseConfigPartial(contents []byte) (*FlatConfig, *userConfigTopology, error) {
 	var uc userConfig
-	err = serialDecodeHCL(&uc, []string{
+	err := serialDecodeHCL(&uc, []string{
 		defaultUserConfig,
 		string(contents),
 	})
@@ -100,12 +122,7 @@ func LoadConfig() (*FlatConfig, *Topology, error) {
 		cfg.ConfigEntries = append(cfg.ConfigEntries, entry)
 	}
 
-	topology, err := InferTopology(&uc)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	return cfg, topology, nil
+	return cfg, &uc.Topology, nil
 }
 
 const defaultUserConfig = `
@@ -120,18 +137,12 @@ monitor {
   prometheus = false
 }
 topology {
+  network_shape = "flat"
   datacenters {
     dc1 {
       servers = 1
       clients = 2
-    }
-    dc2 {
-      servers = 1
-      clients = 2
-    }
-    dc3 {
-      servers = 1
-      clients = 2
+      mesh_gateways = 0
     }
   }
 }

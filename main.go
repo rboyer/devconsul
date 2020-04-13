@@ -92,7 +92,7 @@ func (c *Core) Init() error {
 	c.rootDir = cwd
 
 	if _, err := os.Stat(filepath.Join(c.rootDir, "config.hcl")); err != nil {
-		return fmt.Errorf("Missing required config.hcl file", err)
+		return fmt.Errorf("Missing required config.hcl file: %v", err)
 	}
 
 	cacheDir := filepath.Join(c.rootDir, "cache")
@@ -183,7 +183,24 @@ func (c *Core) initTLS() error {
 
 		var errWriter bytes.Buffer
 
-		cmd := exec.Command(consulBin, "tls", "cert", "create", "-"+typ, "-dc="+dc.Name)
+		var args []string
+		if server {
+			nodeName := fmt.Sprintf("%s-server%d-pod", dc.Name, idx+1)
+			args = []string{
+				"tls", "cert", "create",
+				"-server",
+				"-dc=" + dc.Name,
+				"-node=" + nodeName,
+			}
+		} else {
+			args = []string{
+				"tls", "cert", "create",
+				"-client",
+				"-dc=" + dc.Name,
+			}
+		}
+
+		cmd := exec.Command(consulBin, args...)
 		cmd.Dir = tlsDir
 		cmd.Stdout = nil
 		cmd.Stderr = &errWriter
