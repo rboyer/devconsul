@@ -53,11 +53,13 @@ type userConfigTopologyDatacenter struct {
 }
 
 type userConfigTopologyNodeConfig struct {
-	UpstreamName       string            `hcl:"upstream_name"`
-	UpstreamDatacenter string            `hcl:"upstream_datacenter"`
-	UpstreamExtraHCL   string            `hcl:"upstream_extra_hcl"`
-	ServiceMeta        map[string]string `hcl:"service_meta"` // key -> val
-	UseBuiltinProxy    bool              `hcl:"use_builtin_proxy"`
+	UpstreamName                string            `hcl:"upstream_name"`
+	UpstreamDatacenter          string            `hcl:"upstream_datacenter"`
+	UpstreamExtraHCL            string            `hcl:"upstream_extra_hcl"`
+	ServiceMeta                 map[string]string `hcl:"service_meta"` // key -> val
+	UseBuiltinProxy             bool              `hcl:"use_builtin_proxy"`
+	Dead                        bool              `hcl:"dead"`
+	RetainInPrimaryGatewaysList bool              `hcl:"retain_in_primary_gateways_list"`
 }
 
 func (c *userConfigTopologyNodeConfig) Meta() map[string]string {

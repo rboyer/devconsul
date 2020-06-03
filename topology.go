@@ -176,6 +176,12 @@ func InferTopology(uct *userConfigTopology) (*Topology, error) {
 				node.Service = &svc
 			}
 
+			if nodeConfig.Dead {
+				if node.MeshGateway && node.Datacenter == PrimaryDC && nodeConfig.RetainInPrimaryGatewaysList {
+					topology.AddAdditionalPrimaryGateway(node.PublicAddress() + ":443")
+				}
+				continue // act like this isn't there
+			}
 			topology.AddNode(node)
 		}
 	}
@@ -247,6 +253,8 @@ type Topology struct {
 	nm      map[string]*Node
 	servers []string // node names
 	clients []string // node names
+
+	additionalPrimaryGateways []string
 }
 
 func (t *Topology) LeaderIP(datacenter string, wan bool) string {
@@ -310,6 +318,7 @@ func (t *Topology) GatewayAddrs(datacenter string) []string {
 			out = append(out, n.PublicAddress()+":443")
 		}
 	}
+	out = append(out, t.additionalPrimaryGateways...)
 	return out
 }
 
@@ -382,6 +391,10 @@ func (t *Topology) AddNode(node *Node) {
 	} else {
 		t.clients = append(t.clients, node.Name)
 	}
+}
+
+func (t *Topology) AddAdditionalPrimaryGateway(addr string) {
+	t.additionalPrimaryGateways = append(t.additionalPrimaryGateways, addr)
 }
 
 type Datacenter struct {
