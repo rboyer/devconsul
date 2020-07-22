@@ -42,6 +42,7 @@ func (c *CommandConfig) Run() error {
 
 	m := map[string]interface{}{
 		"image":            c.config.ConsulImage,
+		"envoyVersion":     c.config.EnvoyVersion,
 		"tls":              bool2str(c.config.EncryptionTLS),
 		"gossip":           bool2str(c.config.EncryptionGossip),
 		"k8s":              bool2str(c.config.KubernetesEnabled),

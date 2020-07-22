@@ -23,7 +23,7 @@ force-docker:
 docker: cache/docker.done
 cache/docker.done: $(PROGRAM_NAME) config.hcl Dockerfile-envoy
 	docker tag "$(shell ./$(PROGRAM_NAME) config image)" local/consul-base:latest ; \
-	docker build -t local/consul-envoy -f Dockerfile-envoy .
+	docker build --build-arg ENVOY_VERSION=$(shell ./$(PROGRAM_NAME) config envoyVersion) -t local/consul-envoy -f Dockerfile-envoy .
 	@touch cache/docker.done
 
 .PHONY: k8s

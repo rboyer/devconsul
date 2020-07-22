@@ -9,6 +9,7 @@ import (
 
 type FlatConfig struct {
 	ConsulImage        string
+	EnvoyVersion       string
 	EncryptionTLS      bool
 	EncryptionGossip   bool
 	KubernetesEnabled  bool
@@ -21,8 +22,9 @@ type FlatConfig struct {
 }
 
 type userConfig struct {
-	ConsulImage string `hcl:"consul_image"`
-	Encryption  struct {
+	ConsulImage  string `hcl:"consul_image"`
+	EnvoyVersion string `hcl:"envoy_version"`
+	Encryption   struct {
 		TLS    bool `hcl:"tls"`
 		Gossip bool `hcl:"gossip"`
 	} `hcl:"encryption"`
@@ -108,6 +110,7 @@ func parseConfigPartial(contents []byte) (*FlatConfig, *userConfigTopology, erro
 
 	cfg := &FlatConfig{
 		ConsulImage:        uc.ConsulImage,
+		EnvoyVersion:       uc.EnvoyVersion,
 		EncryptionTLS:      uc.Encryption.TLS,
 		EncryptionGossip:   uc.Encryption.Gossip,
 		KubernetesEnabled:  uc.Kubernetes.Enabled,
@@ -128,7 +131,8 @@ func parseConfigPartial(contents []byte) (*FlatConfig, *userConfigTopology, erro
 }
 
 const defaultUserConfig = `
-consul_image = "consul-dev:latest"
+consul_image  = "consul-dev:latest"
+envoy_version = "v1.14.4"
 envoy {
   log_level = "info"
 }
@@ -142,8 +146,8 @@ topology {
   network_shape = "flat"
   datacenters {
     dc1 {
-      servers = 1
-      clients = 2
+      servers       = 1
+      clients       = 2
       mesh_gateways = 0
     }
   }
