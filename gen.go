@@ -564,6 +564,26 @@ verify_outgoing        = true
 verify_server_hostname = true
 {{- end }}
 
+{{ if not .SecondaryServer -}}
+# Exercise config entry bootstrap
+config_entries {
+  bootstrap {
+    kind     = "service-defaults"
+    name     = "placeholder"
+    protocol = "grpc"
+  }
+
+  bootstrap {
+    kind = "service-intentions"
+    name = "placeholder"
+    sources {
+      name   = "placeholder-client"
+      action = "allow"
+    }
+  }
+}
+{{- end}}
+
 connect {
   enabled = true
   {{ if .FederateViaGateway -}}
