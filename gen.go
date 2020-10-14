@@ -15,6 +15,7 @@ import (
 	"strings"
 	"text/template"
 
+	"github.com/hashicorp/hcl/v2/hclwrite"
 	"github.com/rboyer/safeio"
 )
 
@@ -489,7 +490,9 @@ func (c *CommandGenerate) generateAgentHCL(node *Node) (string, error) {
 		return "", err
 	}
 
-	return buf.String(), nil
+	// Ensure it looks tidy
+	out := hclwrite.Format(buf.Bytes())
+	return string(out), nil
 }
 
 type consulAgentConfigInfo struct {
@@ -537,7 +540,7 @@ cache {
 rpc {
   enable_streaming = true
 }
-{{- end }}
+{{ end }}
 
 primary_datacenter     = "dc1"
 retry_join             = [ {{.RetryJoin}} ]
@@ -558,22 +561,22 @@ ui                     = true
 telemetry {
   prometheus_retention_time = "168h"
 }
-{{- end }}
+{{ end }}
 
 {{ if .GossipKey }}
 encrypt                = "{{.GossipKey}}"
 {{- end }}
 
-{{ if .TLS -}}
+{{ if .TLS }}
 ca_file                = "/tls/consul-agent-ca.pem"
 cert_file              = "/tls/{{.TLSFilePrefix}}.pem"
 key_file               = "/tls/{{.TLSFilePrefix}}-key.pem"
 verify_incoming        = true
 verify_outgoing        = true
 verify_server_hostname = true
-{{- end }}
+{{ end }}
 
-{{ if not .SecondaryServer -}}
+{{ if not .SecondaryServer }}
 # Exercise config entry bootstrap
 config_entries {
   bootstrap {
@@ -591,7 +594,7 @@ config_entries {
     }
   }
 }
-{{- end}}
+{{ end}}
 
 connect {
   enabled = true
@@ -600,11 +603,11 @@ connect {
   {{- end}}
 }
 
-{{ if not .Server -}}
+{{ if not .Server }}
 ports {
   grpc = 8502
 }
-{{- end }}
+{{ end }}
 
 acl {
   enabled                  = true
