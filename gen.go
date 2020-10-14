@@ -528,7 +528,16 @@ disable_update_check   = true
 log_level              = "debug"
 
 enable_debug                  = true
-enable_central_service_config = true
+
+cache {
+  use_streaming_backend = true
+}
+
+{{ if .Server }}
+rpc {
+  enable_streaming = true
+}
+{{- end }}
 
 primary_datacenter     = "dc1"
 retry_join             = [ {{.RetryJoin}} ]
