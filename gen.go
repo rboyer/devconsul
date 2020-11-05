@@ -173,10 +173,15 @@ services:
       devconsul.type: "infra"
     restart: always
     dns: 8.8.8.8
-    network_mode: host
     volumes:
       - 'prometheus-data:/prometheus-data'
       - './cache/prometheus.yml:/etc/prometheus/prometheus.yml:ro'
+    networks:
+      consul-lan:
+        ipv4_address: '10.0.100.100'
+    ports:
+      - "9090:9090"
+      - "3000:3000"
 
   grafana:
     network_mode: 'service:prometheus'
@@ -553,7 +558,16 @@ retry_join_wan         = [ {{.RetryJoinWAN}} ]
 {{- end}}
 {{- end}}
 server                 = {{.Server}}
-ui                     = true
+
+ui_config {
+  enabled          = true
+{{ if .Prometheus }}
+  metrics_provider = "prometheus"
+  metrics_proxy {
+	base_url = "http://prometheus:9090"
+  }
+{{ end }}
+}
 
 {{ if .Prometheus }}
 telemetry {

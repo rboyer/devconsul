@@ -95,6 +95,10 @@ func parseConfig(contents []byte) (*FlatConfig, *Topology, error) {
 		return nil, nil, fmt.Errorf("network_shape=%q requires TLS to be enabled to function", topology.NetworkShape)
 	}
 
+	if cfg.PrometheusEnabled && topology.NetworkShape != NetworkShapeFlat {
+		return nil, nil, fmt.Errorf("enabling prometheus currently requires network_shape=flat")
+	}
+
 	return cfg, topology, nil
 }
 
