@@ -532,9 +532,7 @@ log_level              = "debug"
 
 enable_debug                  = true
 
-cache {
-  use_streaming_backend = true
-}
+use_streaming_backend = true
 
 {{ if .Server }}
 rpc {
