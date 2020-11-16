@@ -136,7 +136,7 @@ func parseConfigPartial(contents []byte) (*FlatConfig, *userConfigTopology, erro
 
 const defaultUserConfig = `
 consul_image  = "consul-dev:latest"
-envoy_version = "v1.15.0"
+envoy_version = "v1.16.0"
 envoy {
   log_level = "info"
 }
