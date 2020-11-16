@@ -153,11 +153,6 @@ func (c *CommandBoot) initPrimaryDC() error {
 		}
 	}
 
-	err = c.createIntentions()
-	if err != nil {
-		return fmt.Errorf("createIntentions: %v", err)
-	}
-
 	return nil
 }
 
@@ -606,34 +601,66 @@ func (c *CommandBoot) writeCentralConfigs() error {
 
 	ce := client.ConfigEntries()
 
-	entries := c.config.ConfigEntries
+	var stockEntries []api.ConfigEntry
 	if c.config.PrometheusEnabled {
-		found := false
-		for _, entry := range entries {
-			if entry.GetKind() != api.ProxyDefaults {
+		stockEntries = append(stockEntries, &api.ProxyConfigEntry{
+			Kind: api.ProxyDefaults,
+			Name: api.ProxyConfigGlobal,
+			Config: map[string]interface{}{
+				// hardcoded address of prometheus container
+				"envoy_prometheus_bind_addr": "0.0.0.0:9102",
+			},
+		})
+	}
+	stockEntries = append(stockEntries, &api.ServiceIntentionsConfigEntry{
+		Kind: api.ServiceIntentions,
+		Name: "ping",
+		Sources: []*api.SourceIntention{
+			{
+				Name:   "pong",
+				Action: api.IntentionActionAllow,
+			},
+		},
+	})
+	stockEntries = append(stockEntries, &api.ServiceIntentionsConfigEntry{
+		Kind: api.ServiceIntentions,
+		Name: "pong",
+		Sources: []*api.SourceIntention{
+			{
+				Name:   "ping",
+				Action: api.IntentionActionAllow,
+			},
+		},
+	})
+
+	entries := c.config.ConfigEntries
+	for _, stockEntry := range stockEntries {
+		for i, entry := range entries {
+			if stockEntry.GetKind() != entry.GetKind() {
 				continue
 			}
-			if entry.GetName() != api.ProxyConfigGlobal {
+			if stockEntry.GetName() != entry.GetName() {
 				continue
 			}
-			ce := entry.(*api.ProxyConfigEntry)
-			if ce.Config == nil {
-				ce.Config = make(map[string]interface{})
+			switch stockEntry.GetKind() {
+			case api.ProxyDefaults:
+				// This one gets special case treatment.
+				stockCE := stockEntry.(*api.ProxyConfigEntry)
+				ce := entry.(*api.ProxyConfigEntry)
+				if ce.Config == nil {
+					ce.Config = make(map[string]interface{})
+				}
+				for k, v := range stockCE.Config {
+					ce.Config[k] = v
+				}
+				entries[i] = ce
+			case api.ServiceIntentions:
+			// we deliberately do not merge these
+			default:
+				return fmt.Errorf("unsupported kind: %q", stockEntry.GetKind())
 			}
-			// hardcoded address of prometheus container
-			ce.Config["envoy_prometheus_bind_addr"] = "0.0.0.0:9102"
-			found = true
-			break
 		}
-		if !found {
-			entries = append(entries, &api.ProxyConfigEntry{
-				Kind: api.ProxyDefaults,
-				Name: api.ProxyConfigGlobal,
-				Config: map[string]interface{}{
-					"envoy_prometheus_bind_addr": "0.0.0.0:9102",
-				},
-			})
-		}
+		entries = append(entries, stockEntry)
 	}
 
 	for _, entry := range entries {
@@ -655,6 +682,9 @@ func (c *CommandBoot) writeCentralConfigs() error {
 
 	// Loop over the kinds in the order that will make the graph happy during erasure.
 	for _, kind := range []string{
+		api.ServiceIntentions,
+		api.IngressGateway,
+		api.TerminatingGateway,
 		api.ServiceRouter,
 		api.ServiceSplitter,
 		api.ServiceResolver,
@@ -700,33 +730,6 @@ func (c *CommandBoot) writeServiceRegistrationFiles() error {
 			return err
 		}
 		c.logger.Info("Generated service registration", "filename", filename)
-		return nil
-	})
-}
-
-func (c *CommandBoot) createIntentions() error {
-	return c.topology.Walk(func(n *Node) error {
-		if n.Service == nil {
-			return nil
-		}
-
-		i := &api.Intention{
-			SourceName:      n.Service.Name,
-			DestinationName: n.Service.UpstreamName,
-			Action:          api.IntentionActionAllow,
-		}
-
-		oi, err := consulfunc.CreateOrUpdateIntention(c.primaryClient(), i)
-		if err != nil {
-			return err
-		}
-
-		c.logger.Info("created/updated intention",
-			"src", oi.SourceName,
-			"dst", oi.DestinationName,
-			"action", oi.Action,
-		)
-
 		return nil
 	})
 }
