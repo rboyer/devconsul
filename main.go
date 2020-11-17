@@ -56,6 +56,8 @@ func main() {
 		runner = &CommandConfig{Core: core}
 	case "gen":
 		runner = &CommandGenerate{Core: core}
+	case "nomad":
+		runner = &CommandNomad{Core: core}
 	case "boot":
 		runner = &CommandBoot{Core: core}
 	default:
