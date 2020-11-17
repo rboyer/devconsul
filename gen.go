@@ -200,7 +200,7 @@ services:
   {{.PodName}}:
     container_name: '{{.PodName}}'
     hostname: '{{.PodName}}'
-    image: gcr.io/google_containers/pause:1.0
+    image: k8s.gcr.io/pause:3.3
     labels:
       devconsul.type: "pod"
 {{- range $k, $v := .Labels }}
