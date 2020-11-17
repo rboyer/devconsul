@@ -9,6 +9,7 @@ import (
 func TestInferTopology(t *testing.T) {
 	type testcase struct {
 		uc             *userConfigTopology
+		enterprise     bool
 		expectErr      bool
 		expectExactErr string
 		expectFn       func(t *testing.T, topo *Topology)
@@ -109,7 +110,7 @@ func TestInferTopology(t *testing.T) {
 		tc := tc
 		t.Run(name, func(t *testing.T) {
 			_ = tc
-			topo, err := InferTopology(tc.uc)
+			topo, err := InferTopology(tc.uc, tc.enterprise)
 			if tc.expectExactErr != "" {
 				require.EqualError(t, err, tc.expectExactErr)
 				require.Nil(t, topo)

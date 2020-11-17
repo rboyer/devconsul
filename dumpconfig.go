@@ -5,12 +5,7 @@ import (
 	"fmt"
 )
 
-type CommandConfig struct {
-	*Core
-}
-
-func (c *CommandConfig) Run() error {
-	flag.Parse()
+func (c *Core) RunConfigDump() error {
 	args := flag.Args()
 
 	var (

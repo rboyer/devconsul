@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"flag"
 	"fmt"
 	"strings"
 	"text/template"
@@ -12,9 +11,7 @@ import (
 	"github.com/rboyer/devconsul/consulfunc"
 )
 
-type CommandBoot struct {
-	*Core
-
+type BootInfo struct {
 	primaryOnly bool
 
 	masterToken         string
@@ -26,9 +23,12 @@ type CommandBoot struct {
 	upgradedACLs map[string]map[string]struct{}
 }
 
-func (c *CommandBoot) Run() error {
-	flag.BoolVar(&c.primaryOnly, "primary", false, "primary only")
-	flag.Parse()
+func (c *Core) runBoot(primaryOnly bool) error {
+	if err := checkHasRunOnce("init"); err != nil {
+		return err
+	}
+
+	c.primaryOnly = primaryOnly
 
 	if c.primaryOnly {
 		c.logger.Info("only bootstrapping the primary datacenter", "dc", PrimaryDC)
@@ -76,7 +76,7 @@ func (c *CommandBoot) Run() error {
 	return nil
 }
 
-func (c *CommandBoot) waitForKV(fromDC, toDC string) {
+func (c *Core) waitForKV(fromDC, toDC string) {
 	client := c.clients[fromDC]
 
 	for {
@@ -101,10 +101,15 @@ func (c *CommandBoot) waitForKV(fromDC, toDC string) {
 	}
 }
 
-func (c *CommandBoot) initPrimaryDC() error {
+func (c *Core) initPrimaryDC() error {
 	var err error
 
 	c.waitForUpgrade(PrimaryDC)
+
+	err = c.createNamespaces()
+	if err != nil {
+		return fmt.Errorf("createNamespaces: %v", err)
+	}
 
 	err = c.createReplicationToken()
 	if err != nil {
@@ -156,7 +161,7 @@ func (c *CommandBoot) initPrimaryDC() error {
 	return nil
 }
 
-func (c *CommandBoot) initSecondaryDCs() error {
+func (c *Core) initSecondaryDCs() error {
 	var err error
 
 	err = c.injectReplicationToken()
@@ -186,15 +191,15 @@ func (c *CommandBoot) initSecondaryDCs() error {
 	return nil
 }
 
-func (c *CommandBoot) primaryClient() *api.Client {
+func (c *Core) primaryClient() *api.Client {
 	return c.clients[PrimaryDC]
 }
 
-func (c *CommandBoot) clientForDC(dc string) *api.Client {
+func (c *Core) clientForDC(dc string) *api.Client {
 	return c.clients[dc]
 }
 
-func (c *CommandBoot) bootstrap(client *api.Client) error {
+func (c *Core) bootstrap(client *api.Client) error {
 	var err error
 	c.masterToken, err = c.cache.LoadValue("master-token")
 	if err != nil {
@@ -250,7 +255,64 @@ TRYAGAIN2:
 	return nil
 }
 
-func (c *CommandBoot) createReplicationToken() error {
+func (c *Core) createNamespaces() error {
+	if !c.config.EnterpriseEnabled {
+		return nil
+	}
+
+	// Create a policy to allow super permissive catalog reads across namespace
+	// boundaries.
+	if err := c.createCrossNamespaceCatalogReadPolicy(); err != nil {
+		return fmt.Errorf("createCrossNamespaceCatalogReadPolicy(): %v", err)
+	}
+
+	nc := c.primaryClient().Namespaces()
+
+	currentList, _, err := nc.List(nil)
+	if err != nil {
+		return err
+	}
+
+	currentMap := make(map[string]struct{})
+	for _, ns := range currentList {
+		currentMap[ns.Name] = struct{}{}
+	}
+
+	for _, ns := range c.config.EnterpriseNamespaces {
+		if _, ok := currentMap[ns]; ok {
+			delete(currentMap, ns)
+			continue
+		}
+
+		obj := &api.Namespace{
+			Name: ns,
+			ACLs: &api.NamespaceACLConfig{
+				PolicyDefaults: []api.ACLLink{
+					{Name: "cross-ns-catalog-read"},
+				},
+			},
+		}
+
+		_, _, err = nc.Create(obj, nil)
+		if err != nil {
+			return err
+		}
+		c.logger.Info("created namespace", "namespace", ns)
+	}
+
+	delete(currentMap, "default")
+
+	for ns, _ := range currentMap {
+		if _, err := nc.Delete(ns, nil); err != nil {
+			return err
+		}
+		c.logger.Info("deleted namespace", "namespace", ns)
+	}
+
+	return nil
+}
+
+func (c *Core) createReplicationToken() error {
 	const replicationName = "acl-replication"
 
 	p := &api.ACLPolicy{
@@ -288,7 +350,7 @@ service_prefix "" {
 	return nil
 }
 
-func (c *CommandBoot) createMeshGatewayToken() error {
+func (c *Core) createMeshGatewayToken() error {
 	const meshGatewayName = "mesh-gateway"
 
 	p := &api.ACLPolicy{
@@ -339,7 +401,7 @@ agent_prefix "" {
 	return nil
 }
 
-func (c *CommandBoot) injectReplicationToken() error {
+func (c *Core) injectReplicationToken() error {
 	token := c.mustGetToken("replication", "")
 
 	agentMasterToken := c.config.AgentMasterToken
@@ -372,7 +434,7 @@ func (c *CommandBoot) injectReplicationToken() error {
 }
 
 // each agent will get a minimal policy configured
-func (c *CommandBoot) createAgentTokens() error {
+func (c *Core) createAgentTokens() error {
 	return c.topology.Walk(func(node *Node) error {
 		policyName := "agent--" + node.Name
 
@@ -411,7 +473,7 @@ service_prefix "" { policy = "read" }
 }
 
 // TALK TO EACH AGENT
-func (c *CommandBoot) injectAgentTokens(datacenter string) error {
+func (c *Core) injectAgentTokens(datacenter string) error {
 	agentMasterToken := c.config.AgentMasterToken
 	return c.topology.Walk(func(node *Node) error {
 		if node.Datacenter != datacenter {
@@ -438,7 +500,7 @@ func (c *CommandBoot) injectAgentTokens(datacenter string) error {
 	})
 }
 
-func (c *CommandBoot) waitForLeader(dc string) {
+func (c *Core) waitForLeader(dc string) {
 	client := c.clients[dc]
 	for {
 		leader, err := client.Status().Leader()
@@ -451,11 +513,11 @@ func (c *CommandBoot) waitForLeader(dc string) {
 	}
 }
 
-func (c *CommandBoot) waitForUpgrade(dc string) {
+func (c *Core) waitForUpgrade(dc string) {
 	c.waitForACLUpgrade(c.clients[dc], dc, dc+"-server1")
 }
 
-func (c *CommandBoot) waitForACLUpgrade(client *api.Client, dc, node string) error {
+func (c *Core) waitForACLUpgrade(client *api.Client, dc, node string) error {
 	if c.isUpgradedACLs(dc, node) {
 		return nil
 	}
@@ -475,7 +537,7 @@ func (c *CommandBoot) waitForACLUpgrade(client *api.Client, dc, node string) err
 	return nil
 }
 
-func (c *CommandBoot) isUpgradedACLs(dc, node string) bool {
+func (c *Core) isUpgradedACLs(dc, node string) bool {
 	if len(c.upgradedACLs) == 0 {
 		return false
 	}
@@ -487,7 +549,7 @@ func (c *CommandBoot) isUpgradedACLs(dc, node string) bool {
 	return ok
 }
 
-func (c *CommandBoot) markUpgradedACLs(dc, node string) {
+func (c *Core) markUpgradedACLs(dc, node string) {
 	if c.upgradedACLs == nil {
 		c.upgradedACLs = make(map[string]map[string]struct{})
 	}
@@ -501,7 +563,7 @@ func (c *CommandBoot) markUpgradedACLs(dc, node string) {
 
 const anonymousTokenAccessorID = "00000000-0000-0000-0000-000000000002"
 
-func (c *CommandBoot) createAnonymousToken() error {
+func (c *Core) createAnonymousToken() error {
 	if err := c.createAnonymousPolicy(); err != nil {
 		return err
 	}
@@ -528,7 +590,7 @@ func (c *CommandBoot) createAnonymousToken() error {
 	return nil
 }
 
-func (c *CommandBoot) createAnonymousPolicy() error {
+func (c *Core) createAnonymousPolicy() error {
 	p := &api.ACLPolicy{
 		Name:        "anonymous",
 		Description: "anonymous",
@@ -536,6 +598,9 @@ func (c *CommandBoot) createAnonymousPolicy() error {
 node_prefix "" { policy = "read" }
 service_prefix "" { policy = "read" }
 `,
+	}
+	if c.config.EnterpriseEnabled {
+		p.Rules = `namespace_prefix "" { ` + p.Rules + ` }`
 	}
 
 	op, err := consulfunc.CreateOrUpdatePolicy(c.primaryClient(), p)
@@ -548,7 +613,33 @@ service_prefix "" { policy = "read" }
 	return nil
 }
 
-func (c *CommandBoot) createServiceTokens() error {
+func (c *Core) createCrossNamespaceCatalogReadPolicy() error {
+	if !c.config.EnterpriseEnabled {
+		return nil
+	}
+
+	p := &api.ACLPolicy{
+		Name:        "cross-ns-catalog-read",
+		Description: "cross-ns-catalog-read",
+		Rules: `
+namespace_prefix "" {
+  node_prefix "" { policy = "read" }
+  service_prefix "" { policy = "read" }
+}
+`,
+	}
+
+	op, err := consulfunc.CreateOrUpdatePolicy(c.primaryClient(), p)
+	if err != nil {
+		return err
+	}
+
+	c.logger.Info("cross-ns-catalog-read policy", "name", p.Name, "id", op.ID)
+
+	return nil
+}
+
+func (c *Core) createServiceTokens() error {
 	done := make(map[string]struct{})
 
 	return c.topology.Walk(func(n *Node) error {
@@ -568,6 +659,9 @@ func (c *CommandBoot) createServiceTokens() error {
 				},
 			},
 		}
+		if n.Service.Namespace != "" {
+			token.Namespace = n.Service.Namespace
+		}
 
 		token, err := consulfunc.CreateOrUpdateToken(c.primaryClient(), token)
 		if err != nil {
@@ -576,6 +670,7 @@ func (c *CommandBoot) createServiceTokens() error {
 
 		c.logger.Info("service token created",
 			"service", n.Service.Name,
+			"namespace", n.Service.Namespace,
 			"token", token.SecretID,
 		)
 
@@ -590,7 +685,7 @@ func (c *CommandBoot) createServiceTokens() error {
 	})
 }
 
-func (c *CommandBoot) writeCentralConfigs() error {
+func (c *Core) writeCentralConfigs() error {
 	// Configs live in the primary DC only.
 	client := c.clientForDC(PrimaryDC)
 
@@ -600,6 +695,46 @@ func (c *CommandBoot) writeCentralConfigs() error {
 	}
 
 	ce := client.ConfigEntries()
+
+	type ServiceName struct {
+		Name      string
+		Namespace string
+	}
+
+	// collect upstreams and downstreams
+	dm := make(map[ServiceName]map[ServiceName]struct{}) // dest -> src
+	err = c.topology.Walk(func(n *Node) error {
+		if n.Service == nil {
+			return nil
+		}
+		svc := n.Service
+
+		dst := ServiceName{
+			Name:      svc.Name,
+			Namespace: defaultValue(svc.Namespace, "default"),
+		}
+		src := ServiceName{
+			Name:      svc.UpstreamName,
+			Namespace: defaultValue(svc.UpstreamNamespace, "default"),
+		}
+		if !c.config.EnterpriseEnabled {
+			dst.Namespace = ""
+			src.Namespace = ""
+		}
+
+		sm, ok := dm[dst]
+		if !ok {
+			sm = make(map[ServiceName]struct{})
+			dm[dst] = sm
+		}
+
+		sm[src] = struct{}{}
+
+		return nil
+	})
+	if err != nil {
+		return err
+	}
 
 	var stockEntries []api.ConfigEntry
 	if c.config.PrometheusEnabled {
@@ -612,29 +747,26 @@ func (c *CommandBoot) writeCentralConfigs() error {
 			},
 		})
 	}
-	stockEntries = append(stockEntries, &api.ServiceIntentionsConfigEntry{
-		Kind: api.ServiceIntentions,
-		Name: "ping",
-		Sources: []*api.SourceIntention{
-			{
-				Name:   "pong",
-				Action: api.IntentionActionAllow,
-			},
-		},
-	})
-	stockEntries = append(stockEntries, &api.ServiceIntentionsConfigEntry{
-		Kind: api.ServiceIntentions,
-		Name: "pong",
-		Sources: []*api.SourceIntention{
-			{
-				Name:   "ping",
-				Action: api.IntentionActionAllow,
-			},
-		},
-	})
+
+	for dst, sm := range dm {
+		entry := &api.ServiceIntentionsConfigEntry{
+			Kind:      api.ServiceIntentions,
+			Name:      dst.Name,
+			Namespace: dst.Namespace,
+		}
+		for src, _ := range sm {
+			entry.Sources = append(entry.Sources, &api.SourceIntention{
+				Name:      src.Name,
+				Namespace: src.Namespace,
+				Action:    api.IntentionActionAllow,
+			})
+		}
+		stockEntries = append(stockEntries, entry)
+	}
 
 	entries := c.config.ConfigEntries
 	for _, stockEntry := range stockEntries {
+		found := false
 		for i, entry := range entries {
 			if stockEntry.GetKind() != entry.GetKind() {
 				continue
@@ -642,6 +774,7 @@ func (c *CommandBoot) writeCentralConfigs() error {
 			if stockEntry.GetName() != entry.GetName() {
 				continue
 			}
+
 			switch stockEntry.GetKind() {
 			case api.ProxyDefaults:
 				// This one gets special case treatment.
@@ -659,8 +792,13 @@ func (c *CommandBoot) writeCentralConfigs() error {
 			default:
 				return fmt.Errorf("unsupported kind: %q", stockEntry.GetKind())
 			}
+
+			found = true
+			break
 		}
-		entries = append(entries, stockEntry)
+		if !found {
+			entries = append(entries, stockEntry)
+		}
 	}
 
 	for _, entry := range entries {
@@ -713,7 +851,7 @@ func (c *CommandBoot) writeCentralConfigs() error {
 	return nil
 }
 
-func (c *CommandBoot) writeServiceRegistrationFiles() error {
+func (c *Core) writeServiceRegistrationFiles() error {
 	return c.topology.Walk(func(n *Node) error {
 		if n.Service == nil {
 			return nil
@@ -734,7 +872,7 @@ func (c *CommandBoot) writeServiceRegistrationFiles() error {
 	})
 }
 
-func (c *CommandBoot) initializeKubernetes() error {
+func (c *Core) initializeKubernetes() error {
 	if err := c.createAuthMethodForK8S(); err != nil {
 		return err
 	}
@@ -747,7 +885,7 @@ func (c *CommandBoot) initializeKubernetes() error {
 
 const bindingRuleDescription = "devconsul--default"
 
-func (c *CommandBoot) createBindingRulesForK8s() error {
+func (c *Core) createBindingRulesForK8s() error {
 	rule := &api.ACLBindingRule{
 		AuthMethod:  "minikube",
 		Description: bindingRuleDescription,
@@ -766,7 +904,7 @@ func (c *CommandBoot) createBindingRulesForK8s() error {
 	return nil
 }
 
-func (c *CommandBoot) createAuthMethodForK8S() error {
+func (c *Core) createAuthMethodForK8S() error {
 	k8sHost, err := c.cache.LoadStringFile("k8s/config_host")
 	if err != nil {
 		return err
@@ -805,6 +943,9 @@ var serviceRegistrationT = template.Must(template.New("service_reg").Parse(`
 services = [
   {
     name = "{{.Name}}"
+{{- if .Namespace }}
+    namespace = "{{.Namespace}}"
+{{- end }}
     port = {{.Port}}
 
     checks = [
@@ -829,6 +970,9 @@ services = [
           upstreams = [
             {
               destination_name = "{{.UpstreamName}}"
+{{- if .UpstreamNamespace }}
+              destination_namespace = "{{.UpstreamNamespace}}"
+{{- end }}
               local_bind_port  = {{.UpstreamLocalPort}}
 {{- if .UpstreamDatacenter }}
               datacenter = "{{.UpstreamDatacenter}}"
@@ -852,7 +996,7 @@ func GetServiceRegistrationHCL(s Service) (string, error) {
 	return buf.String(), nil
 }
 
-func (c *CommandBoot) injectAgentTokensAndWaitForNodeUpdates(datacenter string) error {
+func (c *Core) injectAgentTokensAndWaitForNodeUpdates(datacenter string) error {
 	client := c.clientForDC(datacenter)
 	if client == nil {
 		return fmt.Errorf("unknown datacenter: %s", datacenter)
@@ -882,7 +1026,7 @@ func (c *CommandBoot) injectAgentTokensAndWaitForNodeUpdates(datacenter string) 
 	}
 }
 
-func (c *CommandBoot) determineNodeUpdateStragglers(nodes []*api.Node, datacenter string) []string {
+func (c *Core) determineNodeUpdateStragglers(nodes []*api.Node, datacenter string) []string {
 	nm := make(map[string]*api.Node)
 	for _, n := range nodes {
 		nm[n.Node] = n
@@ -904,24 +1048,31 @@ func (c *CommandBoot) determineNodeUpdateStragglers(nodes []*api.Node, datacente
 	return out
 }
 
-func (c *CommandBoot) setToken(typ, k, v string) {
+func (c *Core) setToken(typ, k, v string) {
 	if c.tokens == nil {
 		c.tokens = make(map[string]string)
 	}
 	c.tokens[typ+"/"+k] = v
 }
 
-func (c *CommandBoot) getToken(typ, k string) string {
+func (c *Core) getToken(typ, k string) string {
 	if c.tokens == nil {
 		return ""
 	}
 	return c.tokens[typ+"/"+k]
 }
 
-func (c *CommandBoot) mustGetToken(typ, k string) string {
+func (c *Core) mustGetToken(typ, k string) string {
 	tok := c.getToken(typ, k)
 	if tok == "" {
 		panic("token for '" + typ + "/" + k + "' not set:" + jsonPretty(c.tokens))
 	}
 	return tok
+}
+
+func defaultValue(v, def string) string {
+	if v == "" {
+		return def
+	}
+	return v
 }

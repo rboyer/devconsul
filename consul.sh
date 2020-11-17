@@ -34,7 +34,7 @@ shift
 
 
 node="${datacenter}-server1"
-ip="$(./devconsul config | jq -r ".localAddrs[\"${node}\"]")"
+ip="$(devconsul config | jq -r ".localAddrs[\"${node}\"]")"
 if [[ "$ip" = "null" ]]; then
     echo "unknown dc: ${datacenter}" >&2
     exit 1

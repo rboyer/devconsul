@@ -3,94 +3,22 @@ SHELL := /bin/bash
 PROGRAM_NAME := devconsul
 
 .PHONY: all
-all: bin init
+all: install
 
-.PHONY: bin
-bin: $(PROGRAM_NAME)
-$(PROGRAM_NAME): *.go cachestore/*.go consulfunc/*.go go.mod go.sum
+.PHONY: install
+install: $(GOPATH)/bin/$(PROGRAM_NAME)
+$(GOPATH)/bin/$(PROGRAM_NAME): *.go cachestore/*.go consulfunc/*.go go.mod go.sum
 	$(info rebuilding binary...)
-	@go build
+	@go install
 
-.PHONY: init
-init: docker k8s
+.PHONY: tidy
+tidy:
+	go mod tidy
 
-.PHONY: force-docker
-force-docker:
-	@rm -f cache/docker.done
-	$(MAKE) docker
+.PHONY: vet
+vet:
+	go vet ./...
 
-.PHONY: docker
-docker: cache/docker.done
-cache/docker.done: $(PROGRAM_NAME) config.hcl Dockerfile-envoy
-	docker tag "$(shell ./$(PROGRAM_NAME) config image)" local/consul-base:latest ; \
-	docker build --build-arg ENVOY_VERSION=$(shell ./$(PROGRAM_NAME) config envoyVersion) -t local/consul-envoy -f Dockerfile-envoy .
-	@touch cache/docker.done
-
-.PHONY: k8s
-k8s: cache/k8s/done
-cache/k8s/done: $(PROGRAM_NAME) config.hcl scripts/k8s-rbac.sh
-	@mkdir -p cache/k8s
-	@if [[ -n "$$(./$(PROGRAM_NAME) config k8s)" ]]; then \
-		./scripts/k8s-rbac.sh ; \
-	fi
-	@touch cache/k8s/done
-
-.PHONY: gen
-gen: docker-compose.yml cache/agent-master-token.val cache/gossip-key.val
-docker-compose.yml: $(PROGRAM_NAME) config.hcl cache/docker.done
-	./$(PROGRAM_NAME) gen
-
-.PHONY: up
-up: up-no-boot
-	./$(PROGRAM_NAME) boot
-
-.PHONY: up-no-boot
-up-no-boot: gen
-	docker-compose up --remove-orphans -d
-
-.PHONY: primary
-primary: primary-no-boot
-	./$(PROGRAM_NAME) boot -primary
-
-.PHONY: primary-no-boot
-primary-no-boot: pods
-	docker-compose up --remove-orphans -d $$(./$(PROGRAM_NAME) config | jq -r '.containers.dc1[]')
-
-.PHONY: pods
-pods: gen
-	$(info bringing up just the empty pods...)
-	@docker-compose up --remove-orphans -d $$(./$(PROGRAM_NAME) config | jq -r '.pods[][]')
-
-
-.PHONY: stop-dc2
-stop-dc2: gen
-	docker-compose stop $$(./$(PROGRAM_NAME) config | jq -r '.containers.dc2[]')
-
-.PHONY: down
-down: gen
-	docker-compose down -v --remove-orphans
-	rm -f docker-compose.yml
-	rm -f cache/*.val cache/*.hcl cache/docker.done
-
-.PHONY: restart
-restart: gen
-	docker-compose down
-	docker-compose up --remove-orphans -d
-	./$(PROGRAM_NAME) boot
-
-.PHONY: members
-members:
-	@./consul.sh dc1 members
-
-.PHONY: services
-services:
-	@./consul.sh dc1 catalog services
-
-.PHONY: configs
-configs:
-	@for kind in service-router service-splitter service-resolver service-defaults proxy-defaults ; do \
-	    names=$$(./consul.sh dc1 config list -kind $$kind | sort) ; \
-		for name in $$names; do \
-			echo "$$kind/$$name" ; \
-		done ; \
-	done
+.PHONY: test
+test:
+	go test ./...

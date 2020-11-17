@@ -4,33 +4,36 @@ This project helps bring up a local Consul Connect cluster using Docker.
 
 ## Prerequisites
 
-* `go v1.13.7` or newer
+* `go v1.15.2` or newer
 * `docker`
-* `docker-compose`
+* `terraform`
 * `automake`
 * `bash4`
+
+### If Kubernetes is Enabled
+
+* `kubectl`
+* `minikube`
 
 ## Getting Started
 
 1. Fork this repository. I'm not currently making guarantees about destructive
    changes to this repository.
 
-2. Create a `consul.hcl` file (see below).
+2. Install the `devconsul` binary with `make install` (or just `go install`).
 
-3. Run `make`. This will create any necessary docker containers that you may
-   lack.
+3. Create a `consul.hcl` file (see below).
 
-4. Run `make up`. This will bring up the containers with docker-compose, and
-   then `devconsul boot` to bootstrap the cluster.
+4. Run `devconsul up`. This will do all of the interesting things.
 
-5. If you wish to destroy everything, run `make down`.
+5. If you wish to destroy everything, run `devconsul down`.
 
 ## If you are developing consul
 
 1. From your `consul` working copy run `make dev-docker`. This will update a
    `consul-dev:latest` docker image locally.
 
-2. From your `devconsul` working copy run `make force-docker` to rebuild the
+2. From your `devconsul` working copy run `devconsul docker` to rebuild the
    images locally to use that binary.
 
 3. Set `consul_image = "consul-dev:latest"` in your `config.hcl` file
@@ -70,35 +73,35 @@ topology {
 
 By default, two datacenters are configured using "machines" configured in the
 manner of a Kubernetes pod by anchoring a network namespace to a single
-placeholder container (running `google/pause:latest`) and then attaching any
+placeholder container (running `k8s.grc.io/pause:3.3`) and then attaching any
 additional containers to it that should be colocated and share network things
 such as `127.0.0.1` and the `lo0` adapter.
 
 An example using a topology of `servers { dc1=1 dc2=1 } clients { dc1=2
 dc2=2}`:
 
-| Container                | IP        | Image              |
-| ----------------         | --------- | ------------------ |
-| dc1-server1-pod          | 10.0.1.11 | google/pause       |
-| dc1-server1              | ^^^       | consul:1.5.0       |
-| dc1-client1-pod          | 10.0.1.12 | google/pause       |
-| dc1-client1              | ^^^       | consul:1.5.0       |
-| dc1-client1-ping         | ^^^       | rboyer/pingpong    |
-| dc1-client1-ping-sidecar | ^^^       | local/consul-envoy |
-| dc1-client2-pod          | 10.0.1.13 | google/pause       |
-| dc1-client2              | ^^^       | consul:1.5.0       |
-| dc1-client2-pong         | ^^^       | rboyer/pingpong    |
-| dc1-client2-pong-sidecar | ^^^       | local/consul-envoy |
-| dc2-server1-pod          | 10.0.2.11 | google/pause       |
-| dc2-server1              | ^^^       | consul:1.5.0       |
-| dc2-client1-pod          | 10.0.2.12 | google/pause       |
-| dc2-client1              | ^^^       | consul:1.5.0       |
-| dc2-client1-ping         | ^^^       | rboyer/pingpong    |
-| dc2-client1-ping-sidecar | ^^^       | local/consul-envoy |
-| dc2-client2-pod          | 10.0.2.13 | google/pause       |
-| dc2-client2              | ^^^       | consul:1.5.0       |
-| dc2-client2-pong         | ^^^       | rboyer/pingpong    |
-| dc2-client2-pong-sidecar | ^^^       | local/consul-envoy |
+| Container                | IP        | Image                |
+| ----------------         | --------- | -------------------- |
+| dc1-server1-pod          | 10.0.1.11 | k8s.grc.io/pause:3.3 |
+| dc1-server1              | ^^^       | consul:1.5.0         |
+| dc1-client1-pod          | 10.0.1.12 | k8s.grc.io/pause:3.3 |
+| dc1-client1              | ^^^       | consul:1.5.0         |
+| dc1-client1-ping         | ^^^       | rboyer/pingpong      |
+| dc1-client1-ping-sidecar | ^^^       | local/consul-envoy   |
+| dc1-client2-pod          | 10.0.1.13 | k8s.grc.io/pause:3.3 |
+| dc1-client2              | ^^^       | consul:1.5.0         |
+| dc1-client2-pong         | ^^^       | rboyer/pingpong      |
+| dc1-client2-pong-sidecar | ^^^       | local/consul-envoy   |
+| dc2-server1-pod          | 10.0.2.11 | k8s.grc.io/pause:3.3 |
+| dc2-server1              | ^^^       | consul:1.5.0         |
+| dc2-client1-pod          | 10.0.2.12 | k8s.grc.io/pause:3.3 |
+| dc2-client1              | ^^^       | consul:1.5.0         |
+| dc2-client1-ping         | ^^^       | rboyer/pingpong      |
+| dc2-client1-ping-sidecar | ^^^       | local/consul-envoy   |
+| dc2-client2-pod          | 10.0.2.13 | k8s.grc.io/pause:3.3 |
+| dc2-client2              | ^^^       | consul:1.5.0         |
+| dc2-client2-pong         | ^^^       | rboyer/pingpong      |
+| dc2-client2-pong-sidecar | ^^^       | local/consul-envoy   |
 
 The copies of pingpong running in the two pods are configured to dial each
 other using Connect and exchange simple RPCs to showcase all of the plumbing in

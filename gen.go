@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"bytes"
 	"errors"
-	"flag"
 	"fmt"
 	"io/ioutil"
 	"net"
@@ -19,28 +18,21 @@ import (
 	"github.com/rboyer/safeio"
 )
 
-type CommandGenerate struct {
-	*Core
-}
-
-func (c *CommandGenerate) Run() error {
-	var verbose bool
-
-	flag.BoolVar(&verbose, "v", false, "verbose")
-	flag.Parse()
-
-	if verbose {
-		c.topology.WalkSilent(func(node *Node) {
-			c.logger.Info("Generating node",
-				"name", node.Name,
-				"server", node.Server,
-				"dc", node.Datacenter,
-				"ip", node.LocalAddress(),
-			)
-		})
+func (c *Core) runGenerate(primaryOnly bool) error {
+	if err := checkHasRunOnce("init"); err != nil {
+		return err
 	}
 
-	if err := c.generateComposeFile(); err != nil {
+	c.topology.WalkSilent(func(node *Node) {
+		c.logger.Info("Generating node",
+			"name", node.Name,
+			"server", node.Server,
+			"dc", node.Datacenter,
+			"ip", node.LocalAddress(),
+		)
+	})
+
+	if err := c.generateConfigs(primaryOnly); err != nil {
 		return err
 	}
 
@@ -53,21 +45,59 @@ func (c *CommandGenerate) Run() error {
 		}
 	}
 
-	return nil
+	return c.terraformApply()
 }
 
-func (c *CommandGenerate) generateComposeFile() error {
-	info := composeInfo{
-		Config:   c.config,
-		Networks: c.topology.Networks(),
+func (c *Core) generateConfigs(primaryOnly bool) error {
+	// write it to a cache file just so we can detect full-destroy
+	networks, err := c.writeDockerNetworksTF()
+	if err != nil {
+		return err
+	}
+
+	type terraformPod struct {
+		PodName string
+		Node    *Node
+		HCL     string
+		Labels  map[string]string
+	}
+
+	var (
+		volumes    []string
+		images     []string
+		containers []string
+	)
+
+	addVolume := func(name string) {
+		volumes = append(volumes, fmt.Sprintf(`
+resource "docker_volume" %[1]q {
+  name       = %[1]q
+  labels {
+    label = "devconsul"
+    value = "1"
+  }
+}`, name))
+	}
+
+	addImage := func(name, image string) {
+		images = append(images, fmt.Sprintf(`
+resource "docker_image" %[1]q {
+  name = %[2]q
+  keep_locally = true
+}`, name, image))
 	}
 
 	if c.config.PrometheusEnabled {
-		info.Volumes = append(info.Volumes, "prometheus-data")
-		info.Volumes = append(info.Volumes, "grafana-data")
+		addVolume("prometheus-data")
+		addVolume("grafana-data")
 	}
 
-	err := c.topology.Walk(func(node *Node) error {
+	addImage("pause", "k8s.gcr.io/pause:3.3")
+	addImage("consul", c.config.ConsulImage)
+	addImage("consul-envoy", "local/consul-envoy:latest")
+	addImage("pingpong", "rboyer/pingpong:latest")
+
+	err = c.topology.Walk(func(node *Node) error {
 		podName := node.Name + "-pod"
 
 		podHCL, err := c.generateAgentHCL(node)
@@ -75,293 +105,205 @@ func (c *CommandGenerate) generateComposeFile() error {
 			return err
 		}
 
-		extraYAML_1, err := c.generateMeshGatewayYAML(podName, node)
-		if err != nil {
-			return err
-		}
-
-		extraYAML_2, err := c.generatePingPongYAML(podName, node)
-		if err != nil {
-			return err
-		}
-
-		extraYAML := extraYAML_1 + "\n\n" + extraYAML_2
-
-		pod := composePod{
-			PodName:        podName,
-			ConsulImage:    c.config.ConsulImage,
-			Node:           node,
-			HCL:            indent(podHCL, 8),
-			AgentDependsOn: []string{podName},
-			ExtraYAML:      extraYAML,
-			Labels:         map[string]string{
+		pod := terraformPod{
+			PodName: podName,
+			Node:    node,
+			HCL:     podHCL,
+			Labels:  map[string]string{
 				//
 			},
 		}
 		node.AddLabels(pod.Labels)
 
-		if !node.Server {
-			pod.AgentDependsOn = append(pod.AgentDependsOn,
-				node.Datacenter+"-server1",
-			)
+		// if !node.Server {
+		// 	pod.DependsOn = append(pod.DependsOn,
+		// 		"docker_container."+node.Datacenter+"-server1",
+		// 	)
+		// }
+		/*
+					depends_on = [
+			    aws_iam_role_policy.example,
+			  ]
+		*/
+
+		// NOTE: primaryOnly implies we still generate empty pods in the remote datacenters
+		populatePodContents := true
+		if primaryOnly {
+			populatePodContents = node.Datacenter == PrimaryDC
 		}
 
-		info.Volumes = append(info.Volumes, node.Name)
-		info.Pods = append(info.Pods, pod)
+		addVolume(node.Name)
+
+		// pod placeholder container
+		pauseRes, err := stringTemplate(tfPauseT, &pod)
+		if err != nil {
+			return err
+		}
+		containers = append(containers, pauseRes)
+
+		if populatePodContents {
+			// TODO: container specific consul versions
+			// consul agent (TODO: depends on?)
+			consulRes, err := stringTemplate(tfConsulT, &pod)
+			if err != nil {
+				return err
+			}
+			containers = append(containers, consulRes)
+
+			if gwRes, err := c.generateMeshGatewayContainer(podName, pod.Node); err != nil {
+				return err
+			} else if gwRes != "" {
+				containers = append(containers, gwRes)
+			}
+
+			if resources, err := c.generatePingPongContainers(podName, pod.Node); err != nil {
+				return err
+			} else if len(resources) > 0 {
+				containers = append(containers, resources...)
+			}
+		}
+
 		return nil
 	})
 	if err != nil {
 		return err
 	}
 
-	var out bytes.Buffer
-	if err := dockerComposeT.Execute(&out, &info); err != nil {
-		return err
+	if c.config.PrometheusEnabled {
+		addImage("prometheus", "prom/prometheus:latest")
+		addImage("grafana", "grafana/grafana:latest")
+		containers = append(containers, tfPrometheusContainer)
+		containers = append(containers, tfGrafanaContainer)
 	}
 
-	return c.updateFileIfDifferent(out.Bytes(), "docker-compose.yml", 0644)
+	var res []string
+	res = append(res, networks...)
+	res = append(res, volumes...)
+	res = append(res, images...)
+	res = append(res, containers...)
+
+	_, err = c.writeResourceFile(res, "docker.tf", 0644)
+	return err
 }
 
-type composeInfo struct {
-	Config *FlatConfig
+func (c *Core) writeDockerNetworksTF() ([]string, error) {
+	var res []string
+	for _, net := range c.topology.Networks() {
+		res = append(res, fmt.Sprintf(`
+resource "docker_network" %[1]q {
+  name       = %[1]q
+  attachable = true
+  ipam_config {
+    subnet = %[2]q
+  }
+  labels {
+    label = "devconsul"
+    value = "1"
+  }
+}`, net.DockerName(), net.CIDR))
+	}
 
-	Volumes  []string
-	Pods     []composePod
-	Networks []*Network
+	updateResult, err := c.writeResourceFile(res, "cache/networks.tf", 0644)
+	if err != nil {
+		return nil, err
+	}
+
+	// You will need to do a full down/up cycle to switch network_shape.
+	if updateResult == UpdateResultModified {
+		return nil, fmt.Errorf("Networking changed significantly, so you'll have to destroy everything first with 'devconsul down'")
+	}
+	return res, nil
 }
 
-type composePod struct {
-	PodName        string
-	ConsulImage    string
-	Node           *Node
-	HCL            string
-	AgentDependsOn []string
-	ExtraYAML      string
-	Labels         map[string]string
-}
+var tfPauseT = template.Must(template.New("tf-pause").Parse(`
+resource "docker_container" "{{.PodName}}" {
+  name     = "{{.PodName}}"
+  image = docker_image.pause.latest
+  hostname = "{{.PodName}}"
+  restart  = "always"
+  dns      = ["8.8.8.8"]
 
-var dockerComposeT = template.Must(template.New("docker").Parse(`version: '3.7'
-
-# consul:
-#   client_addr is set to 0.0.0.0 to make control from the host easier
-#   it should be disabled for real topologies
-
-# envoy:
-#   admin-bind is set to 0.0.0.0 to make control from the host easier
-#   it should be disabled for real topologies
-
-networks:
-{{- range .Networks }}
-  consul-{{ .Name }}:
-    ipam:
-      driver: default
-      config:
-        - subnet: '{{ .CIDR }}'
-{{- end }}
-
-volumes:
-{{- range .Volumes }}
-  {{.}}:
-{{- end }}
-
-# https://yipee.io/2017/06/getting-kubernetes-pod-features-using-native-docker-commands/
-services:
-{{- if .Config.PrometheusEnabled }}
-  prometheus:
-    image: prom/prometheus:latest
-    labels:
-      devconsul.type: "infra"
-    restart: always
-    dns: 8.8.8.8
-    volumes:
-      - 'prometheus-data:/prometheus-data'
-      - './cache/prometheus.yml:/etc/prometheus/prometheus.yml:ro'
-    networks:
-      consul-lan:
-        ipv4_address: '10.0.100.100'
-    ports:
-      - "9090:9090"
-      - "3000:3000"
-
-  grafana:
-    network_mode: 'service:prometheus'
-    image: grafana/grafana:latest
-    labels:
-      devconsul.type: "infra"
-    restart: always
-    init: true
-    volumes:
-      - 'grafana-data:/var/lib/grafana'
-      - './cache/grafana-prometheus.yml:/etc/grafana/provisioning/datasources/prometheus.yml:ro'
-      - './cache/grafana.ini:/etc/grafana/grafana.ini:ro'
-{{- end }}
-
-{{- range .Pods }}
-  {{.PodName}}:
-    container_name: '{{.PodName}}'
-    hostname: '{{.PodName}}'
-    image: k8s.gcr.io/pause:3.3
-    labels:
-      devconsul.type: "pod"
+  labels {
+    label = "devconsul"
+    value = "1"
+  }
+  labels {
+    label = "devconsul.type"
+    value = "pod"
+  }
 {{- range $k, $v := .Labels }}
-      {{ $k }}: "{{ $v }}"
+  labels {
+    label = "{{ $k }}"
+    value = "{{ $v }}"
+  }
 {{- end }}
-    restart: always
-    dns: 8.8.8.8
-    networks:
+
 {{- range .Node.Addresses }}
-      consul-{{.Network}}:
-        ipv4_address: '{{.IPAddress}}'
+networks_advanced {
+  name         = "devconsul-{{.Network}}"
+  ipv4_address = "{{.IPAddress}}"
+}
 {{- end }}
+}
+`))
 
-  {{.Node.Name}}:
-    network_mode: 'service:{{.PodName}}'
-    depends_on:
-{{- range .AgentDependsOn }}
-      - '{{.}}'
-{{- end}}
-    volumes:
-      - '{{.Node.Name}}:/consul/data'
-      - './cache/tls:/tls:ro'
-    image: '{{.ConsulImage}}'
-    labels:
-      devconsul.type: "consul"
+var tfConsulT = template.Must(template.New("tf-consul").Parse(`
+resource "docker_container" "{{.Node.Name}}" {
+  name         = "{{.Node.Name}}"
+  network_mode = "container:${docker_container.{{.PodName}}.id}"
+  image        = docker_image.consul.latest
+  restart  = "always"
+
+  labels {
+    label = "devconsul"
+    value = "1"
+  }
+  labels {
+    label = "devconsul.type"
+    value = "consul"
+  }
 {{- range $k, $v := .Labels }}
-      {{ $k }}: "{{ $v }}"
+  labels {
+    label = "{{ $k }}"
+    value = "{{ $v }}"
+  }
 {{- end }}
-    command:
-      - 'agent'
-      - '-hcl'
-      - |
+
+  command = [
+    "agent",
+    "-hcl",
+	<<-EOT
 {{ .HCL }}
-{{ .ExtraYAML }}
-{{- end}}
+EOT
+  ]
+
+  volumes {
+    volume_name    = "{{.Node.Name}}"
+    container_path = "/consul/data"
+  }
+  volumes {
+    host_path      = abspath("cache/tls")
+    container_path = "/tls"
+    read_only      = true
+  }
+}
 `))
 
-func (c *CommandGenerate) generatePingPongYAML(podName string, node *Node) (string, error) {
-	var extraYAML bytes.Buffer
-	if node.Service != nil {
-		svc := node.Service
-
-		switch svc.Name {
-		case "ping", "pong":
-		default:
-			return "", errors.New("unexpected service: " + svc.Name)
-		}
-
-		ppi := pingpongInfo{
-			PodName:         podName,
-			NodeName:        node.Name,
-			PingPong:        svc.Name,
-			UseBuiltinProxy: node.UseBuiltinProxy,
-			EnvoyLogLevel:   c.config.EnvoyLogLevel,
-		}
-		if len(svc.Meta) > 0 {
-			ppi.MetaString = fmt.Sprintf("--%q", svc.Meta)
-		}
-
-		proxyType := "envoy"
-		if node.UseBuiltinProxy {
-			proxyType = "builtin"
-		}
-
-		if c.config.KubernetesEnabled {
-			ppi.SidecarBootArgs = []string{
-				"/secrets/ready.val",
-				proxyType,
-				"login",
-				"-t",
-				"/secrets/k8s/service_jwt_token." + svc.Name,
-				"-s",
-				"/tmp/consul.token",
-				"-r",
-				"/secrets/servicereg__" + node.Name + "__" + svc.Name + ".hcl",
-			}
-		} else {
-			ppi.SidecarBootArgs = []string{
-				"/secrets/ready.val",
-				proxyType,
-				"direct",
-				"-t",
-				"/secrets/service-token--" + svc.Name + ".val",
-				"-r",
-				"/secrets/servicereg__" + node.Name + "__" + svc.Name + ".hcl",
-			}
-		}
-
-		if err := pingpongT.Execute(&extraYAML, &ppi); err != nil {
-			return "", err
-		}
-	}
-
-	return extraYAML.String(), nil
-}
-
-type pingpongInfo struct {
-	PodName         string
-	NodeName        string
-	PingPong        string // ping or pong
-	MetaString      string
-	SidecarBootArgs []string
-	UseBuiltinProxy bool
-	EnvoyLogLevel   string
-}
-
-var pingpongT = template.Must(template.New("pingpong").Parse(`  #####################
-  {{.NodeName}}-{{.PingPong}}:
-    network_mode: 'service:{{.PodName}}'
-    depends_on:
-      - {{.NodeName}}
-    image: rboyer/pingpong:latest
-    labels:
-      devconsul.type: "app"
-    init: true
-    command:
-      - '-bind'
-      # - '127.0.0.1:8080'
-      - '0.0.0.0:8080'
-      - '-dial'
-      - '127.0.0.1:9090'
-      - '-name'
-      - '{{.PingPong}}{{.MetaString}}'
-
-  {{.NodeName}}-{{.PingPong}}-sidecar:
-    network_mode: 'service:{{.PodName}}'
-    depends_on:
-      - {{.NodeName}}-{{.PingPong}}
-    image: local/consul-envoy
-    labels:
-      devconsul.type: "sidecar"
-    init: true
-    restart: on-failure
-    volumes:
-      - './cache:/secrets:ro'
-      - './sidecar-boot.sh:/bin/sidecar-boot.sh:ro'
-    command:
-      - '/bin/sidecar-boot.sh'
-{{- range .SidecarBootArgs }}
-      - '{{.}}'
-{{- end}}
-      - '--'
-      #################
-      - '-sidecar-for'
-      - '{{.PingPong}}'
-{{- if not .UseBuiltinProxy }}
-      - '-admin-bind'
-      # for demo purposes
-      - '0.0.0.0:19000'
-      - '--'
-      - '-l'
-      - '{{ .EnvoyLogLevel }}'
-{{- end }}
-`))
-
-func (c *CommandGenerate) generateMeshGatewayYAML(podName string, node *Node) (string, error) {
+func (c *Core) generateMeshGatewayContainer(podName string, node *Node) (string, error) {
 	if !node.MeshGateway {
 		return "", nil
 	}
 
-	mgi := meshGatewayInfo{
+	type tfMeshGatewayInfo struct {
+		PodName       string
+		NodeName      string
+		EnvoyLogLevel string
+		EnableWAN     bool
+		ExposeServers bool
+		Labels        map[string]string
+	}
+
+	mgi := tfMeshGatewayInfo{
 		PodName:       podName,
 		NodeName:      node.Name,
 		EnvoyLogLevel: c.config.EnvoyLogLevel,
@@ -380,61 +322,306 @@ func (c *CommandGenerate) generateMeshGatewayYAML(podName string, node *Node) (s
 		panic("unknown shape: " + c.topology.NetworkShape)
 	}
 
-	var extraYAML bytes.Buffer
-	if err := meshGatewayT.Execute(&extraYAML, &mgi); err != nil {
-		return "", err
-	}
-	return extraYAML.String(), nil
+	return stringTemplate(tfMeshGatewayT, &mgi)
 }
 
-type meshGatewayInfo struct {
-	PodName       string
-	NodeName      string
-	EnvoyLogLevel string
-	EnableWAN     bool
-	ExposeServers bool
-	Labels        map[string]string
-}
+var tfMeshGatewayT = template.Must(template.New("tf-mesh-gateway").Parse(`
+resource "docker_container" "{{.NodeName}}-mesh-gateway" {
+	name = "{{.NodeName}}-mesh-gateway"
+    network_mode = "container:${docker_container.{{.PodName}}.id}"
+	image        = docker_image.consul-envoy.latest
+    restart  = "on-failure"
 
-var meshGatewayT = template.Must(template.New("mesh-gateway").Parse(`  #####################
-  {{.NodeName}}-mesh-gateway:
-    network_mode: 'service:{{.PodName}}'
-    depends_on:
-      - {{.NodeName}}
-    image: local/consul-envoy
-    labels:
-      devconsul.type: "gateway"
+  labels {
+    label = "devconsul"
+    value = "1"
+  }
+  labels {
+    label = "devconsul.type"
+    value = "gateway"
+  }
 {{- range $k, $v := .Labels }}
-      {{ $k }}: "{{ $v }}"
+  labels {
+    label = "{{ $k }}"
+    value = "{{ $v }}"
+  }
 {{- end }}
-    init: true
-    restart: on-failure
-    volumes:
-      - './cache:/secrets:ro'
-      - './mesh-gateway-sidecar-boot.sh:/bin/mesh-gateway-sidecar-boot.sh:ro'
-    command:
-      - '/bin/mesh-gateway-sidecar-boot.sh'
-      - "/secrets/ready.val"
-      - "-t"
-      - "/secrets/mesh-gateway.val"
-      - '--'
-      #################
+
+  volumes {
+    host_path      = abspath("cache")
+    container_path = "/secrets"
+    read_only      = true
+  }
+  volumes {
+    host_path      = abspath("mesh-gateway-sidecar-boot.sh")
+    container_path = "/bin/mesh-gateway-sidecar-boot.sh"
+    read_only      = true
+  }
+
+  command = [
+      "/bin/mesh-gateway-sidecar-boot.sh",
+      "/secrets/ready.val",
+      "-t",
+      "/secrets/mesh-gateway.val",
+      "--",
 {{- if .ExposeServers }}
-      - '-expose-servers'
+      "-expose-servers",
 {{- end }}
 {{- if .EnableWAN }}
-      - '-wan-address'
-      - '{{ "{{ GetInterfaceIP \"eth1\" }}:443" }}'
+      "-wan-address",
+      "{{ "{{ GetInterfaceIP \"eth1\" }}:443" }}",
 {{- end }}
-      - '-admin-bind'
-      # for demo purposes
-      - '0.0.0.0:19000'
-      - '--'
-      - '-l'
-      - '{{ .EnvoyLogLevel }}'
+      "-admin-bind",
+      // for demo purposes
+      "0.0.0.0:19000",
+      "--",
+      "-l",
+      "{{ .EnvoyLogLevel }}",
+  ]
+}
 `))
 
-func (c *CommandGenerate) generateAgentHCL(node *Node) (string, error) {
+func (c *Core) generatePingPongContainers(podName string, node *Node) ([]string, error) {
+	if node.Service == nil {
+		return nil, nil
+	}
+	svc := node.Service
+
+	switch svc.Name {
+	case "ping", "pong":
+	default:
+		return nil, errors.New("unexpected service: " + svc.Name)
+	}
+
+	type pingpongInfo struct {
+		PodName         string
+		NodeName        string
+		PingPong        string // ping or pong
+		MetaString      string
+		SidecarBootArgs []string
+		UseBuiltinProxy bool
+		EnvoyLogLevel   string
+	}
+
+	ppi := pingpongInfo{
+		PodName:         podName,
+		NodeName:        node.Name,
+		PingPong:        svc.Name,
+		UseBuiltinProxy: node.UseBuiltinProxy,
+		EnvoyLogLevel:   c.config.EnvoyLogLevel,
+	}
+	if len(svc.Meta) > 0 {
+		ppi.MetaString = fmt.Sprintf("--%q", svc.Meta)
+	}
+
+	proxyType := "envoy"
+	if node.UseBuiltinProxy {
+		proxyType = "builtin"
+	}
+
+	if c.config.KubernetesEnabled {
+		ppi.SidecarBootArgs = []string{
+			"/secrets/ready.val",
+			proxyType,
+			"login",
+			"-t",
+			"/secrets/k8s/service_jwt_token." + svc.Name,
+			"-s",
+			"/tmp/consul.token",
+			"-r",
+			"/secrets/servicereg__" + node.Name + "__" + svc.Name + ".hcl",
+		}
+	} else {
+		ppi.SidecarBootArgs = []string{
+			"/secrets/ready.val",
+			proxyType,
+			"direct",
+			"-t",
+			"/secrets/service-token--" + svc.Name + ".val",
+			"-r",
+			"/secrets/servicereg__" + node.Name + "__" + svc.Name + ".hcl",
+		}
+	}
+
+	appRes, err := stringTemplate(tfPingPongAppT, &ppi)
+	if err != nil {
+		return nil, err
+	}
+	sidecarRes, err := stringTemplate(tfPingPongSidecarT, &ppi)
+	if err != nil {
+		return nil, err
+	}
+
+	return []string{appRes, sidecarRes}, nil
+}
+
+// TODO: make chaos opt-in
+var tfPingPongAppT = template.Must(template.New("tf-pingpong-app").Parse(`
+resource "docker_container" "{{.NodeName}}-{{.PingPong}}" {
+	name = "{{.NodeName}}-{{.PingPong}}"
+    network_mode = "container:${docker_container.{{.PodName}}.id}"
+	image        = docker_image.pingpong.latest
+    restart  = "on-failure"
+
+  labels {
+    label = "devconsul"
+    value = "1"
+  }
+  labels {
+    label = "devconsul.type"
+    value = "app"
+  }
+
+  command = [
+      "-bind",
+      "0.0.0.0:8080",
+      "-dial",
+      "127.0.0.1:9090",
+      "-pong-chaos",
+      "-dialfreq",
+      "5ms",
+      "-name",
+      "{{.PingPong}}{{.MetaString}}",
+  ]
+}`))
+
+var tfPingPongSidecarT = template.Must(template.New("tf-pingpong-sidecar").Parse(`
+resource "docker_container" "{{.NodeName}}-{{.PingPong}}-sidecar" {
+	name = "{{.NodeName}}-{{.PingPong}}-sidecar"
+    network_mode = "container:${docker_container.{{.PodName}}.id}"
+	image        = docker_image.consul-envoy.latest
+    restart  = "on-failure"
+
+  labels {
+    label = "devconsul"
+    value = "1"
+  }
+  labels {
+    label = "devconsul.type"
+    value = "sidecar"
+  }
+
+  volumes {
+    host_path      = abspath("cache")
+    container_path = "/secrets"
+    read_only      = true
+  }
+  volumes {
+    host_path      = abspath("sidecar-boot.sh")
+    container_path = "/bin/sidecar-boot.sh"
+    read_only      = true
+  }
+
+  command = [
+      "/bin/sidecar-boot.sh",
+{{- range .SidecarBootArgs }}
+      "{{.}}",
+{{- end}}
+      "--",
+      #################
+      "-sidecar-for",
+      "{{.PingPong}}",
+{{- if not .UseBuiltinProxy }}
+      "-admin-bind",
+      # for demo purposes
+      "0.0.0.0:19000",
+      "--",
+      "-l",
+      "{{ .EnvoyLogLevel }}",
+{{- end }}
+  ]
+}
+`))
+
+const tfPrometheusContainer = `
+resource "docker_container" "prometheus" {
+  name  = "prometheus"
+  image = docker_image.prometheus.latest
+  labels {
+    label = "devconsul"
+    value = "1"
+  }
+  labels {
+    label = "devconsul.type"
+    value = "infra"
+  }
+  restart = "always"
+  dns     = ["8.8.8.8"]
+  volumes {
+    volume_name    = "prometheus-data"
+    container_path = "/prometheus-data"
+  }
+  volumes {
+    host_path      = abspath("cache/prometheus.yml")
+    container_path = "/etc/prometheus/prometheus.yml"
+    read_only      = true
+   }
+  networks_advanced {
+    name         = "devconsul-lan"
+    ipv4_address = "10.0.100.100"
+   }
+
+  ports {
+    internal = 9090
+    external = 9090
+   }
+  ports {
+    internal = 3000
+    external = 3000
+  }
+} `
+
+const tfGrafanaContainer = `
+resource "docker_container" "grafana" {
+  name  = "grafana"
+  image = docker_image.grafana.latest
+  labels {
+    label = "devconsul"
+    value = "1"
+  }
+  labels {
+    label = "devconsul.type"
+    value = "infra"
+  }
+  restart = "always"
+  network_mode = "container:${docker_container.prometheus.id}"
+  volumes {
+    volume_name    = "grafana-data"
+    container_path = "/var/lib/grafana"
+  }
+  volumes {
+    host_path      = abspath("cache/grafana-prometheus.yml")
+    container_path = "/etc/grafana/provisioning/datasources/prometheus.yml"
+    read_only      = true
+  }
+  volumes {
+    host_path      = abspath("cache/grafana.ini")
+    container_path = "/etc/grafana/grafana.ini"
+    read_only      = true
+  }
+} `
+
+func (c *Core) generateAgentHCL(node *Node) (string, error) {
+	type consulAgentConfigInfo struct {
+		AdvertiseAddr    string
+		AdvertiseAddrWAN string
+		RetryJoin        string
+		RetryJoinWAN     string
+		Datacenter       string
+		SecondaryServer  bool
+		MasterToken      string
+		AgentMasterToken string
+		Server           bool
+		BootstrapExpect  int
+		GossipKey        string
+		TLS              bool
+		TLSFilePrefix    string
+		Prometheus       bool
+
+		FederateViaGateway bool
+		PrimaryGateways    string
+	}
+
 	configInfo := consulAgentConfigInfo{
 		AdvertiseAddr:    node.LocalAddress(),
 		RetryJoin:        `"` + strings.Join(c.topology.ServerIPs(node.Datacenter), `", "`) + `"`,
@@ -498,26 +685,6 @@ func (c *CommandGenerate) generateAgentHCL(node *Node) (string, error) {
 	// Ensure it looks tidy
 	out := hclwrite.Format(buf.Bytes())
 	return string(out), nil
-}
-
-type consulAgentConfigInfo struct {
-	AdvertiseAddr    string
-	AdvertiseAddrWAN string
-	RetryJoin        string
-	RetryJoinWAN     string
-	Datacenter       string
-	SecondaryServer  bool
-	MasterToken      string
-	AgentMasterToken string
-	Server           bool
-	BootstrapExpect  int
-	GossipKey        string
-	TLS              bool
-	TLSFilePrefix    string
-	Prometheus       bool
-
-	FederateViaGateway bool
-	PrimaryGateways    string
 }
 
 var consulAgentConfigT = template.Must(template.New("consul-agent-config").Parse(`
@@ -657,7 +824,7 @@ func indent(s string, n int) string {
 	return buf.String()
 }
 
-func (c *CommandGenerate) generatePrometheusConfigFile() error {
+func (c *Core) generatePrometheusConfigFile() error {
 	type kv struct {
 		Key, Val string
 	}
@@ -771,7 +938,8 @@ func (c *CommandGenerate) generatePrometheusConfigFile() error {
 		return err
 	}
 
-	return c.updateFileIfDifferent(out.Bytes(), "cache/prometheus.yml", 0644)
+	_, err = c.updateFileIfDifferent(out.Bytes(), "cache/prometheus.yml", 0644)
+	return err
 }
 
 var prometheusConfigT = template.Must(template.New("prometheus").Parse(`
@@ -826,7 +994,7 @@ scrape_configs:
 {{- end }}
 `))
 
-func (c *CommandGenerate) generateGrafanaConfigFiles() error {
+func (c *Core) generateGrafanaConfigFiles() error {
 	files := map[string]string{
 		"grafana-prometheus.yml": `
 apiVersion: 1
@@ -853,28 +1021,61 @@ org_role = Admin
 	}
 
 	for name, body := range files {
-		if err := c.updateFileIfDifferent([]byte(body), filepath.Join("cache", name), 0644); err != nil {
+		if _, err := c.updateFileIfDifferent([]byte(body), filepath.Join("cache", name), 0644); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (c *CommandGenerate) updateFileIfDifferent(body []byte, path string, perm os.FileMode) error {
+func (c *Core) writeResourceFile(res []string, path string, perm os.FileMode) (UpdateResult, error) {
+	for i := 0; i < len(res); i++ {
+		res[i] = strings.TrimSpace(res[i])
+	}
+
+	body := strings.Join(res, "\n\n")
+
+	// Ensure it looks tidy
+	out := hclwrite.Format(bytes.TrimSpace([]byte(body)))
+
+	return c.updateFileIfDifferent(out, path, perm)
+}
+
+type UpdateResult int
+
+const (
+	UpdateResultNone UpdateResult = iota
+	UpdateResultCreated
+	UpdateResultModified
+)
+
+func (c *Core) updateFileIfDifferent(body []byte, path string, perm os.FileMode) (UpdateResult, error) {
 	prev, err := ioutil.ReadFile(path)
+
+	result := UpdateResultNone
 	if err != nil {
 		if !os.IsNotExist(err) {
-			return err
+			return result, err
 		}
 		c.logger.Info("writing new file", "path", path)
+		result = UpdateResultCreated
 	} else {
 		// loaded
 		if bytes.Equal(body, prev) {
-			return nil
+			return result, nil
 		}
 		c.logger.Info("file has changed", "path", path)
+		result = UpdateResultModified
 	}
 
 	_, err = safeio.WriteToFile(bytes.NewReader(body), path, perm)
-	return err
+	return result, err
+}
+
+func stringTemplate(t *template.Template, data interface{}) (string, error) {
+	var res bytes.Buffer
+	if err := t.Execute(&res, data); err != nil {
+		return "", err
+	}
+	return res.String(), nil
 }

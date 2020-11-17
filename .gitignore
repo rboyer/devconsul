@@ -1,4 +1,7 @@
 /cache
 /config.hcl
 /devconsul
-/docker-compose.yml
+/docker.tf
+/.terraform
+/terraform.tfstate
+/terraform.tfstate.backup

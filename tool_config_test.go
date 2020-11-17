@@ -14,6 +14,7 @@ func TestParseConfigPartial_EmptyInferDefaults(t *testing.T) {
 	require.Equal(t, &FlatConfig{
 		ConsulImage:   "consul-dev:latest",
 		EnvoyLogLevel: "info",
+		EnvoyVersion:  "v1.16.0",
 	}, fc)
 
 	var expectUCT userConfigTopology
@@ -104,6 +105,7 @@ EOF
 		KubernetesEnabled:  true,
 		PrometheusEnabled:  true,
 		EnvoyLogLevel:      "debug",
+		EnvoyVersion:       "v1.16.0",
 		InitialMasterToken: "root",
 		ConfigEntries: []api.ConfigEntry{
 			&api.ProxyConfigEntry{
