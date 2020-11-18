@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"sort"
+	"strings"
 
 	"github.com/hashicorp/hcl/v2/hclwrite"
 	"github.com/rboyer/safeio"
@@ -61,10 +62,12 @@ func (c *CommandNomad) syncDockerNetworksTF() error {
 		}
 	}
 
+	// NOTE: you will need to do a full down/up cycle to switch network_shape
+
 	var buf bytes.Buffer
 	for _, net := range c.topology.Networks() {
 		name := "nomad-" + net.Name
-		buf.WriteString(fmt.Sprintf(`
+		buf.WriteString(strings.TrimSpace(fmt.Sprintf(`
 resource "docker_network" %q {
   name       = %q
   attachable = true
@@ -78,7 +81,7 @@ resource "docker_network" %q {
 }
 
 `, name, name, net.CIDR,
-		))
+		)) + "\n")
 	}
 
 	// tf apply -auto-approve
