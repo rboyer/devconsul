@@ -23,23 +23,16 @@ type CommandNomad struct {
 
 func (c *CommandNomad) Run() error {
 
-	var tf bool
-	flag.BoolVar(&tf, "tf", false, "")
-
 	flag.BoolVar(&c.verbose, "v", false, "verbose")
 	flag.BoolVar(&c.destroy, "rm", false, "destroy")
 	flag.Parse()
 
-	if tf {
-		if err := c.syncDockerNetworksTF(); err != nil {
-			return err
-		}
-		return nil
-	}
-
-	if err := c.syncDockerNetworks(); err != nil {
+	if err := c.syncDockerNetworksTF(); err != nil {
 		return err
 	}
+	// if err := c.syncDockerNetworks(); err != nil {
+	// 	return err
+	// }
 
 	return nil
 }
