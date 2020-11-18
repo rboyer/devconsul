@@ -415,6 +415,10 @@ type Network struct {
 	CIDR string
 }
 
+func (n *Network) NomadName() string {
+	return "nomad-" + n.Name
+}
+
 type Node struct {
 	Datacenter      string
 	Name            string

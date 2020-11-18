@@ -18,6 +18,8 @@ import (
 type CommandNomad struct {
 	*Core
 
+	g *CommandGenerate
+
 	verbose bool
 	destroy bool
 }
@@ -34,6 +36,63 @@ func (c *CommandNomad) Run() error {
 	// if err := c.syncDockerNetworks(); err != nil {
 	// 	return err
 	// }
+
+	if err := c.generateJobFiles(); err != nil {
+		return err
+	}
+
+	// TODO: prom + grafana stuff from gen.go
+
+	return nil
+}
+
+func (c *CommandNomad) generateJobFiles() error {
+	if err := os.MkdirAll("jobs", 0755); err != nil {
+		return err
+	}
+
+	if c.verbose {
+		c.topology.WalkSilent(func(node *Node) {
+			c.logger.Info("Generating node",
+				"name", node.Name,
+				"server", node.Server,
+				"dc", node.Datacenter,
+				"ip", node.LocalAddress(),
+			)
+		})
+	}
+
+	err := c.topology.Walk(func(node *Node) error {
+		podName := node.Name + "-pod"
+
+		podHCL, err := c.generateAgentHCL(node)
+		if err != nil {
+			return err
+		}
+
+		jobHCL := fmt.Sprintf(`
+job %[1]q {
+  datacenters = ["dc1"]
+
+  group "group" {
+    task "pause" {
+      driver = "docker"
+      config {
+        image = "k8s.gcr.io/pause:3.3"
+		dns_servers = "8.8.8.8"
+		hostname = %[1]q
+		ipv4_address = %[2]q
+		network_mode = 
+      }
+    }
+  }
+}
+`, podName)
+
+	})
+	if err != nil {
+		return err
+	}
 
 	return nil
 }
@@ -66,7 +125,6 @@ func (c *CommandNomad) syncDockerNetworksTF() error {
 
 	var buf bytes.Buffer
 	for _, net := range c.topology.Networks() {
-		name := "nomad-" + net.Name
 		buf.WriteString(strings.TrimSpace(fmt.Sprintf(`
 resource "docker_network" %q {
   name       = %q
@@ -80,7 +138,7 @@ resource "docker_network" %q {
   }
 }
 
-`, name, name, net.CIDR,
+`, net.NomadName(), net.NomadName(), net.CIDR,
 		)) + "\n")
 	}
 
@@ -131,22 +189,23 @@ func (c *CommandNomad) syncDockerNetworks() error {
 	)
 	if !c.destroy {
 		for _, net := range c.topology.Networks() {
-			exists, err := dockerNetworkExists(dockerBin, "nomad-"+net.Name)
+			name := net.NomadName()
+			exists, err := dockerNetworkExists(dockerBin, name)
 			if err != nil {
 				return err
 			}
 			if exists {
-				subnet, err := dockerNetworkInspectCIDR(dockerBin, "nomad-"+net.Name)
+				subnet, err := dockerNetworkInspectCIDR(dockerBin, name)
 				if err != nil {
 					return err
 				}
 				if subnet == net.CIDR {
-					skipDeleteNetworks["nomad-"+net.Name] = struct{}{}
+					skipDeleteNetworks[name] = struct{}{}
 				} else {
-					createNetworks["nomad-"+net.Name] = struct{}{}
+					createNetworks[name] = struct{}{}
 				}
 			} else {
-				createNetworks["nomad-"+net.Name] = struct{}{}
+				createNetworks[name] = struct{}{}
 			}
 		}
 	}
@@ -166,9 +225,10 @@ func (c *CommandNomad) syncDockerNetworks() error {
 	if !c.destroy {
 		// Create networks
 		for _, net := range c.topology.Networks() {
-			if _, ok := createNetworks["nomad-"+net.Name]; !ok {
+			name := net.NomadName()
+			if _, ok := createNetworks[name]; !ok {
 				if c.verbose {
-					c.logger.Debug("network already exists", "network", "nomad-"+net.Name)
+					c.logger.Debug("network already exists", "network", name)
 				}
 				continue
 			}
@@ -182,7 +242,7 @@ func (c *CommandNomad) syncDockerNetworks() error {
 				"--subnet", net.CIDR,
 				"--attachable",
 				"--label", "devconsul=1",
-				"nomad-"+net.Name,
+				name,
 			)
 			cmd.Stdout = &outWriter
 			cmd.Stderr = &errWriter
@@ -191,7 +251,7 @@ func (c *CommandNomad) syncDockerNetworks() error {
 				return fmt.Errorf("could not invoke 'docker': %v : %s", err, errWriter.String())
 			}
 
-			c.logger.Info("network created", "network", "nomad-"+net.Name)
+			c.logger.Info("network created", "network", name)
 		}
 	}
 	return nil
