@@ -2,3 +2,6 @@
 /config.hcl
 /devconsul
 /docker-compose.yml
+/network.tf
+/.terraform
+/terraform.tfstate

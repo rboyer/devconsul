@@ -6,8 +6,12 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"os"
 	"os/exec"
 	"sort"
+
+	"github.com/hashicorp/hcl/v2/hclwrite"
+	"github.com/rboyer/safeio"
 )
 
 type CommandNomad struct {
@@ -19,12 +23,96 @@ type CommandNomad struct {
 
 func (c *CommandNomad) Run() error {
 
+	var tf bool
+	flag.BoolVar(&tf, "tf", false, "")
+
 	flag.BoolVar(&c.verbose, "v", false, "verbose")
 	flag.BoolVar(&c.destroy, "rm", false, "destroy")
 	flag.Parse()
 
+	if tf {
+		if err := c.syncDockerNetworksTF(); err != nil {
+			return err
+		}
+		return nil
+	}
+
 	if err := c.syncDockerNetworks(); err != nil {
 		return err
+	}
+
+	return nil
+}
+
+func (c *CommandNomad) syncDockerNetworksTF() error {
+	tfBin, err := exec.LookPath("terraform")
+	if err != nil {
+		return err
+	}
+
+	if _, err = os.Stat(".terraform"); err != nil {
+		if !os.IsNotExist(err) {
+			return err
+		}
+
+		var errWriter bytes.Buffer
+		var outWriter bytes.Buffer
+
+		// tf init
+		cmd := exec.Command(tfBin, "init")
+		cmd.Stdout = &outWriter
+		cmd.Stderr = &errWriter
+		cmd.Stdin = nil
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("could not invoke 'terraform': %v : %s", err, errWriter.String())
+		}
+	}
+
+	var buf bytes.Buffer
+	for _, net := range c.topology.Networks() {
+		name := "nomad-" + net.Name
+		buf.WriteString(fmt.Sprintf(`
+resource "docker_network" %q {
+  name       = %q
+  attachable = true
+  ipam_config {
+    subnet = %q
+  }
+  labels {
+    label = "devconsul"
+    value = "1"
+  }
+}
+
+`, name, name, net.CIDR,
+		))
+	}
+
+	// tf apply -auto-approve
+
+	// Ensure it looks tidy
+	out := hclwrite.Format(bytes.TrimSpace(buf.Bytes()))
+
+	_, err = safeio.WriteToFile(bytes.NewBuffer(out), "network.tf", 0644)
+	if err != nil {
+		return err
+	}
+
+	c.logger.Info("syncing networks with terraform")
+	{
+		// TODO: WRAP LOGS
+		var errWriter bytes.Buffer
+		// var outWriter bytes.Buffer
+
+		// tf init
+		cmd := exec.Command(tfBin, "apply", "-auto-approve")
+		// cmd.Stdout = &outWriter
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = &errWriter
+		cmd.Stdin = nil
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("could not invoke 'terraform': %v : %s", err, errWriter.String())
+		}
 	}
 
 	return nil
