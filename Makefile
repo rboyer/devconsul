@@ -82,6 +82,10 @@ restart: gen
 members:
 	@./consul.sh dc1 members
 
+.PHONY: save-grafana
+save-grafana:
+	curl -sL http://localhost:3000/api/dashboards/db/devconsul-dashboard | jq .dashboard > connect_service_dashboard.json
+
 .PHONY: services
 services:
 	@./consul.sh dc1 catalog services

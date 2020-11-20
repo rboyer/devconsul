@@ -16,7 +16,7 @@
   "gnetId": null,
   "graphTooltip": 1,
   "id": 4,
-  "iteration": 1605901294296,
+  "iteration": 1605902514139,
   "links": [],
   "panels": [
     {
@@ -36,7 +36,7 @@
       "id": 20,
       "links": [],
       "options": {
-        "content": "<div style=\"display: flex; align-items: center\">\n  <img src=\"https://www.datocms-assets.com/2885/1507928925-consul.svg\" alt=\"Consul Icon\">&nbsp;&nbsp;&nbsp;\n  <span style=\"font-size: 32px\">svc/</span>\n</div>",
+        "content": "<div style=\"display: flex; align-items: center\">\n  <img src=\"https://www.datocms-assets.com/2885/1507928925-consul.svg\" alt=\"Consul Icon\">&nbsp;&nbsp;&nbsp;\n  <span style=\"font-size: 32px\">svc/$service</span>\n</div>",
         "mode": "html"
       },
       "pluginVersion": "7.3.3",
@@ -108,7 +108,7 @@
       "pluginVersion": "7.3.3",
       "targets": [
         {
-          "expr": "sum(rate(envoy_http_downstream_rq_xx{envoy_response_code_class!=\"5\",local_cluster=\"\",envoy_http_conn_manager_prefix=\"public_listener\"}[1m])) / sum(rate(envoy_http_downstream_rq_xx{local_cluster=\"\",envoy_http_conn_manager_prefix=\"public_listener\"}[1m]))",
+          "expr": "sum(rate(envoy_http_downstream_rq_xx{envoy_response_code_class!=\"5\",local_cluster=\"$service\",envoy_http_conn_manager_prefix=\"public_listener\"}[1m])) / sum(rate(envoy_http_downstream_rq_xx{local_cluster=\"$service\",envoy_http_conn_manager_prefix=\"public_listener\"}[1m]))",
           "format": "time_series",
           "intervalFactor": 1,
           "refId": "A"
@@ -138,12 +138,8 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "rgb(31, 120, 193)",
                 "value": null
-              },
-              {
-                "color": "red",
-                "value": 80
               }
             ]
           },
@@ -178,7 +174,7 @@
       "pluginVersion": "7.3.3",
       "targets": [
         {
-          "expr": "sum(irate(envoy_http_downstream_rq_total{local_cluster=\"\",envoy_http_conn_manager_prefix=\"public_listener\"}[30s]))",
+          "expr": "sum(irate(envoy_http_downstream_rq_total{local_cluster=\"$service\",envoy_http_conn_manager_prefix=\"public_listener\"}[30s]))",
           "format": "time_series",
           "intervalFactor": 1,
           "refId": "A"
@@ -236,7 +232,7 @@
           "calcs": [
             "lastNotNull"
           ],
-          "fields": "/^Source: \$/",
+          "fields": "/^Source: \\$local_cluster$/",
           "values": false
         },
         "textMode": "auto"
@@ -244,11 +240,11 @@
       "pluginVersion": "7.3.3",
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum(irate(envoy_cluster_upstream_rq_time_bucket{consul_service=\"\"}[30s])) by (le))",
+          "expr": "histogram_quantile(0.95, sum(irate(envoy_cluster_upstream_rq_time_bucket{consul_service=\"$service\"}[30s])) by (le))",
           "format": "time_series",
           "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "Source: ",
+          "legendFormat": "Source: $local_cluster",
           "refId": "A"
         }
       ],
@@ -312,7 +308,7 @@
       "pluginVersion": "7.3.3",
       "targets": [
         {
-          "expr": "sum(irate(envoy_http_downstream_cx_rx_bytes_total[1m]))*8 + sum(irate(envoy_cluster_upstream_cx_rx_bytes_total{local_cluster=\"\"}[1m])) * 8",
+          "expr": "sum(irate(envoy_http_downstream_cx_rx_bytes_total[1m]))*8 + sum(irate(envoy_cluster_upstream_cx_rx_bytes_total{local_cluster=\"$service\"}[1m])) * 8",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "rx",
@@ -381,7 +377,7 @@
       "pluginVersion": "7.3.3",
       "targets": [
         {
-          "expr": "sum(irate(envoy_http_downstream_cx_tx_bytes_total[1m]))*8 + sum(irate(envoy_cluster_upstream_cx_tx_bytes_total{local_cluster=\"\"}[1m])) * 8",
+          "expr": "sum(irate(envoy_http_downstream_cx_tx_bytes_total[1m]))*8 + sum(irate(envoy_cluster_upstream_cx_tx_bytes_total{local_cluster=\"$service\"}[1m])) * 8",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "tx",
@@ -466,12 +462,13 @@
       "renderer": "flot",
       "seriesOverrides": [],
       "spaceLength": 10,
-      "stack": true,
+      "stack": false,
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(increase(envoy_http_downstream_rq_xx{local_cluster=\"\",envoy_http_conn_manager_prefix=\"public_listener\"}[1m])) by (local_cluster, envoy_response_code_class)",
+          "expr": "sum(increase(envoy_http_downstream_rq_xx{local_cluster=\"$service\",envoy_http_conn_manager_prefix=\"public_listener\"}[1m])) by (local_cluster, envoy_response_code_class)",
           "format": "time_series",
+          "interval": "",
           "intervalFactor": 1,
           "legendFormat": "{{envoy_response_code_class}}xx",
           "refId": "A"
@@ -569,10 +566,11 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(irate(envoy_http_downstream_rq_total{local_cluster=\"\",envoy_http_conn_manager_prefix=\"public_listener\"}[30s]))",
+          "expr": "sum(irate(envoy_http_downstream_rq_total{local_cluster=\"$service\",envoy_http_conn_manager_prefix=\"public_listener\"}[30s]))",
           "format": "time_series",
+          "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "svc/{{consul_service}}",
+          "legendFormat": "svc/{{consul_destination_service}}",
           "refId": "A"
         }
       ],
@@ -669,23 +667,26 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "histogram_quantile(0.5, sum(irate(envoy_cluster_upstream_rq_time_bucket{consul_service=\"\"}[30s])) by (le))",
+          "expr": "histogram_quantile(0.5, sum(irate(envoy_cluster_upstream_rq_time_bucket{consul_destination_service=\"$service\"}[30s])) by (le))",
           "format": "time_series",
+          "interval": "",
           "intervalFactor": 1,
           "legendFormat": "p50",
           "refId": "A"
         },
         {
-          "expr": "histogram_quantile(0.95, sum(irate(envoy_cluster_upstream_rq_time_bucket{consul_service=\"\"}[30s])) by (le))",
+          "expr": "histogram_quantile(0.95, sum(irate(envoy_cluster_upstream_rq_time_bucket{consul_destination_service=\"$service\"}[30s])) by (le))",
           "format": "time_series",
           "hide": false,
+          "interval": "",
           "intervalFactor": 1,
           "legendFormat": "p95",
           "refId": "B"
         },
         {
-          "expr": "histogram_quantile(0.99, sum(irate(envoy_cluster_upstream_rq_time_bucket{consul_service=\"\"}[30s])) by (le))",
+          "expr": "histogram_quantile(0.99, sum(irate(envoy_cluster_upstream_rq_time_bucket{consul_destination_service=\"$service\"}[30s])) by (le))",
           "format": "time_series",
+          "interval": "",
           "intervalFactor": 1,
           "legendFormat": "p99",
           "refId": "C"
@@ -809,8 +810,9 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(irate(envoy_cluster_upstream_rq_xx{envoy_response_code_class!=\"5\",consul_service=\"\"}[30s])) by (consul_service, local_cluster) / sum(irate(envoy_cluster_upstream_rq_xx{consul_service=\"\"}[30s])) by (consul_service, local_cluster)",
+          "expr": "sum(irate(envoy_cluster_upstream_rq_xx{envoy_response_code_class!=\"5\",consul_destination_service=\"$service\"}[30s])) by (consul_destination_service, local_cluster) / sum(irate(envoy_cluster_upstream_rq_xx{consul_destination_service=\"$service\"}[30s])) by (consul_destination_service, local_cluster)",
           "format": "time_series",
+          "interval": "",
           "intervalFactor": 1,
           "legendFormat": "source:{{local_cluster}}",
           "refId": "A"
@@ -910,8 +912,9 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(irate(envoy_cluster_upstream_rq_total{consul_service=\"\"}[30s])) by (consul_service, local_cluster)",
+          "expr": "sum(irate(envoy_cluster_upstream_rq_total{consul_destination_service=\"$service\"}[30s])) by (consul_destination_service, local_cluster)",
           "format": "time_series",
+          "interval": "",
           "intervalFactor": 1,
           "legendFormat": "src: {{local_cluster}}",
           "refId": "A"
@@ -1010,8 +1013,9 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum(rate(envoy_cluster_upstream_rq_time_bucket{consul_service=\"\"}[30s])) by (le, consul_service, local_cluster))",
+          "expr": "histogram_quantile(0.95, sum(rate(envoy_cluster_upstream_rq_time_bucket{consul_destination_service=\"$service\"}[30s])) by (le, consul_destination_service, local_cluster))",
           "format": "time_series",
+          "interval": "",
           "intervalFactor": 1,
           "legendFormat": "src: {{local_cluster}}",
           "refId": "A"
@@ -1037,6 +1041,7 @@
       },
       "yaxes": [
         {
+          "$$hashKey": "object:148",
           "format": "s",
           "label": null,
           "logBase": 1,
@@ -1045,6 +1050,7 @@
           "show": true
         },
         {
+          "$$hashKey": "object:149",
           "format": "short",
           "label": null,
           "logBase": 1,
@@ -1135,10 +1141,11 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(irate(envoy_cluster_upstream_rq_xx{envoy_response_code_class!=\"5\",local_cluster=\"\",consul_target!=\"\"}[30s])) by (local_cluster, consul_target) / sum(irate(envoy_cluster_upstream_rq_xx{local_cluster=\"\",consul_target!=\"\"}[30s])) by (local_cluster, consul_target)",
+          "expr": "sum(irate(envoy_cluster_upstream_rq_xx{envoy_response_code_class!=\"5\",local_cluster=\"$service\",consul_destination_target!=\"\"}[30s])) by (local_cluster, consul_destination_target) / sum(irate(envoy_cluster_upstream_rq_xx{local_cluster=\"$service\",consul_destination_target!=\"\"}[30s])) by (local_cluster, consul_destination_target)",
           "format": "time_series",
+          "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "{{consul_target}}",
+          "legendFormat": "{{consul_destination_target}}",
           "refId": "A"
         }
       ],
@@ -1236,10 +1243,11 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(irate(envoy_cluster_upstream_rq_total{local_cluster=\"\",consul_target!=\"\"}[30s])) by (local_cluster, consul_target)",
+          "expr": "sum(irate(envoy_cluster_upstream_rq_total{local_cluster=\"$service\",consul_destination_target!=\"\"}[30s])) by (local_cluster, consul_destination_target)",
           "format": "time_series",
+          "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "upstream: {{consul_target}}",
+          "legendFormat": "upstream: {{consul_destination_target}}",
           "refId": "A"
         }
       ],
@@ -1336,10 +1344,11 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum(rate(envoy_cluster_upstream_rq_time_bucket{local_cluster=\"\",consul_target!=\"\"}[30s])) by (le, local_cluster, consul_target))",
+          "expr": "histogram_quantile(0.95, sum(rate(envoy_cluster_upstream_rq_time_bucket{local_cluster=\"$service\",consul_target!=\"\"}[30s])) by (le, local_cluster, consul_destination_target))",
           "format": "time_series",
+          "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "upstream: {{consul_target}}",
+          "legendFormat": "upstream: {{consul_destination_target}}",
           "refId": "A"
         }
       ],
@@ -1423,10 +1432,10 @@
         "current": {
           "selected": false,
           "text": "All",
-          "value": ""
+          "value": "$__all"
         },
         "datasource": "Prometheus",
-        "definition": "label_values(envoy_cluster_upstream_rq_completed{consul_service=\"\"}, local_cluster)",
+        "definition": "label_values(envoy_cluster_upstream_rq_completed{consul_service=\"$service\"}, local_cluster)",
         "error": null,
         "hide": 2,
         "includeAll": true,
@@ -1434,7 +1443,7 @@
         "multi": false,
         "name": "inbound",
         "options": [],
-        "query": "label_values(envoy_cluster_upstream_rq_completed{consul_service=\"\"}, local_cluster)",
+        "query": "label_values(envoy_cluster_upstream_rq_completed{consul_service=\"$service\"}, local_cluster)",
         "refresh": 2,
         "regex": "",
         "skipUrlSync": false,
@@ -1450,10 +1459,10 @@
         "current": {
           "selected": false,
           "text": "All",
-          "value": ""
+          "value": "$__all"
         },
         "datasource": "Prometheus",
-        "definition": "label_values(envoy_cluster_external_upstream_rq_completed{local_cluster=\"\"}, consul_service)",
+        "definition": "label_values(envoy_cluster_external_upstream_rq_completed{local_cluster=\"$service\"}, consul_service)",
         "error": null,
         "hide": 2,
         "includeAll": true,
@@ -1461,7 +1470,7 @@
         "multi": false,
         "name": "outbound",
         "options": [],
-        "query": "label_values(envoy_cluster_external_upstream_rq_completed{local_cluster=\"\"}, consul_service)",
+        "query": "label_values(envoy_cluster_external_upstream_rq_completed{local_cluster=\"$service\"}, consul_service)",
         "refresh": 2,
         "regex": "",
         "skipUrlSync": false,
@@ -1505,5 +1514,6 @@
   },
   "timezone": "",
   "title": "devconsul Dashboard",
-  "uid": "consul-service"
+  "uid": "consul-service",
+  "version": 21
 }
