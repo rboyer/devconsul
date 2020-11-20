@@ -322,6 +322,9 @@ var pingpongT = template.Must(template.New("pingpong").Parse(`  ################
       - '0.0.0.0:8080'
       - '-dial'
       - '127.0.0.1:9090'
+      - '-pong-chaos'
+      - '-dialfreq'
+      - '5ms'
       - '-name'
       - '{{.PingPong}}{{.MetaString}}'
 
