@@ -15,12 +15,18 @@
   "editable": true,
   "gnetId": null,
   "graphTooltip": 1,
-  "id": 2,
-  "iteration": 1565378975112,
+  "id": 4,
+  "iteration": 1605901294296,
   "links": [],
   "panels": [
     {
-      "content": "<div style=\"display: flex; align-items: center\">\n  <img src=\"https://www.datocms-assets.com/2885/1507928925-consul.svg\" alt=\"Consul Icon\">&nbsp;&nbsp;&nbsp;\n  <span style=\"font-size: 32px\">svc/$service</span>\n</div>",
+      "datasource": null,
+      "fieldConfig": {
+        "defaults": {
+          "custom": {}
+        },
+        "overrides": []
+      },
       "gridPos": {
         "h": 2.4,
         "w": 24,
@@ -29,30 +35,53 @@
       },
       "id": 20,
       "links": [],
-      "mode": "html",
-      "options": {},
+      "options": {
+        "content": "<div style=\"display: flex; align-items: center\">\n  <img src=\"https://www.datocms-assets.com/2885/1507928925-consul.svg\" alt=\"Consul Icon\">&nbsp;&nbsp;&nbsp;\n  <span style=\"font-size: 32px\">svc/</span>\n</div>",
+        "mode": "html"
+      },
+      "pluginVersion": "7.3.3",
       "title": "",
       "transparent": true,
       "type": "text"
     },
     {
       "cacheTimeout": null,
-      "colorBackground": false,
-      "colorValue": false,
-      "colors": [
-        "#d44a3a",
-        "rgba(237, 129, 40, 0.89)",
-        "#299c46"
-      ],
       "datasource": "Prometheus",
-      "decimals": null,
-      "format": "percentunit",
-      "gauge": {
-        "maxValue": 1,
-        "minValue": 0,
-        "show": true,
-        "thresholdLabels": false,
-        "thresholdMarkers": true
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "mappings": [
+            {
+              "id": 0,
+              "op": "=",
+              "text": "N/A",
+              "type": 1,
+              "value": "null"
+            }
+          ],
+          "max": 1,
+          "min": 0,
+          "nullValueMode": "connected",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#d44a3a",
+                "value": null
+              },
+              {
+                "color": "rgba(237, 129, 40, 0.89)",
+                "value": 0.9
+              },
+              {
+                "color": "#299c46",
+                "value": 0.99
+              }
+            ]
+          },
+          "unit": "percentunit"
+        },
+        "overrides": []
       },
       "gridPos": {
         "h": 5,
@@ -63,79 +92,64 @@
       "id": 5,
       "interval": null,
       "links": [],
-      "mappingType": 1,
-      "mappingTypes": [
-        {
-          "name": "value to text",
-          "value": 1
-        },
-        {
-          "name": "range to text",
-          "value": 2
-        }
-      ],
       "maxDataPoints": 100,
-      "nullPointMode": "connected",
-      "nullText": null,
-      "options": {},
-      "postfix": "",
-      "postfixFontSize": "50%",
-      "prefix": "",
-      "prefixFontSize": "50%",
-      "rangeMaps": [
-        {
-          "from": "null",
-          "text": "N/A",
-          "to": "null"
-        }
-      ],
-      "sparkline": {
-        "fillColor": "rgba(31, 118, 189, 0.18)",
-        "full": true,
-        "lineColor": "rgb(31, 120, 193)",
-        "show": true
+      "options": {
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true
       },
-      "tableColumn": "",
+      "pluginVersion": "7.3.3",
       "targets": [
         {
-          "expr": "sum(rate(envoy_http_downstream_rq_xx{envoy_response_code_class!=\"5\",local_cluster=\"$service\",envoy_http_conn_manager_prefix=\"public_listener\"}[1m])) / sum(rate(envoy_http_downstream_rq_xx{local_cluster=\"$service\",envoy_http_conn_manager_prefix=\"public_listener\"}[1m]))",
+          "expr": "sum(rate(envoy_http_downstream_rq_xx{envoy_response_code_class!=\"5\",local_cluster=\"\",envoy_http_conn_manager_prefix=\"public_listener\"}[1m])) / sum(rate(envoy_http_downstream_rq_xx{local_cluster=\"\",envoy_http_conn_manager_prefix=\"public_listener\"}[1m]))",
           "format": "time_series",
           "intervalFactor": 1,
           "refId": "A"
         }
       ],
-      "thresholds": "0.9,.99",
       "title": "SUCCESS RATE",
       "transparent": true,
-      "type": "singlestat",
-      "valueFontSize": "80%",
-      "valueMaps": [
-        {
-          "op": "=",
-          "text": "N/A",
-          "value": "null"
-        }
-      ],
-      "valueName": "current"
+      "type": "gauge"
     },
     {
       "cacheTimeout": null,
-      "colorBackground": false,
-      "colorValue": false,
-      "colors": [
-        "#299c46",
-        "rgba(237, 129, 40, 0.89)",
-        "#d44a3a"
-      ],
       "datasource": "Prometheus",
-      "decimals": null,
-      "format": "none",
-      "gauge": {
-        "maxValue": 100,
-        "minValue": 0,
-        "show": false,
-        "thresholdLabels": false,
-        "thresholdMarkers": true
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "mappings": [
+            {
+              "id": 0,
+              "op": "=",
+              "text": "N/A",
+              "type": 1,
+              "value": "null"
+            }
+          ],
+          "nullValueMode": "connected",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "reqps"
+        },
+        "overrides": []
       },
       "gridPos": {
         "h": 5,
@@ -146,79 +160,62 @@
       "id": 4,
       "interval": null,
       "links": [],
-      "mappingType": 1,
-      "mappingTypes": [
-        {
-          "name": "value to text",
-          "value": 1
-        },
-        {
-          "name": "range to text",
-          "value": 2
-        }
-      ],
       "maxDataPoints": 100,
-      "nullPointMode": "connected",
-      "nullText": null,
-      "options": {},
-      "postfix": " RPS",
-      "postfixFontSize": "100%",
-      "prefix": "",
-      "prefixFontSize": "50%",
-      "rangeMaps": [
-        {
-          "from": "null",
-          "text": "N/A",
-          "to": "null"
-        }
-      ],
-      "sparkline": {
-        "fillColor": "rgba(31, 118, 189, 0.18)",
-        "full": true,
-        "lineColor": "rgb(31, 120, 193)",
-        "show": true
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
       },
-      "tableColumn": "",
+      "pluginVersion": "7.3.3",
       "targets": [
         {
-          "expr": "sum(irate(envoy_http_downstream_rq_total{local_cluster=\"$service\",envoy_http_conn_manager_prefix=\"public_listener\"}[30s]))",
+          "expr": "sum(irate(envoy_http_downstream_rq_total{local_cluster=\"\",envoy_http_conn_manager_prefix=\"public_listener\"}[30s]))",
           "format": "time_series",
           "intervalFactor": 1,
           "refId": "A"
         }
       ],
-      "thresholds": "",
       "title": "REQUEST RATE",
       "transparent": true,
-      "type": "singlestat",
-      "valueFontSize": "100%",
-      "valueMaps": [
-        {
-          "op": "=",
-          "text": "N/A",
-          "value": "null"
-        }
-      ],
-      "valueName": "current"
+      "type": "stat"
     },
     {
       "cacheTimeout": null,
-      "colorBackground": false,
-      "colorValue": false,
-      "colors": [
-        "#299c46",
-        "rgba(237, 129, 40, 0.89)",
-        "#d44a3a"
-      ],
       "datasource": "Prometheus",
-      "decimals": null,
-      "format": "s",
-      "gauge": {
-        "maxValue": 100,
-        "minValue": 0,
-        "show": false,
-        "thresholdLabels": false,
-        "thresholdMarkers": true
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "mappings": [
+            {
+              "id": 0,
+              "op": "=",
+              "text": "N/A",
+              "type": 1,
+              "value": "null"
+            }
+          ],
+          "nullValueMode": "connected",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "rgb(31, 120, 193)",
+                "value": null
+              }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": []
       },
       "gridPos": {
         "h": 5,
@@ -229,79 +226,64 @@
       "id": 81,
       "interval": null,
       "links": [],
-      "mappingType": 1,
-      "mappingTypes": [
-        {
-          "name": "value to text",
-          "value": 1
-        },
-        {
-          "name": "range to text",
-          "value": 2
-        }
-      ],
       "maxDataPoints": 100,
-      "nullPointMode": "connected",
-      "nullText": null,
-      "options": {},
-      "postfix": "",
-      "postfixFontSize": "100%",
-      "prefix": "",
-      "prefixFontSize": "50%",
-      "rangeMaps": [
-        {
-          "from": "null",
-          "text": "N/A",
-          "to": "null"
-        }
-      ],
-      "sparkline": {
-        "fillColor": "rgba(31, 118, 189, 0.18)",
-        "full": true,
-        "lineColor": "rgb(31, 120, 193)",
-        "show": true
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "/^Source: \$/",
+          "values": false
+        },
+        "textMode": "auto"
       },
-      "tableColumn": "",
+      "pluginVersion": "7.3.3",
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum(irate(envoy_cluster_upstream_rq_time_bucket{consul_service=\"$service\"}[30s])) by (le))",
+          "expr": "histogram_quantile(0.95, sum(irate(envoy_cluster_upstream_rq_time_bucket{consul_service=\"\"}[30s])) by (le))",
           "format": "time_series",
+          "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "Source: $local_cluster",
+          "legendFormat": "Source: ",
           "refId": "A"
         }
       ],
-      "thresholds": "",
       "title": "P95 LATENCY",
       "transparent": true,
-      "type": "singlestat",
-      "valueFontSize": "100%",
-      "valueMaps": [
-        {
-          "op": "=",
-          "text": "N/A",
-          "value": "null"
-        }
-      ],
-      "valueName": "current"
+      "type": "stat"
     },
     {
       "cacheTimeout": null,
-      "colorBackground": false,
-      "colorValue": false,
-      "colors": [
-        "#299c46",
-        "rgba(237, 129, 40, 0.89)",
-        "#d44a3a"
-      ],
       "datasource": "Prometheus",
-      "format": "bps",
-      "gauge": {
-        "maxValue": 100,
-        "minValue": 0,
-        "show": false,
-        "thresholdLabels": false,
-        "thresholdMarkers": true
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "mappings": [
+            {
+              "id": 0,
+              "op": "=",
+              "text": "N/A",
+              "type": 1,
+              "value": "null"
+            }
+          ],
+          "nullValueMode": "connected",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#b877d9",
+                "value": null
+              }
+            ]
+          },
+          "unit": "bps"
+        },
+        "overrides": []
       },
       "gridPos": {
         "h": 5,
@@ -312,81 +294,65 @@
       "id": 89,
       "interval": null,
       "links": [],
-      "mappingType": 1,
-      "mappingTypes": [
-        {
-          "name": "value to text",
-          "value": 1
-        },
-        {
-          "name": "range to text",
-          "value": 2
-        }
-      ],
       "maxDataPoints": 100,
-      "nullPointMode": "connected",
-      "nullText": null,
-      "options": {},
-      "postfix": "",
-      "postfixFontSize": "50%",
-      "prefix": "",
-      "prefixFontSize": "50%",
-      "rangeMaps": [
-        {
-          "from": "null",
-          "text": "N/A",
-          "to": "null"
-        }
-      ],
-      "sparkline": {
-        "fillColor": "rgba(184, 119, 217, 0.18)",
-        "full": false,
-        "lineColor": "#B877D9",
-        "show": true
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "/^rx$/",
+          "values": false
+        },
+        "textMode": "auto"
       },
-      "tableColumn": "",
+      "pluginVersion": "7.3.3",
       "targets": [
         {
-          "expr": "sum(irate(envoy_http_downstream_cx_rx_bytes_total[1m]))*8 + sum(irate(envoy_cluster_upstream_cx_rx_bytes_total{local_cluster=\"$service\"}[1m])) * 8",
+          "expr": "sum(irate(envoy_http_downstream_cx_rx_bytes_total[1m]))*8 + sum(irate(envoy_cluster_upstream_cx_rx_bytes_total{local_cluster=\"\"}[1m])) * 8",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "rx",
           "refId": "A"
         }
       ],
-      "thresholds": "",
       "timeFrom": null,
       "timeShift": null,
       "title": "Data Rx",
       "transparent": true,
-      "type": "singlestat",
-      "valueFontSize": "80%",
-      "valueMaps": [
-        {
-          "op": "=",
-          "text": "N/A",
-          "value": "null"
-        }
-      ],
-      "valueName": "current"
+      "type": "stat"
     },
     {
       "cacheTimeout": null,
-      "colorBackground": false,
-      "colorValue": false,
-      "colors": [
-        "#299c46",
-        "rgba(237, 129, 40, 0.89)",
-        "#FADE2A"
-      ],
       "datasource": "Prometheus",
-      "format": "bps",
-      "gauge": {
-        "maxValue": 100,
-        "minValue": 0,
-        "show": false,
-        "thresholdLabels": false,
-        "thresholdMarkers": true
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "mappings": [
+            {
+              "id": 0,
+              "op": "=",
+              "text": "N/A",
+              "type": 1,
+              "value": "null"
+            }
+          ],
+          "nullValueMode": "connected",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#FADE2A",
+                "value": null
+              }
+            ]
+          },
+          "unit": "bps"
+        },
+        "overrides": []
       },
       "gridPos": {
         "h": 5,
@@ -397,66 +363,45 @@
       "id": 90,
       "interval": null,
       "links": [],
-      "mappingType": 1,
-      "mappingTypes": [
-        {
-          "name": "value to text",
-          "value": 1
-        },
-        {
-          "name": "range to text",
-          "value": 2
-        }
-      ],
       "maxDataPoints": 100,
-      "nullPointMode": "connected",
-      "nullText": null,
-      "options": {},
-      "postfix": "",
-      "postfixFontSize": "50%",
-      "prefix": "",
-      "prefixFontSize": "50%",
-      "rangeMaps": [
-        {
-          "from": "null",
-          "text": "N/A",
-          "to": "null"
-        }
-      ],
-      "sparkline": {
-        "fillColor": "rgba(250, 222, 42, 0.11)",
-        "full": false,
-        "lineColor": "#FADE2A",
-        "show": true
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "/^tx$/",
+          "values": false
+        },
+        "textMode": "auto"
       },
-      "tableColumn": "",
+      "pluginVersion": "7.3.3",
       "targets": [
         {
-          "expr": "sum(irate(envoy_http_downstream_cx_tx_bytes_total[1m]))*8 + sum(irate(envoy_cluster_upstream_cx_tx_bytes_total{local_cluster=\"$service\"}[1m])) * 8",
+          "expr": "sum(irate(envoy_http_downstream_cx_tx_bytes_total[1m]))*8 + sum(irate(envoy_cluster_upstream_cx_tx_bytes_total{local_cluster=\"\"}[1m])) * 8",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "tx",
           "refId": "A"
         }
       ],
-      "thresholds": "",
       "timeFrom": null,
       "timeShift": null,
       "title": "Data Tx",
       "transparent": true,
-      "type": "singlestat",
-      "valueFontSize": "80%",
-      "valueMaps": [
-        {
-          "op": "=",
-          "text": "N/A",
-          "value": "null"
-        }
-      ],
-      "valueName": "current"
+      "type": "stat"
     },
     {
-      "content": "<div class=\"text-center dashboard-header\">\n  <span>INBOUND TRAFFIC</span>\n</div>",
+      "datasource": null,
+      "fieldConfig": {
+        "defaults": {
+          "custom": {}
+        },
+        "overrides": []
+      },
       "gridPos": {
         "h": 2.2,
         "w": 24,
@@ -465,8 +410,11 @@
       },
       "id": 17,
       "links": [],
-      "mode": "html",
-      "options": {},
+      "options": {
+        "content": "<div class=\"text-center dashboard-header\">\n  <span>INBOUND TRAFFIC</span>\n</div>",
+        "mode": "html"
+      },
+      "pluginVersion": "7.3.3",
       "title": "",
       "transparent": true,
       "type": "text"
@@ -477,6 +425,13 @@
       "dashLength": 10,
       "dashes": false,
       "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "links": []
+        },
+        "overrides": []
+      },
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
@@ -485,6 +440,7 @@
         "x": 0,
         "y": 9.600000000000001
       },
+      "hiddenSeries": false,
       "id": 87,
       "legend": {
         "avg": false,
@@ -500,10 +456,11 @@
       "links": [],
       "nullPointMode": "null",
       "options": {
-        "dataLinks": []
+        "alertThreshold": true
       },
       "paceLength": 10,
       "percentage": false,
+      "pluginVersion": "7.3.3",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -513,7 +470,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(increase(envoy_http_downstream_rq_xx{local_cluster=\"$service\",envoy_http_conn_manager_prefix=\"public_listener\"}[1m])) by (local_cluster, envoy_response_code_class)",
+          "expr": "sum(increase(envoy_http_downstream_rq_xx{local_cluster=\"\",envoy_http_conn_manager_prefix=\"public_listener\"}[1m])) by (local_cluster, envoy_response_code_class)",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{envoy_response_code_class}}xx",
@@ -567,6 +524,13 @@
       "dashLength": 10,
       "dashes": false,
       "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "links": []
+        },
+        "overrides": []
+      },
       "fill": 0,
       "fillGradient": 0,
       "gridPos": {
@@ -575,6 +539,7 @@
         "x": 8,
         "y": 9.600000000000001
       },
+      "hiddenSeries": false,
       "id": 2,
       "legend": {
         "avg": false,
@@ -590,10 +555,11 @@
       "links": [],
       "nullPointMode": "null",
       "options": {
-        "dataLinks": []
+        "alertThreshold": true
       },
       "paceLength": 10,
       "percentage": false,
+      "pluginVersion": "7.3.3",
       "pointradius": 5,
       "points": false,
       "renderer": "flot",
@@ -603,7 +569,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(irate(envoy_http_downstream_rq_total{local_cluster=\"$service\",envoy_http_conn_manager_prefix=\"public_listener\"}[30s]))",
+          "expr": "sum(irate(envoy_http_downstream_rq_total{local_cluster=\"\",envoy_http_conn_manager_prefix=\"public_listener\"}[30s]))",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "svc/{{consul_service}}",
@@ -658,6 +624,13 @@
       "dashLength": 10,
       "dashes": false,
       "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "links": []
+        },
+        "overrides": []
+      },
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
@@ -666,6 +639,7 @@
         "x": 16,
         "y": 9.600000000000001
       },
+      "hiddenSeries": false,
       "id": 68,
       "legend": {
         "avg": false,
@@ -681,10 +655,11 @@
       "links": [],
       "nullPointMode": "null",
       "options": {
-        "dataLinks": []
+        "alertThreshold": true
       },
       "paceLength": 10,
       "percentage": false,
+      "pluginVersion": "7.3.3",
       "pointradius": 5,
       "points": false,
       "renderer": "flot",
@@ -694,14 +669,14 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "histogram_quantile(0.5, sum(irate(envoy_cluster_upstream_rq_time_bucket{consul_service=\"$service\"}[30s])) by (le))",
+          "expr": "histogram_quantile(0.5, sum(irate(envoy_cluster_upstream_rq_time_bucket{consul_service=\"\"}[30s])) by (le))",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "p50",
           "refId": "A"
         },
         {
-          "expr": "histogram_quantile(0.95, sum(irate(envoy_cluster_upstream_rq_time_bucket{consul_service=\"$service\"}[30s])) by (le))",
+          "expr": "histogram_quantile(0.95, sum(irate(envoy_cluster_upstream_rq_time_bucket{consul_service=\"\"}[30s])) by (le))",
           "format": "time_series",
           "hide": false,
           "intervalFactor": 1,
@@ -709,7 +684,7 @@
           "refId": "B"
         },
         {
-          "expr": "histogram_quantile(0.99, sum(irate(envoy_cluster_upstream_rq_time_bucket{consul_service=\"$service\"}[30s])) by (le))",
+          "expr": "histogram_quantile(0.99, sum(irate(envoy_cluster_upstream_rq_time_bucket{consul_service=\"\"}[30s])) by (le))",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "p99",
@@ -759,7 +734,13 @@
       }
     },
     {
-      "content": "<div class=\"text-center dashboard-header\">\n  <span>INBOUND TRAFFIC BY SOURCE</span>\n</div>",
+      "datasource": null,
+      "fieldConfig": {
+        "defaults": {
+          "custom": {}
+        },
+        "overrides": []
+      },
       "gridPos": {
         "h": 2.2,
         "w": 24,
@@ -768,8 +749,11 @@
       },
       "id": 32,
       "links": [],
-      "mode": "html",
-      "options": {},
+      "options": {
+        "content": "<div class=\"text-center dashboard-header\">\n  <span>INBOUND TRAFFIC BY SOURCE</span>\n</div>",
+        "mode": "html"
+      },
+      "pluginVersion": "7.3.3",
       "title": "",
       "transparent": true,
       "type": "text"
@@ -780,6 +764,13 @@
       "dashLength": 10,
       "dashes": false,
       "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "links": []
+        },
+        "overrides": []
+      },
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
@@ -788,6 +779,7 @@
         "x": 0,
         "y": 18.8
       },
+      "hiddenSeries": false,
       "id": 77,
       "legend": {
         "avg": false,
@@ -803,10 +795,11 @@
       "links": [],
       "nullPointMode": "null",
       "options": {
-        "dataLinks": []
+        "alertThreshold": true
       },
       "paceLength": 10,
       "percentage": false,
+      "pluginVersion": "7.3.3",
       "pointradius": 5,
       "points": false,
       "renderer": "flot",
@@ -816,7 +809,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(irate(envoy_cluster_upstream_rq_xx{envoy_response_code_class!=\"5\",consul_service=\"$service\"}[30s])) by (consul_service, local_cluster) / sum(irate(envoy_cluster_upstream_rq_xx{consul_service=\"$service\"}[30s])) by (consul_service, local_cluster)",
+          "expr": "sum(irate(envoy_cluster_upstream_rq_xx{envoy_response_code_class!=\"5\",consul_service=\"\"}[30s])) by (consul_service, local_cluster) / sum(irate(envoy_cluster_upstream_rq_xx{consul_service=\"\"}[30s])) by (consul_service, local_cluster)",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "source:{{local_cluster}}",
@@ -871,6 +864,13 @@
       "dashLength": 10,
       "dashes": false,
       "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "links": []
+        },
+        "overrides": []
+      },
       "fill": 0,
       "fillGradient": 0,
       "gridPos": {
@@ -879,6 +879,7 @@
         "x": 8,
         "y": 18.8
       },
+      "hiddenSeries": false,
       "id": 78,
       "legend": {
         "avg": false,
@@ -895,10 +896,11 @@
       "links": [],
       "nullPointMode": "null",
       "options": {
-        "dataLinks": []
+        "alertThreshold": true
       },
       "paceLength": 10,
       "percentage": false,
+      "pluginVersion": "7.3.3",
       "pointradius": 5,
       "points": false,
       "renderer": "flot",
@@ -908,7 +910,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(irate(envoy_cluster_upstream_rq_total{consul_service=\"$service\"}[30s])) by (consul_service, local_cluster)",
+          "expr": "sum(irate(envoy_cluster_upstream_rq_total{consul_service=\"\"}[30s])) by (consul_service, local_cluster)",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "src: {{local_cluster}}",
@@ -962,6 +964,13 @@
       "dashLength": 10,
       "dashes": false,
       "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "links": []
+        },
+        "overrides": []
+      },
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
@@ -970,6 +979,7 @@
         "x": 16,
         "y": 18.8
       },
+      "hiddenSeries": false,
       "id": 79,
       "legend": {
         "avg": false,
@@ -986,10 +996,11 @@
       "links": [],
       "nullPointMode": "null",
       "options": {
-        "dataLinks": []
+        "alertThreshold": true
       },
       "paceLength": 10,
       "percentage": false,
+      "pluginVersion": "7.3.3",
       "pointradius": 5,
       "points": false,
       "renderer": "flot",
@@ -999,7 +1010,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum(rate(envoy_cluster_upstream_rq_time_bucket{consul_service=\"$service\"}[30s])) by (le, consul_service, local_cluster))",
+          "expr": "histogram_quantile(0.95, sum(rate(envoy_cluster_upstream_rq_time_bucket{consul_service=\"\"}[30s])) by (le, consul_service, local_cluster))",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "src: {{local_cluster}}",
@@ -1048,7 +1059,13 @@
       }
     },
     {
-      "content": "<div class=\"text-center dashboard-header\">\n  <span>OUTBOUND TRAFFIC BY UPSTREAM</span>\n</div>",
+      "datasource": null,
+      "fieldConfig": {
+        "defaults": {
+          "custom": {}
+        },
+        "overrides": []
+      },
       "gridPos": {
         "h": 2.2,
         "w": 24,
@@ -1057,8 +1074,11 @@
       },
       "id": 82,
       "links": [],
-      "mode": "html",
-      "options": {},
+      "options": {
+        "content": "<div class=\"text-center dashboard-header\">\n  <span>OUTBOUND TRAFFIC BY UPSTREAM</span>\n</div>",
+        "mode": "html"
+      },
+      "pluginVersion": "7.3.3",
       "title": "",
       "transparent": true,
       "type": "text"
@@ -1069,6 +1089,13 @@
       "dashLength": 10,
       "dashes": false,
       "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "links": []
+        },
+        "overrides": []
+      },
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
@@ -1077,6 +1104,7 @@
         "x": 0,
         "y": 28
       },
+      "hiddenSeries": false,
       "id": 83,
       "legend": {
         "avg": false,
@@ -1093,10 +1121,11 @@
       "links": [],
       "nullPointMode": "null",
       "options": {
-        "dataLinks": []
+        "alertThreshold": true
       },
       "paceLength": 10,
       "percentage": false,
+      "pluginVersion": "7.3.3",
       "pointradius": 5,
       "points": false,
       "renderer": "flot",
@@ -1106,7 +1135,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(irate(envoy_cluster_upstream_rq_xx{envoy_response_code_class!=\"5\",local_cluster=\"$service\",consul_target!=\"\"}[30s])) by (local_cluster, consul_target) / sum(irate(envoy_cluster_upstream_rq_xx{local_cluster=\"$service\",consul_target!=\"\"}[30s])) by (local_cluster, consul_target)",
+          "expr": "sum(irate(envoy_cluster_upstream_rq_xx{envoy_response_code_class!=\"5\",local_cluster=\"\",consul_target!=\"\"}[30s])) by (local_cluster, consul_target) / sum(irate(envoy_cluster_upstream_rq_xx{local_cluster=\"\",consul_target!=\"\"}[30s])) by (local_cluster, consul_target)",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{consul_target}}",
@@ -1161,6 +1190,13 @@
       "dashLength": 10,
       "dashes": false,
       "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "links": []
+        },
+        "overrides": []
+      },
       "fill": 0,
       "fillGradient": 0,
       "gridPos": {
@@ -1169,6 +1205,7 @@
         "x": 8,
         "y": 28
       },
+      "hiddenSeries": false,
       "id": 84,
       "legend": {
         "avg": false,
@@ -1185,10 +1222,11 @@
       "links": [],
       "nullPointMode": "null",
       "options": {
-        "dataLinks": []
+        "alertThreshold": true
       },
       "paceLength": 10,
       "percentage": false,
+      "pluginVersion": "7.3.3",
       "pointradius": 5,
       "points": false,
       "renderer": "flot",
@@ -1198,7 +1236,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(irate(envoy_cluster_upstream_rq_total{local_cluster=\"$service\",consul_target!=\"\"}[30s])) by (local_cluster, consul_target)",
+          "expr": "sum(irate(envoy_cluster_upstream_rq_total{local_cluster=\"\",consul_target!=\"\"}[30s])) by (local_cluster, consul_target)",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "upstream: {{consul_target}}",
@@ -1252,6 +1290,13 @@
       "dashLength": 10,
       "dashes": false,
       "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "links": []
+        },
+        "overrides": []
+      },
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
@@ -1260,6 +1305,7 @@
         "x": 16,
         "y": 28
       },
+      "hiddenSeries": false,
       "id": 85,
       "legend": {
         "avg": false,
@@ -1276,10 +1322,11 @@
       "links": [],
       "nullPointMode": "null",
       "options": {
-        "dataLinks": []
+        "alertThreshold": true
       },
       "paceLength": 10,
       "percentage": false,
+      "pluginVersion": "7.3.3",
       "pointradius": 5,
       "points": false,
       "renderer": "flot",
@@ -1289,7 +1336,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum(rate(envoy_cluster_upstream_rq_time_bucket{local_cluster=\"$service\",consul_target!=\"\"}[30s])) by (le, local_cluster, consul_target))",
+          "expr": "histogram_quantile(0.95, sum(rate(envoy_cluster_upstream_rq_time_bucket{local_cluster=\"\",consul_target!=\"\"}[30s])) by (le, local_cluster, consul_target))",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "upstream: {{consul_target}}",
@@ -1339,7 +1386,7 @@
     }
   ],
   "refresh": "5s",
-  "schemaVersion": 19,
+  "schemaVersion": 26,
   "style": "dark",
   "tags": [],
   "templating": {
@@ -1347,11 +1394,13 @@
       {
         "allValue": null,
         "current": {
+          "selected": false,
           "text": "ping",
           "value": "ping"
         },
         "datasource": "Prometheus",
         "definition": "label_values(envoy_http_rq_total, local_cluster)",
+        "error": null,
         "hide": 0,
         "includeAll": false,
         "label": "Service",
@@ -1372,18 +1421,20 @@
       {
         "allValue": null,
         "current": {
+          "selected": false,
           "text": "All",
-          "value": "$__all"
+          "value": ""
         },
         "datasource": "Prometheus",
-        "definition": "label_values(envoy_cluster_upstream_rq_completed{consul_service=\"$service\"}, local_cluster)",
+        "definition": "label_values(envoy_cluster_upstream_rq_completed{consul_service=\"\"}, local_cluster)",
+        "error": null,
         "hide": 2,
         "includeAll": true,
         "label": null,
         "multi": false,
         "name": "inbound",
         "options": [],
-        "query": "label_values(envoy_cluster_upstream_rq_completed{consul_service=\"$service\"}, local_cluster)",
+        "query": "label_values(envoy_cluster_upstream_rq_completed{consul_service=\"\"}, local_cluster)",
         "refresh": 2,
         "regex": "",
         "skipUrlSync": false,
@@ -1397,18 +1448,20 @@
       {
         "allValue": null,
         "current": {
+          "selected": false,
           "text": "All",
-          "value": "$__all"
+          "value": ""
         },
         "datasource": "Prometheus",
-        "definition": "label_values(envoy_cluster_external_upstream_rq_completed{local_cluster=\"$service\"}, consul_service)",
+        "definition": "label_values(envoy_cluster_external_upstream_rq_completed{local_cluster=\"\"}, consul_service)",
+        "error": null,
         "hide": 2,
         "includeAll": true,
         "label": null,
         "multi": false,
         "name": "outbound",
         "options": [],
-        "query": "label_values(envoy_cluster_external_upstream_rq_completed{local_cluster=\"$service\"}, consul_service)",
+        "query": "label_values(envoy_cluster_external_upstream_rq_completed{local_cluster=\"\"}, consul_service)",
         "refresh": 2,
         "regex": "",
         "skipUrlSync": false,
