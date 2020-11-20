@@ -35,7 +35,7 @@ func (s NetworkShape) GetNetworkName(dc string) string {
 	}
 }
 
-func InferTopology(uct *userConfigTopology) (*Topology, error) {
+func InferTopology(uct *userConfigTopology, enterpriseEnabled bool) (*Topology, error) {
 	topology := &Topology{}
 
 	needsAllNetworks := false
@@ -67,7 +67,7 @@ func InferTopology(uct *userConfigTopology) (*Topology, error) {
 
 	nodeConfigs := uct.NodeConfig
 
-	forDC := func(dc, baseIP, wanBaseIP string, servers, clients, meshGateways int) {
+	forDC := func(dc, baseIP, wanBaseIP string, servers, clients, meshGateways int) error {
 		for idx := 1; idx <= servers; idx++ {
 			id := strconv.Itoa(idx)
 			ip := baseIP + "." + strconv.Itoa(10+idx)
@@ -101,7 +101,7 @@ func InferTopology(uct *userConfigTopology) (*Topology, error) {
 				})
 			case NetworkShapeFlat:
 			default:
-				panic("unknown shape: " + topology.NetworkShape)
+				return fmt.Errorf("unknown shape: %s", topology.NetworkShape)
 			}
 			topology.AddNode(node)
 		}
@@ -146,7 +146,7 @@ func InferTopology(uct *userConfigTopology) (*Topology, error) {
 					})
 				case NetworkShapeFlat:
 				default:
-					panic("unknown shape: " + topology.NetworkShape)
+					return fmt.Errorf("unknown shape: %s", topology.NetworkShape)
 				}
 			} else {
 				if nodeConfig.UseBuiltinProxy {
@@ -172,6 +172,18 @@ func InferTopology(uct *userConfigTopology) (*Topology, error) {
 				if nodeConfig.UpstreamDatacenter != "" {
 					svc.UpstreamDatacenter = nodeConfig.UpstreamDatacenter
 				}
+				if nodeConfig.ServiceNamespace != "" {
+					if !enterpriseEnabled {
+						return fmt.Errorf("namespaces cannot be configured when enterprise.enabled=false")
+					}
+					svc.Namespace = nodeConfig.ServiceNamespace
+				}
+				if nodeConfig.UpstreamNamespace != "" {
+					if !enterpriseEnabled {
+						return fmt.Errorf("namespaces cannot be configured when enterprise.enabled=false")
+					}
+					svc.UpstreamNamespace = nodeConfig.UpstreamNamespace
+				}
 
 				node.Service = &svc
 			}
@@ -184,6 +196,8 @@ func InferTopology(uct *userConfigTopology) (*Topology, error) {
 			}
 			topology.AddNode(node)
 		}
+
+		return nil
 	}
 
 	if _, ok := uct.Datacenters[PrimaryDC]; !ok {
@@ -238,7 +252,10 @@ func InferTopology(uct *userConfigTopology) (*Topology, error) {
 	})
 
 	for _, dc := range topology.dcs {
-		forDC(dc.Name, dc.BaseIP, dc.WANBaseIP, dc.Servers, dc.Clients, dc.MeshGateways)
+		err := forDC(dc.Name, dc.BaseIP, dc.WANBaseIP, dc.Servers, dc.Clients, dc.MeshGateways)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return topology, nil
@@ -468,8 +485,10 @@ type Address struct {
 
 type Service struct {
 	Name               string
+	Namespace          string
 	Port               int
 	UpstreamName       string
+	UpstreamNamespace  string
 	UpstreamDatacenter string
 	UpstreamLocalPort  int
 	UpstreamExtraHCL   string

@@ -8,17 +8,25 @@ import (
 )
 
 type FlatConfig struct {
-	ConsulImage        string
-	EnvoyVersion       string
-	EncryptionTLS      bool
-	EncryptionGossip   bool
-	KubernetesEnabled  bool
-	EnvoyLogLevel      string
-	PrometheusEnabled  bool
-	InitialMasterToken string
-	ConfigEntries      []api.ConfigEntry
-	GossipKey          string
-	AgentMasterToken   string
+	ConsulImage          string
+	EnvoyVersion         string
+	EncryptionTLS        bool
+	EncryptionGossip     bool
+	KubernetesEnabled    bool
+	EnvoyLogLevel        string
+	PrometheusEnabled    bool
+	InitialMasterToken   string
+	ConfigEntries        []api.ConfigEntry
+	GossipKey            string
+	AgentMasterToken     string
+	EnterpriseEnabled    bool
+	EnterpriseNamespaces []string
+}
+
+func (c *FlatConfig) Namespaces() []string {
+	out := []string{"default"}
+	out = append(out, c.EnterpriseNamespaces...)
+	return out
 }
 
 type userConfig struct {
@@ -40,6 +48,11 @@ type userConfig struct {
 	Topology           userConfigTopology `hcl:"topology"`
 	InitialMasterToken string             `hcl:"initial_master_token"`
 	RawConfigEntries   []string           `hcl:"config_entries"`
+
+	Enterprise struct {
+		Enabled    bool     `hcl:"enabled"`
+		Namespaces []string `hcl:"namespaces"`
+	} `hcl:"enterprise"`
 }
 
 type userConfigTopology struct {
@@ -56,9 +69,11 @@ type userConfigTopologyDatacenter struct {
 
 type userConfigTopologyNodeConfig struct {
 	UpstreamName                string            `hcl:"upstream_name"`
+	UpstreamNamespace           string            `hcl:"upstream_namespace"`
 	UpstreamDatacenter          string            `hcl:"upstream_datacenter"`
 	UpstreamExtraHCL            string            `hcl:"upstream_extra_hcl"`
 	ServiceMeta                 map[string]string `hcl:"service_meta"` // key -> val
+	ServiceNamespace            string            `hcl:"service_namespace"`
 	UseBuiltinProxy             bool              `hcl:"use_builtin_proxy"`
 	Dead                        bool              `hcl:"dead"`
 	RetainInPrimaryGatewaysList bool              `hcl:"retain_in_primary_gateways_list"`
@@ -86,7 +101,15 @@ func parseConfig(contents []byte) (*FlatConfig, *Topology, error) {
 		return nil, nil, err
 	}
 
-	topology, err := InferTopology(uct)
+	if cfg.EnterpriseEnabled && cfg.KubernetesEnabled {
+		return nil, nil, fmt.Errorf("kubernetes and enterprise are not compatible in this tool")
+	}
+
+	if !cfg.EnterpriseEnabled && len(cfg.EnterpriseNamespaces) > 0 {
+		return nil, nil, fmt.Errorf("enterprise.namespaces cannot be configured when enterprise.enabled=false")
+	}
+
+	topology, err := InferTopology(uct, cfg.EnterpriseEnabled)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -113,14 +136,16 @@ func parseConfigPartial(contents []byte) (*FlatConfig, *userConfigTopology, erro
 	}
 
 	cfg := &FlatConfig{
-		ConsulImage:        uc.ConsulImage,
-		EnvoyVersion:       uc.EnvoyVersion,
-		EncryptionTLS:      uc.Encryption.TLS,
-		EncryptionGossip:   uc.Encryption.Gossip,
-		KubernetesEnabled:  uc.Kubernetes.Enabled,
-		EnvoyLogLevel:      uc.Envoy.LogLevel,
-		PrometheusEnabled:  uc.Monitor.Prometheus,
-		InitialMasterToken: uc.InitialMasterToken,
+		ConsulImage:          uc.ConsulImage,
+		EnvoyVersion:         uc.EnvoyVersion,
+		EncryptionTLS:        uc.Encryption.TLS,
+		EncryptionGossip:     uc.Encryption.Gossip,
+		KubernetesEnabled:    uc.Kubernetes.Enabled,
+		EnvoyLogLevel:        uc.Envoy.LogLevel,
+		PrometheusEnabled:    uc.Monitor.Prometheus,
+		InitialMasterToken:   uc.InitialMasterToken,
+		EnterpriseEnabled:    uc.Enterprise.Enabled,
+		EnterpriseNamespaces: uc.Enterprise.Namespaces,
 	}
 
 	for i, raw := range uc.RawConfigEntries {

@@ -106,6 +106,11 @@ func (c *CommandBoot) initPrimaryDC() error {
 
 	c.waitForUpgrade(PrimaryDC)
 
+	err = c.createNamespaces()
+	if err != nil {
+		return fmt.Errorf("createNamespaces: %v", err)
+	}
+
 	err = c.createReplicationToken()
 	if err != nil {
 		return fmt.Errorf("createReplicationToken: %v", err)
@@ -246,6 +251,63 @@ TRYAGAIN2:
 	}
 
 	c.logger.Info("current master token", "token", c.masterToken)
+
+	return nil
+}
+
+func (c *CommandBoot) createNamespaces() error {
+	if !c.config.EnterpriseEnabled {
+		return nil
+	}
+
+	// Create a policy to allow super permissive catalog reads across namespace
+	// boundaries.
+	if err := c.createCrossNamespaceCatalogReadPolicy(); err != nil {
+		return fmt.Errorf("createCrossNamespaceCatalogReadPolicy(): %v", err)
+	}
+
+	nc := c.primaryClient().Namespaces()
+
+	currentList, _, err := nc.List(nil)
+	if err != nil {
+		return err
+	}
+
+	currentMap := make(map[string]struct{})
+	for _, ns := range currentList {
+		currentMap[ns.Name] = struct{}{}
+	}
+
+	for _, ns := range c.config.EnterpriseNamespaces {
+		if _, ok := currentMap[ns]; ok {
+			delete(currentMap, ns)
+			continue
+		}
+
+		obj := &api.Namespace{
+			Name: ns,
+			ACLs: &api.NamespaceACLConfig{
+				PolicyDefaults: []api.ACLLink{
+					{Name: "cross-ns-catalog-read"},
+				},
+			},
+		}
+
+		_, _, err = nc.Create(obj, nil)
+		if err != nil {
+			return err
+		}
+		c.logger.Info("created namespace", "namespace", ns)
+	}
+
+	delete(currentMap, "default")
+
+	for ns, _ := range currentMap {
+		if _, err := nc.Delete(ns, nil); err != nil {
+			return err
+		}
+		c.logger.Info("deleted namespace", "namespace", ns)
+	}
 
 	return nil
 }
@@ -537,6 +599,9 @@ node_prefix "" { policy = "read" }
 service_prefix "" { policy = "read" }
 `,
 	}
+	if c.config.EnterpriseEnabled {
+		p.Rules = `namespace_prefix "" { ` + p.Rules + ` }`
+	}
 
 	op, err := consulfunc.CreateOrUpdatePolicy(c.primaryClient(), p)
 	if err != nil {
@@ -544,6 +609,32 @@ service_prefix "" { policy = "read" }
 	}
 
 	c.logger.Info("anonymous policy", "name", p.Name, "id", op.ID)
+
+	return nil
+}
+
+func (c *CommandBoot) createCrossNamespaceCatalogReadPolicy() error {
+	if !c.config.EnterpriseEnabled {
+		return nil
+	}
+
+	p := &api.ACLPolicy{
+		Name:        "cross-ns-catalog-read",
+		Description: "cross-ns-catalog-read",
+		Rules: `
+namespace_prefix "" {
+  node_prefix "" { policy = "read" }
+  service_prefix "" { policy = "read" }
+}
+`,
+	}
+
+	op, err := consulfunc.CreateOrUpdatePolicy(c.primaryClient(), p)
+	if err != nil {
+		return err
+	}
+
+	c.logger.Info("cross-ns-catalog-read policy", "name", p.Name, "id", op.ID)
 
 	return nil
 }
@@ -568,6 +659,9 @@ func (c *CommandBoot) createServiceTokens() error {
 				},
 			},
 		}
+		if n.Service.Namespace != "" {
+			token.Namespace = n.Service.Namespace
+		}
 
 		token, err := consulfunc.CreateOrUpdateToken(c.primaryClient(), token)
 		if err != nil {
@@ -576,6 +670,7 @@ func (c *CommandBoot) createServiceTokens() error {
 
 		c.logger.Info("service token created",
 			"service", n.Service.Name,
+			"namespace", n.Service.Namespace,
 			"token", token.SecretID,
 		)
 
@@ -601,6 +696,46 @@ func (c *CommandBoot) writeCentralConfigs() error {
 
 	ce := client.ConfigEntries()
 
+	type ServiceName struct {
+		Name      string
+		Namespace string
+	}
+
+	// collect upstreams and downstreams
+	dm := make(map[ServiceName]map[ServiceName]struct{}) // dest -> src
+	err = c.topology.Walk(func(n *Node) error {
+		if n.Service == nil {
+			return nil
+		}
+		svc := n.Service
+
+		dst := ServiceName{
+			Name:      svc.Name,
+			Namespace: defaultValue(svc.Namespace, "default"),
+		}
+		src := ServiceName{
+			Name:      svc.UpstreamName,
+			Namespace: defaultValue(svc.UpstreamNamespace, "default"),
+		}
+		if !c.config.EnterpriseEnabled {
+			dst.Namespace = ""
+			src.Namespace = ""
+		}
+
+		sm, ok := dm[dst]
+		if !ok {
+			sm = make(map[ServiceName]struct{})
+			dm[dst] = sm
+		}
+
+		sm[src] = struct{}{}
+
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
 	var stockEntries []api.ConfigEntry
 	if c.config.PrometheusEnabled {
 		stockEntries = append(stockEntries, &api.ProxyConfigEntry{
@@ -612,26 +747,22 @@ func (c *CommandBoot) writeCentralConfigs() error {
 			},
 		})
 	}
-	stockEntries = append(stockEntries, &api.ServiceIntentionsConfigEntry{
-		Kind: api.ServiceIntentions,
-		Name: "ping",
-		Sources: []*api.SourceIntention{
-			{
-				Name:   "pong",
-				Action: api.IntentionActionAllow,
-			},
-		},
-	})
-	stockEntries = append(stockEntries, &api.ServiceIntentionsConfigEntry{
-		Kind: api.ServiceIntentions,
-		Name: "pong",
-		Sources: []*api.SourceIntention{
-			{
-				Name:   "ping",
-				Action: api.IntentionActionAllow,
-			},
-		},
-	})
+
+	for dst, sm := range dm {
+		entry := &api.ServiceIntentionsConfigEntry{
+			Kind:      api.ServiceIntentions,
+			Name:      dst.Name,
+			Namespace: dst.Namespace,
+		}
+		for src, _ := range sm {
+			entry.Sources = append(entry.Sources, &api.SourceIntention{
+				Name:      src.Name,
+				Namespace: src.Namespace,
+				Action:    api.IntentionActionAllow,
+			})
+		}
+		stockEntries = append(stockEntries, entry)
+	}
 
 	entries := c.config.ConfigEntries
 	for _, stockEntry := range stockEntries {
@@ -812,6 +943,9 @@ var serviceRegistrationT = template.Must(template.New("service_reg").Parse(`
 services = [
   {
     name = "{{.Name}}"
+{{- if .Namespace }}
+    namespace = "{{.Namespace}}"
+{{- end }}
     port = {{.Port}}
 
     checks = [
@@ -836,6 +970,9 @@ services = [
           upstreams = [
             {
               destination_name = "{{.UpstreamName}}"
+{{- if .UpstreamNamespace }}
+              destination_namespace = "{{.UpstreamNamespace}}"
+{{- end }}
               local_bind_port  = {{.UpstreamLocalPort}}
 {{- if .UpstreamDatacenter }}
               datacenter = "{{.UpstreamDatacenter}}"
@@ -931,4 +1068,11 @@ func (c *CommandBoot) mustGetToken(typ, k string) string {
 		panic("token for '" + typ + "/" + k + "' not set:" + jsonPretty(c.tokens))
 	}
 	return tok
+}
+
+func defaultValue(v, def string) string {
+	if v == "" {
+		return def
+	}
+	return v
 }
