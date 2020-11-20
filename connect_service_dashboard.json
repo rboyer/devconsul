@@ -98,7 +98,7 @@
       "tableColumn": "",
       "targets": [
         {
-          "expr": "sum(rate(envoy_http_downstream_rq_xx{response_code_class!=\"5\",local_cluster=\"$service\",envoy_http_conn_manager_prefix=\"public_listener_http\"}[1m])) / sum(rate(envoy_http_downstream_rq_xx{local_cluster=\"$service\",envoy_http_conn_manager_prefix=\"public_listener_http\"}[1m]))",
+          "expr": "sum(rate(envoy_http_downstream_rq_xx{envoy_response_code_class!=\"5\",local_cluster=\"$service\",envoy_http_conn_manager_prefix=\"public_listener\"}[1m])) / sum(rate(envoy_http_downstream_rq_xx{local_cluster=\"$service\",envoy_http_conn_manager_prefix=\"public_listener\"}[1m]))",
           "format": "time_series",
           "intervalFactor": 1,
           "refId": "A"
@@ -181,7 +181,7 @@
       "tableColumn": "",
       "targets": [
         {
-          "expr": "sum(irate(envoy_http_downstream_rq_total{local_cluster=\"$service\",envoy_http_conn_manager_prefix=\"public_listener_http\"}[30s]))",
+          "expr": "sum(irate(envoy_http_downstream_rq_total{local_cluster=\"$service\",envoy_http_conn_manager_prefix=\"public_listener\"}[30s]))",
           "format": "time_series",
           "intervalFactor": 1,
           "refId": "A"
@@ -513,10 +513,10 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(increase(envoy_http_downstream_rq_xx{local_cluster=\"$service\",envoy_http_conn_manager_prefix=\"public_listener_http\"}[1m])) by (local_cluster, response_code_class)",
+          "expr": "sum(increase(envoy_http_downstream_rq_xx{local_cluster=\"$service\",envoy_http_conn_manager_prefix=\"public_listener\"}[1m])) by (local_cluster, envoy_response_code_class)",
           "format": "time_series",
           "intervalFactor": 1,
-          "legendFormat": "{{response_code_class}}xx",
+          "legendFormat": "{{envoy_response_code_class}}xx",
           "refId": "A"
         }
       ],
@@ -603,7 +603,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(irate(envoy_http_downstream_rq_total{local_cluster=\"$service\",envoy_http_conn_manager_prefix=\"public_listener_http\"}[30s]))",
+          "expr": "sum(irate(envoy_http_downstream_rq_total{local_cluster=\"$service\",envoy_http_conn_manager_prefix=\"public_listener\"}[30s]))",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "svc/{{consul_service}}",
@@ -816,7 +816,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(irate(envoy_cluster_upstream_rq_xx{response_code_class!=\"5\",consul_service=\"$service\"}[30s])) by (consul_service, local_cluster) / sum(irate(envoy_cluster_upstream_rq_xx{consul_service=\"$service\"}[30s])) by (consul_service, local_cluster)",
+          "expr": "sum(irate(envoy_cluster_upstream_rq_xx{envoy_response_code_class!=\"5\",consul_service=\"$service\"}[30s])) by (consul_service, local_cluster) / sum(irate(envoy_cluster_upstream_rq_xx{consul_service=\"$service\"}[30s])) by (consul_service, local_cluster)",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "source:{{local_cluster}}",
@@ -1106,7 +1106,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(irate(envoy_cluster_upstream_rq_xx{response_code_class!=\"5\",local_cluster=\"$service\",consul_target!=\"\"}[30s])) by (local_cluster, consul_target) / sum(irate(envoy_cluster_upstream_rq_xx{local_cluster=\"$service\",consul_target!=\"\"}[30s])) by (local_cluster, consul_target)",
+          "expr": "sum(irate(envoy_cluster_upstream_rq_xx{envoy_response_code_class!=\"5\",local_cluster=\"$service\",consul_target!=\"\"}[30s])) by (local_cluster, consul_target) / sum(irate(envoy_cluster_upstream_rq_xx{local_cluster=\"$service\",consul_target!=\"\"}[30s])) by (local_cluster, consul_target)",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{consul_target}}",
@@ -1451,7 +1451,6 @@
     ]
   },
   "timezone": "",
-  "title": "Consul 1.6 SNI Dashboard",
-  "uid": "consul-service",
-  "version": 7
+  "title": "devconsul Dashboard",
+  "uid": "consul-service"
 }
