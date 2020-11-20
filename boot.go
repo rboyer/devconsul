@@ -635,6 +635,7 @@ func (c *CommandBoot) writeCentralConfigs() error {
 
 	entries := c.config.ConfigEntries
 	for _, stockEntry := range stockEntries {
+		found := false
 		for i, entry := range entries {
 			if stockEntry.GetKind() != entry.GetKind() {
 				continue
@@ -642,6 +643,7 @@ func (c *CommandBoot) writeCentralConfigs() error {
 			if stockEntry.GetName() != entry.GetName() {
 				continue
 			}
+
 			switch stockEntry.GetKind() {
 			case api.ProxyDefaults:
 				// This one gets special case treatment.
@@ -659,8 +661,13 @@ func (c *CommandBoot) writeCentralConfigs() error {
 			default:
 				return fmt.Errorf("unsupported kind: %q", stockEntry.GetKind())
 			}
+
+			found = true
+			break
 		}
-		entries = append(entries, stockEntry)
+		if !found {
+			entries = append(entries, stockEntry)
+		}
 	}
 
 	for _, entry := range entries {
