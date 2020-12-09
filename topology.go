@@ -42,6 +42,7 @@ func InferTopology(uct *userConfigTopology, enterpriseEnabled bool) (*Topology, 
 	switch uct.NetworkShape {
 	case "islands":
 		topology.NetworkShape = NetworkShapeIslands
+		topology.DisableWANBootstrap = uct.DisableWANBootstrap
 		needsAllNetworks = true
 	case "dual":
 		topology.NetworkShape = NetworkShapeDual
@@ -88,7 +89,7 @@ func InferTopology(uct *userConfigTopology, enterpriseEnabled bool) (*Topology, 
 
 			switch topology.NetworkShape {
 			case NetworkShapeIslands:
-				if dc != PrimaryDC { // Needed for initial join
+				if dc != PrimaryDC && !topology.DisableWANBootstrap { // Needed for initial join
 					node.Addresses = append(node.Addresses, Address{
 						Network:   "wan",
 						IPAddress: wanIP,
@@ -262,7 +263,8 @@ func InferTopology(uct *userConfigTopology, enterpriseEnabled bool) (*Topology, 
 }
 
 type Topology struct {
-	NetworkShape NetworkShape
+	NetworkShape        NetworkShape
+	DisableWANBootstrap bool
 
 	networks map[string]*Network
 	dcs      []*Datacenter

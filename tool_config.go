@@ -58,9 +58,10 @@ type userConfig struct {
 }
 
 type userConfigTopology struct {
-	NetworkShape string                                  `hcl:"network_shape"`
-	Datacenters  map[string]userConfigTopologyDatacenter `hcl:"datacenters"`
-	NodeConfig   map[string]userConfigTopologyNodeConfig `hcl:"node_config"` // node -> data
+	NetworkShape        string                                  `hcl:"network_shape"`
+	DisableWANBootstrap bool                                    `hcl:"disable_wan_bootstrap"`
+	Datacenters         map[string]userConfigTopologyDatacenter `hcl:"datacenters"`
+	NodeConfig          map[string]userConfigTopologyNodeConfig `hcl:"node_config"` // node -> data
 }
 
 type userConfigTopologyDatacenter struct {
@@ -114,6 +115,10 @@ func parseConfig(contents []byte) (*FlatConfig, *Topology, error) {
 	topology, err := InferTopology(uct, cfg.EnterpriseEnabled)
 	if err != nil {
 		return nil, nil, err
+	}
+
+	if topology.NetworkShape != NetworkShapeIslands && topology.DisableWANBootstrap {
+		return nil, nil, fmt.Errorf("disable_wan_bootstrap requires network_shape=islands")
 	}
 
 	if topology.NetworkShape == NetworkShapeIslands && !cfg.EncryptionTLS {
