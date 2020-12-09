@@ -299,6 +299,8 @@ func (c *Core) generateMeshGatewayContainer(podName string, node *Node) (string,
 		NodeName      string
 		EnvoyLogLevel string
 		EnableWAN     bool
+		LANAddress    string
+		WANAddress    string
 		ExposeServers bool
 		Labels        map[string]string
 	}
@@ -317,6 +319,8 @@ func (c *Core) generateMeshGatewayContainer(podName string, node *Node) (string,
 	case NetworkShapeIslands, NetworkShapeDual:
 		mgi.EnableWAN = true
 		mgi.ExposeServers = true
+		mgi.LANAddress = `{{ GetInterfaceIP \"eth0\" }}:8443`
+		mgi.WANAddress = `{{ GetInterfaceIP \"eth1\" }}:8443`
 	case NetworkShapeFlat:
 	default:
 		panic("unknown shape: " + c.topology.NetworkShape)
@@ -368,8 +372,10 @@ resource "docker_container" "{{.NodeName}}-mesh-gateway" {
       "-expose-servers",
 {{- end }}
 {{- if .EnableWAN }}
+      "-address",
+      "{{ .LANAddress }}",
       "-wan-address",
-      "{{ "{{ GetInterfaceIP \"eth1\" }}:443" }}",
+      "{{ .WANAddress }}",
 {{- end }}
       "-admin-bind",
       // for demo purposes
@@ -411,7 +417,18 @@ func (c *Core) generatePingPongContainers(podName string, node *Node) ([]string,
 		EnvoyLogLevel:   c.config.EnvoyLogLevel,
 	}
 	if len(svc.Meta) > 0 {
-		ppi.MetaString = fmt.Sprintf("--%q", svc.Meta)
+		var kvs []struct{ K, V string }
+		for k, v := range svc.Meta {
+			kvs = append(kvs, struct{ K, V string }{k, v})
+		}
+		sort.Slice(kvs, func(i, j int) bool {
+			return kvs[i].K < kvs[j].K
+		})
+		var parts []string
+		for _, kv := range kvs {
+			parts = append(parts, kv.K+"-"+kv.V)
+		}
+		ppi.MetaString = strings.Join(parts, "--")
 	}
 
 	proxyType := "envoy"

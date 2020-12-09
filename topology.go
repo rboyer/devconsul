@@ -190,7 +190,7 @@ func InferTopology(uct *userConfigTopology, enterpriseEnabled bool) (*Topology, 
 
 			if nodeConfig.Dead {
 				if node.MeshGateway && node.Datacenter == PrimaryDC && nodeConfig.RetainInPrimaryGatewaysList {
-					topology.AddAdditionalPrimaryGateway(node.PublicAddress() + ":443")
+					topology.AddAdditionalPrimaryGateway(node.PublicAddress() + ":8443")
 				}
 				continue // act like this isn't there
 			}
@@ -332,7 +332,7 @@ func (t *Topology) GatewayAddrs(datacenter string) []string {
 	for _, name := range t.clients {
 		n := t.Node(name)
 		if n.Datacenter == datacenter && n.MeshGateway {
-			out = append(out, n.PublicAddress()+":443")
+			out = append(out, n.PublicAddress()+":8443")
 		}
 	}
 	out = append(out, t.additionalPrimaryGateways...)
