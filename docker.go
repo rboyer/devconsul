@@ -110,7 +110,7 @@ func (c *Core) RunStopDC2() error {
 	args = append(args, containers["dc2"]...)
 
 	if err := c.dockerExec(args, nil); err != nil {
-		return err
+		c.logger.Error("error stopping containers", "error", err)
 	}
 
 	// docker stop $$($(PROGRAM_NAME) config | jq -r '.containers.dc2[]')

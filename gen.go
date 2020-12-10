@@ -240,7 +240,7 @@ resource "docker_container" "{{.PodName}}" {
 
 {{- range .Node.Addresses }}
 networks_advanced {
-  name         = "devconsul-{{.Network}}"
+  name         = docker_network.devconsul-{{.Network}}.name
   ipv4_address = "{{.IPAddress}}"
 }
 {{- end }}
@@ -574,7 +574,7 @@ resource "docker_container" "prometheus" {
     read_only      = true
    }
   networks_advanced {
-    name         = "devconsul-lan"
+    name         = docker_network.devconsul-lan.name
     ipv4_address = "10.0.100.100"
    }
 
