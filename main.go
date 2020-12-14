@@ -40,6 +40,7 @@ var allCommands = []command{
 	{"force-docker", (*Core).RunForceDocker, []string{"docker"}},
 	{"primary", (*Core).RunBringUpPrimary, []string{"up-primary", "up-pri"}},
 	{"stop-dc2", (*Core).RunStopDC2, nil},
+	{"restart-dc2", (*Core).RunRestartDC2, nil},
 	{"save-grafana", (*Core).RunDebugSaveGrafana, nil},
 	{"config-entries", (*Core).RunDebugListConfigs, nil},
 }

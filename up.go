@@ -54,3 +54,16 @@ func (c *Core) RunRestart() error {
 
 	return c.RunBringUp()
 }
+
+func (c *Core) RunRestartDC2() error {
+	// This only makes sense to run after you've configured it once.
+	if err := checkHasRunOnce("init"); err != nil {
+		return err
+	}
+
+	if err := c.runStopDC2(); err != nil {
+		return err
+	}
+
+	return c.RunBringUp()
+}

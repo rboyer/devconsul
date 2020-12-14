@@ -93,6 +93,10 @@ func (c *Core) buildDockerImages(force bool) error {
 }
 
 func (c *Core) RunStopDC2() error {
+	return c.runStopDC2()
+}
+
+func (c *Core) runStopDC2() error {
 	var (
 		pods       = make(map[string][]string)
 		containers = make(map[string][]string)
