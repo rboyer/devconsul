@@ -717,7 +717,7 @@ translate_wan_addrs    = true
 client_addr            = "0.0.0.0"
 datacenter             = "{{.Datacenter}}"
 disable_update_check   = true
-log_level              = "debug"
+log_level              = "trace"
 
 enable_debug                  = true
 
