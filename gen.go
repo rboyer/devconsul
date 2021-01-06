@@ -635,8 +635,9 @@ func (c *Core) generateAgentHCL(node *Node) (string, error) {
 		TLSFilePrefix    string
 		Prometheus       bool
 
-		FederateViaGateway bool
-		PrimaryGateways    string
+		FederateViaGateway  bool
+		PrimaryGateways     string
+		DisableWANBootstrap bool
 	}
 
 	configInfo := consulAgentConfigInfo{
@@ -681,6 +682,7 @@ func (c *Core) generateAgentHCL(node *Node) (string, error) {
 			if node.Datacenter != PrimaryDC {
 				primaryGateways := c.topology.GatewayAddrs(PrimaryDC)
 				configInfo.PrimaryGateways = `"` + strings.Join(primaryGateways, `", "`) + `"`
+				configInfo.DisableWANBootstrap = c.topology.DisableWANBootstrap
 			}
 		} else {
 			configInfo.RetryJoinWAN = `"` + strings.Join(ips, `", "`) + `"`
@@ -735,6 +737,9 @@ retry_join             = [ {{.RetryJoin}} ]
 {{ if .SecondaryServer -}}
 primary_gateways          = [ {{ .PrimaryGateways }} ]
 primary_gateways_interval = "5s"
+{{ if .DisableWANBootstrap -}}
+disable_primary_gateway_fallback = true
+{{- end}}
 {{- end}}
 {{ else -}}
 {{ if .Server -}}
