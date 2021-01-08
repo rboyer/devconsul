@@ -22,12 +22,17 @@ while : ; do
     sleep 0.1
 done
 
+api_args=()
+agent_tls=""
+service_register_file=""
 case "${mode}" in
     direct)
         token_file=""
-        service_register_file=""
-        while getopts ":t:r:" opt; do
+        while getopts ":t:r:e" opt; do
             case "${opt}" in
+                e)
+                    agent_tls=1
+                    ;;
                 t)
                     token_file="$OPTARG"
                     ;;
@@ -55,51 +60,17 @@ case "${mode}" in
             exit 1
         fi
 
-        token=''
-        while : ; do
-            read -r token < "${token_file}" || true
-            if [[ -n "${token}" ]]; then
-                break
-            fi
-            echo "waiting for secret to show up at ${token_file}..."
-            sleep 0.1
-        done
-        # trim any whitespace; this overdoes it in the middle, but tokens don't have
-        # whitespace in the middle so :shrug:
-        token="${token//[[:space:]]}"
+        api_args+=( -token-file "${token_file}" )
 
-        while : ; do
-            if consul acl token read -token-file "${token_file}" -self &> /dev/null ; then
-                break
-            fi
-
-            echo "waiting for ACLs to work..."
-            sleep 0.1
-        done
-
-        echo "Registering service..."
-        consul services register -token-file "${token_file}" "${service_register_file}"
-
-        echo "Launching proxy..."
-        case "${proxy_type}" in
-            envoy)
-                consul connect envoy -bootstrap -token-file "${token_file}" "$@" > /tmp/envoy.config
-                exec consul connect envoy -token-file "${token_file}" "$@"
-                ;;
-            builtin)
-                exec consul connect proxy -token-file "${token_file}" "$@"
-                ;;
-            *)
-                echo "unknown proxy type: ${proxy_type}" >&2
-                exit 1
-        esac
         ;;
     login)
         bearer_token_file=""
         token_sink_file=""
-        service_register_file=""
-        while getopts ":t:s:r:" opt; do
+        while getopts ":t:s:r:e" opt; do
             case "${opt}" in
+                e)
+                    agent_tls=1
+                    ;;
                 t)
                     bearer_token_file="$OPTARG"
                     ;;
@@ -134,6 +105,7 @@ case "${mode}" in
             exit 1
         fi
 
+        #TODO: handle api_args[@] here somehow
         consul login \
             -method=minikube \
             -bearer-token-file="${bearer_token_file}" \
@@ -142,22 +114,8 @@ case "${mode}" in
 
         echo "Wrote new token to ${token_sink_file}"
 
-        echo "Registering service..."
-        consul services register -token-file "${token_sink_file}" "${service_register_file}"
+        api_args+=( -token-file "${token_sink_file}" )
 
-        echo "Launching proxy..."
-        case "${proxy_type}" in
-            envoy)
-                consul connect envoy -bootstrap -token-file "${token_sink_file}" "$@" > /tmp/envoy.config
-                exec consul connect envoy -token-file "${token_sink_file}" "$@"
-                ;;
-            builtin)
-                exec consul connect proxy -token-file "${token_sink_file}" "$@"
-                ;;
-            *)
-                echo "unknown proxy type: ${proxy_type}" >&2
-                exit 1
-        esac
         ;;
     *)
         echo "unknown mode: $mode" >&2
@@ -165,3 +123,41 @@ case "${mode}" in
         ;;
 esac
 
+grpc_args=()
+if [[ -n "$agent_tls" ]]; then
+    api_args+=(
+        -ca-file /tls/consul-agent-ca.pem
+        -http-addr https://127.0.0.1:8501
+    )
+    grpc_args+=( -grpc-addr https://127.0.0.1:8502 )
+else
+    api_args+=( -http-addr http://127.0.0.1:8500 )
+    grpc_args+=( -grpc-addr http://127.0.0.1:8502 )
+fi
+
+while : ; do
+    if consul acl token read "${api_args[@]}" -self &> /dev/null ; then
+        break
+    fi
+
+    echo "waiting for ACLs to work..."
+    sleep 0.1
+done
+
+echo "Registering service..."
+consul services register "${api_args[@]}" "${service_register_file}"
+
+echo "Launching proxy..."
+case "${proxy_type}" in
+    envoy)
+        consul connect envoy -bootstrap "${grpc_args[@]}" "${api_args[@]}" "$@" > /tmp/envoy.config
+        exec consul connect envoy "${grpc_args[@]}" "${api_args[@]}" "$@"
+        ;;
+    builtin)
+        # TODO: handle agent tls?
+        exec consul connect proxy "${api_args[@]}" "$@"
+        ;;
+    *)
+        echo "unknown proxy type: ${proxy_type}" >&2
+        exit 1
+esac

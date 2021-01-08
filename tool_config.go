@@ -13,6 +13,7 @@ type FlatConfig struct {
 	ConsulImage          string
 	EnvoyVersion         string
 	EncryptionTLS        bool
+	EncryptionTLSAPI     bool
 	EncryptionGossip     bool
 	KubernetesEnabled    bool
 	EnvoyLogLevel        string
@@ -36,6 +37,7 @@ type userConfig struct {
 	EnvoyVersion string `hcl:"envoy_version"`
 	Encryption   struct {
 		TLS    bool `hcl:"tls"`
+		TLSAPI bool `hcl:"tls_api"`
 		Gossip bool `hcl:"gossip"`
 	} `hcl:"encryption"`
 	Kubernetes struct {
@@ -112,6 +114,10 @@ func parseConfig(contents []byte) (*FlatConfig, *Topology, error) {
 		return nil, nil, fmt.Errorf("enterprise.namespaces cannot be configured when enterprise.enabled=false")
 	}
 
+	if cfg.EncryptionTLSAPI && !cfg.EncryptionTLS {
+		return nil, nil, fmt.Errorf("encryption.tls_api=true requires encryption.tls=true")
+	}
+
 	topology, err := InferTopology(uct, cfg.EnterpriseEnabled)
 	if err != nil {
 		return nil, nil, err
@@ -146,6 +152,7 @@ func parseConfigPartial(contents []byte) (*FlatConfig, *userConfigTopology, erro
 		ConsulImage:          uc.ConsulImage,
 		EnvoyVersion:         uc.EnvoyVersion,
 		EncryptionTLS:        uc.Encryption.TLS,
+		EncryptionTLSAPI:     uc.Encryption.TLSAPI,
 		EncryptionGossip:     uc.Encryption.Gossip,
 		KubernetesEnabled:    uc.Kubernetes.Enabled,
 		EnvoyLogLevel:        uc.Envoy.LogLevel,

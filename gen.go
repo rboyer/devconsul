@@ -361,6 +361,11 @@ resource "docker_container" "{{.NodeName}}-mesh-gateway" {
     container_path = "/bin/mesh-gateway-sidecar-boot.sh"
     read_only      = true
   }
+  volumes {
+    host_path      = abspath("cache/tls")
+    container_path = "/tls"
+    read_only      = true
+  }
 
   command = [
       "/bin/mesh-gateway-sidecar-boot.sh",
@@ -460,6 +465,10 @@ func (c *Core) generatePingPongContainers(podName string, node *Node) ([]string,
 		}
 	}
 
+	if c.config.EncryptionTLSAPI {
+		ppi.SidecarBootArgs = append(ppi.SidecarBootArgs, "-e")
+	}
+
 	appRes, err := stringTemplate(tfPingPongAppT, &ppi)
 	if err != nil {
 		return nil, err
@@ -526,6 +535,11 @@ resource "docker_container" "{{.NodeName}}-{{.PingPong}}-sidecar" {
   volumes {
     host_path      = abspath("sidecar-boot.sh")
     container_path = "/bin/sidecar-boot.sh"
+    read_only      = true
+  }
+  volumes {
+    host_path      = abspath("cache/tls")
+    container_path = "/tls"
     read_only      = true
   }
 
@@ -632,6 +646,7 @@ func (c *Core) generateAgentHCL(node *Node) (string, error) {
 		BootstrapExpect  int
 		GossipKey        string
 		TLS              bool
+		TLSAPI           bool
 		TLSFilePrefix    string
 		Prometheus       bool
 
@@ -648,6 +663,7 @@ func (c *Core) generateAgentHCL(node *Node) (string, error) {
 		Server:           node.Server,
 		GossipKey:        c.config.GossipKey,
 		TLS:              c.config.EncryptionTLS,
+		TLSAPI:           c.config.EncryptionTLSAPI,
 		Prometheus:       c.config.PrometheusEnabled,
 	}
 
@@ -772,9 +788,11 @@ encrypt                = "{{.GossipKey}}"
 ca_file                = "/tls/consul-agent-ca.pem"
 cert_file              = "/tls/{{.TLSFilePrefix}}.pem"
 key_file               = "/tls/{{.TLSFilePrefix}}-key.pem"
+{{ if .Server }}
 verify_incoming        = true
-verify_outgoing        = true
 verify_server_hostname = true
+{{- end }}
+verify_outgoing        = true
 {{ end }}
 
 {{ if not .SecondaryServer }}
@@ -804,11 +822,14 @@ connect {
   {{- end}}
 }
 
-{{ if not .Server }}
 ports {
+{{ if not .Server }}
   grpc = 8502
-}
 {{ end }}
+{{ if .TLSAPI }}
+  https = 8501
+{{ end }}
+}
 
 acl {
   enabled                  = true
