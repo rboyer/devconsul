@@ -42,6 +42,8 @@ func (c *Core) buildDockerImages(force bool) error {
 
 		hash.Write([]byte(c.config.EnvoyVersion))
 		hash.Write([]byte(c.config.ConsulImage))
+		hash.Write([]byte(c.config.CanaryEnvoyVersion))
+		hash.Write([]byte(c.config.CanaryConsulImage))
 
 		currentHash = fmt.Sprintf("%x", hash.Sum(nil))
 	}
@@ -72,9 +74,21 @@ func (c *Core) buildDockerImages(force bool) error {
 		return err
 	}
 
+	if c.config.CanaryConsulImage != "" {
+		if err := c.dockerExec([]string{
+			"tag",
+			c.config.CanaryConsulImage,
+			"local/consul-base-canary:latest",
+		}, nil); err != nil {
+			return err
+		}
+	}
+
 	// build
 	if err := c.dockerExec([]string{
 		"build",
+		"--build-arg",
+		"CONSUL_IMAGE=local/consul-base:latest",
 		"--build-arg",
 		"ENVOY_VERSION=" + c.config.EnvoyVersion,
 		"-t", "local/consul-envoy",
@@ -82,6 +96,21 @@ func (c *Core) buildDockerImages(force bool) error {
 		".",
 	}, nil); err != nil {
 		return err
+	}
+
+	if c.config.CanaryEnvoyVersion != "" {
+		if err := c.dockerExec([]string{
+			"build",
+			"--build-arg",
+			"CONSUL_IMAGE=local/consul-base-canary:latest",
+			"--build-arg",
+			"ENVOY_VERSION=" + c.config.CanaryEnvoyVersion,
+			"-t", "local/consul-envoy-canary",
+			"-f", "Dockerfile-envoy",
+			".",
+		}, nil); err != nil {
+			return err
+		}
 	}
 
 	// Checkpoint

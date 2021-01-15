@@ -97,6 +97,10 @@ resource "docker_image" %[1]q {
 	addImage("consul-envoy", "local/consul-envoy:latest")
 	addImage("pingpong", "rboyer/pingpong:latest")
 
+	if c.config.CanaryEnvoyVersion != "" {
+		addImage("consul-envoy-canary", "local/consul-envoy-canary:latest")
+	}
+
 	err = c.topology.Walk(func(node *Node) error {
 		podName := node.Name + "-pod"
 
@@ -405,21 +409,26 @@ func (c *Core) generatePingPongContainers(podName string, node *Node) ([]string,
 	}
 
 	type pingpongInfo struct {
-		PodName         string
-		NodeName        string
-		PingPong        string // ping or pong
-		MetaString      string
-		SidecarBootArgs []string
-		UseBuiltinProxy bool
-		EnvoyLogLevel   string
+		PodName            string
+		NodeName           string
+		PingPong           string // ping or pong
+		MetaString         string
+		SidecarBootArgs    []string
+		UseBuiltinProxy    bool
+		EnvoyLogLevel      string
+		EnvoyImageResource string
 	}
 
 	ppi := pingpongInfo{
-		PodName:         podName,
-		NodeName:        node.Name,
-		PingPong:        svc.Name,
-		UseBuiltinProxy: node.UseBuiltinProxy,
-		EnvoyLogLevel:   c.config.EnvoyLogLevel,
+		PodName:            podName,
+		NodeName:           node.Name,
+		PingPong:           svc.Name,
+		UseBuiltinProxy:    node.UseBuiltinProxy,
+		EnvoyLogLevel:      c.config.EnvoyLogLevel,
+		EnvoyImageResource: "docker_image.consul-envoy.latest",
+	}
+	if node.Canary {
+		ppi.EnvoyImageResource = "docker_image.consul-envoy-canary.latest"
 	}
 	if len(svc.Meta) > 0 {
 		var kvs []struct{ K, V string }
@@ -515,7 +524,7 @@ var tfPingPongSidecarT = template.Must(template.New("tf-pingpong-sidecar").Parse
 resource "docker_container" "{{.NodeName}}-{{.PingPong}}-sidecar" {
 	name = "{{.NodeName}}-{{.PingPong}}-sidecar"
     network_mode = "container:${docker_container.{{.PodName}}.id}"
-	image        = docker_image.consul-envoy.latest
+	image        = {{ .EnvoyImageResource }}
     restart  = "on-failure"
 
   labels {

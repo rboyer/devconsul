@@ -12,6 +12,8 @@ import (
 type FlatConfig struct {
 	ConsulImage          string
 	EnvoyVersion         string
+	CanaryConsulImage    string
+	CanaryEnvoyVersion   string
 	EncryptionTLS        bool
 	EncryptionTLSAPI     bool
 	EncryptionGossip     bool
@@ -33,9 +35,13 @@ func (c *FlatConfig) Namespaces() []string {
 }
 
 type userConfig struct {
-	ConsulImage  string `hcl:"consul_image"`
-	EnvoyVersion string `hcl:"envoy_version"`
-	Encryption   struct {
+	ConsulImage   string `hcl:"consul_image"`
+	EnvoyVersion  string `hcl:"envoy_version"`
+	CanaryProxies struct {
+		ConsulImage  string `hcl:"consul_image"`
+		EnvoyVersion string `hcl:"envoy_version"`
+	} `hcl:"canary_proxies"`
+	Encryption struct {
 		TLS    bool `hcl:"tls"`
 		TLSAPI bool `hcl:"tls_api"`
 		Gossip bool `hcl:"gossip"`
@@ -81,6 +87,7 @@ type userConfigTopologyNodeConfig struct {
 	ServiceNamespace            string            `hcl:"service_namespace"`
 	UseBuiltinProxy             bool              `hcl:"use_builtin_proxy"`
 	Dead                        bool              `hcl:"dead"`
+	Canary                      bool              `hcl:"canary"`
 	RetainInPrimaryGatewaysList bool              `hcl:"retain_in_primary_gateways_list"`
 }
 
@@ -118,7 +125,16 @@ func parseConfig(contents []byte) (*FlatConfig, *Topology, error) {
 		return nil, nil, fmt.Errorf("encryption.tls_api=true requires encryption.tls=true")
 	}
 
-	topology, err := InferTopology(uct, cfg.EnterpriseEnabled)
+	if cfg.CanaryConsulImage == "" && cfg.CanaryEnvoyVersion != "" {
+		return nil, nil, fmt.Errorf("canary_proxies.consul_image must be set if canary_proxies.envoy_verison is set")
+	}
+	if cfg.CanaryConsulImage != "" && cfg.CanaryEnvoyVersion == "" {
+		return nil, nil, fmt.Errorf("canary_proxies.envoy_image must be set if canary_proxies.consul_image is set")
+	}
+
+	canaryConfigured := cfg.CanaryConsulImage != "" && cfg.CanaryEnvoyVersion != ""
+
+	topology, err := InferTopology(uct, cfg.EnterpriseEnabled, canaryConfigured)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -151,6 +167,8 @@ func parseConfigPartial(contents []byte) (*FlatConfig, *userConfigTopology, erro
 	cfg := &FlatConfig{
 		ConsulImage:          uc.ConsulImage,
 		EnvoyVersion:         uc.EnvoyVersion,
+		CanaryConsulImage:    uc.CanaryProxies.ConsulImage,
+		CanaryEnvoyVersion:   uc.CanaryProxies.EnvoyVersion,
 		EncryptionTLS:        uc.Encryption.TLS,
 		EncryptionTLSAPI:     uc.Encryption.TLSAPI,
 		EncryptionGossip:     uc.Encryption.Gossip,

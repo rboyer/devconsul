@@ -1,4 +1,5 @@
+ARG CONSUL_IMAGE
 ARG ENVOY_VERSION
-FROM local/consul-base:latest
+FROM ${CONSUL_IMAGE}
 FROM envoyproxy/envoy:${ENVOY_VERSION}
 COPY --from=0 /bin/consul /bin/consul

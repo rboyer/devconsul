@@ -35,7 +35,7 @@ func (s NetworkShape) GetNetworkName(dc string) string {
 	}
 }
 
-func InferTopology(uct *userConfigTopology, enterpriseEnabled bool) (*Topology, error) {
+func InferTopology(uct *userConfigTopology, enterpriseEnabled, canaryConfigured bool) (*Topology, error) {
 	topology := &Topology{}
 
 	needsAllNetworks := false
@@ -188,6 +188,11 @@ func InferTopology(uct *userConfigTopology, enterpriseEnabled bool) (*Topology, 
 
 				node.Service = &svc
 			}
+
+			if nodeConfig.Canary && !canaryConfigured {
+				return fmt.Errorf("cannot mark a node as a canary node without configuring canary_proxies section")
+			}
+			node.Canary = nodeConfig.Canary
 
 			if nodeConfig.Dead {
 				if node.MeshGateway && node.Datacenter == PrimaryDC && nodeConfig.RetainInPrimaryGatewaysList {
@@ -447,6 +452,7 @@ type Node struct {
 	MeshGateway     bool
 	UseBuiltinProxy bool
 	Index           int
+	Canary          bool
 }
 
 func (n *Node) AddLabels(m map[string]string) {
