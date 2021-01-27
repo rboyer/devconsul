@@ -183,9 +183,15 @@ func (c *Core) initSecondaryDCs() error {
 		if err != nil {
 			return fmt.Errorf("injectAgentTokensAndWaitForNodeUpdates[%s]: %v", dc.Name, err)
 		}
+	}
 
-		c.waitForKV(dc.Name, PrimaryDC)
-		c.waitForKV(PrimaryDC, dc.Name)
+	for _, dc1 := range c.topology.Datacenters() {
+		for _, dc2 := range c.topology.Datacenters() {
+			if dc1 == dc2 {
+				continue
+			}
+			c.waitForKV(dc1.Name, dc2.Name)
+		}
 	}
 
 	return nil
