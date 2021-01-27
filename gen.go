@@ -299,14 +299,15 @@ func (c *Core) generateMeshGatewayContainer(podName string, node *Node) (string,
 	}
 
 	type tfMeshGatewayInfo struct {
-		PodName       string
-		NodeName      string
-		EnvoyLogLevel string
-		EnableWAN     bool
-		LANAddress    string
-		WANAddress    string
-		ExposeServers bool
-		Labels        map[string]string
+		PodName         string
+		NodeName        string
+		EnvoyLogLevel   string
+		EnableWAN       bool
+		LANAddress      string
+		WANAddress      string
+		ExposeServers   bool
+		SidecarBootArgs []string
+		Labels          map[string]string
 	}
 
 	mgi := tfMeshGatewayInfo{
@@ -318,6 +319,10 @@ func (c *Core) generateMeshGatewayContainer(podName string, node *Node) (string,
 		},
 	}
 	node.AddLabels(mgi.Labels)
+
+	if c.config.EncryptionTLSAPI {
+		mgi.SidecarBootArgs = append(mgi.SidecarBootArgs, "-e")
+	}
 
 	switch c.topology.NetworkShape {
 	case NetworkShapeIslands, NetworkShapeDual:
@@ -376,6 +381,9 @@ resource "docker_container" "{{.NodeName}}-mesh-gateway" {
       "/secrets/ready.val",
       "-t",
       "/secrets/mesh-gateway.val",
+{{- range .SidecarBootArgs }}
+      "{{.}}",
+{{- end}}
       "--",
 {{- if .ExposeServers }}
       "-expose-servers",

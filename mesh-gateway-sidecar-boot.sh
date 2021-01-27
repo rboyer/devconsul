@@ -14,9 +14,13 @@ while : ; do
     sleep 0.1
 done
 
+agent_tls=""
 token_file=""
-while getopts ":t:" opt; do
+while getopts ":t:e" opt; do
     case "${opt}" in
+        e)
+            agent_tls=1
+            ;;
         t)
             token_file="$OPTARG"
             ;;
@@ -47,9 +51,23 @@ while : ; do
     sleep 0.1
 done
 
+api_args=()
+grpc_args=()
+if [[ -n "$agent_tls" ]]; then
+    api_args+=(
+        -ca-file /tls/consul-agent-ca.pem
+        -http-addr https://127.0.0.1:8501
+    )
+    grpc_args+=( -grpc-addr https://127.0.0.1:8502 )
+else
+    api_args+=( -http-addr http://127.0.0.1:8500 )
+    grpc_args+=( -grpc-addr http://127.0.0.1:8502 )
+fi
+
 echo "Launching mesh-gateway proxy..."
 exec consul connect envoy \
     -register \
     -mesh-gateway \
+    "${grpc_args[@]}" "${api_args[@]}" \
     -token-file "${token_file}" \
     "$@"
