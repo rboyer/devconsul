@@ -756,6 +756,10 @@ log_level              = "trace"
 
 enable_debug                  = true
 
+# gossip_lan {
+#   retransmit_mult = 0
+# }
+
 use_streaming_backend = true
 
 {{ if .Server }}
