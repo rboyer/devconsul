@@ -522,7 +522,7 @@ resource "docker_container" "{{.NodeName}}-{{.PingPong}}" {
       "127.0.0.1:9090",
       "-pong-chaos",
       "-dialfreq",
-      "5ms",
+      "250ms",
       "-name",
       "{{.PingPong}}{{.MetaString}}",
   ]
