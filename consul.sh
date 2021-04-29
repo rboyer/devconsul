@@ -32,11 +32,19 @@ fi
 datacenter=$1
 shift
 
-
 node="${datacenter}-server1"
+error_message="unknown dc: ${datacenter}"
+if [[ "$datacenter" == *-* ]]; then
+    # actually this is a node query
+    node="${datacenter}"
+    error_message="unknown node: ${node}"
+fi
+
+
+
 ip="$(devconsul config | jq -r ".localAddrs[\"${node}\"]")"
 if [[ "$ip" = "null" ]]; then
-    echo "unknown dc: ${datacenter}" >&2
+    echo "${error_message}" >&2
     exit 1
 fi
 
