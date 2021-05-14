@@ -795,11 +795,10 @@ ui_config {
 {{ end }}
 }
 
-{{ if .Prometheus }}
 telemetry {
+  disable_hostname          = true
   prometheus_retention_time = "168h"
 }
-{{ end }}
 
 {{ if .GossipKey }}
 encrypt                = "{{.GossipKey}}"
