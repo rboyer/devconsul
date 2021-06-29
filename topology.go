@@ -132,7 +132,7 @@ func InferTopology(uct *userConfigTopology, enterpriseEnabled, canaryConfigured 
 			nodeConfig := userConfigTopologyNodeConfig{} // yay zero value!
 			if nodeConfigs != nil {
 				if c, ok := nodeConfigs[nodeName]; ok {
-					nodeConfig = c
+					nodeConfig = *c
 				}
 			}
 

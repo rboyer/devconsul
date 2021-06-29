@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"io/ioutil"
 
+	"github.com/hashicorp/hcl/v2/hclsimple"
+
 	"github.com/hashicorp/consul/api"
-	"github.com/hashicorp/hcl"
-	hclparser "github.com/hashicorp/hcl/hcl/parser"
 )
 
 type FlatConfig struct {
@@ -26,6 +26,7 @@ type FlatConfig struct {
 	AgentMasterToken     string
 	EnterpriseEnabled    bool
 	EnterpriseNamespaces []string
+	Tests                []*test
 }
 
 func (c *FlatConfig) Namespaces() []string {
@@ -35,60 +36,67 @@ func (c *FlatConfig) Namespaces() []string {
 }
 
 type userConfig struct {
-	ConsulImage   string `hcl:"consul_image"`
-	EnvoyVersion  string `hcl:"envoy_version"`
+	ConsulImage   string `hcl:"consul_image,optional"`
+	EnvoyVersion  string `hcl:"envoy_version,optional"`
 	CanaryProxies struct {
-		ConsulImage  string `hcl:"consul_image"`
-		EnvoyVersion string `hcl:"envoy_version"`
-	} `hcl:"canary_proxies"`
+		ConsulImage  string `hcl:"consul_image,optional"`
+		EnvoyVersion string `hcl:"envoy_version,optional"`
+	} `hcl:"canary_proxies,block"`
 	Encryption struct {
-		TLS    bool `hcl:"tls"`
-		TLSAPI bool `hcl:"tls_api"`
-		Gossip bool `hcl:"gossip"`
-	} `hcl:"encryption"`
+		TLS    bool `hcl:"tls,optional"`
+		TLSAPI bool `hcl:"tls_api,optional"`
+		Gossip bool `hcl:"gossip,optional"`
+	} `hcl:"encryption,block"`
 	Kubernetes struct {
-		Enabled bool `hcl:"enabled"`
-	} `hcl:"kubernetes"`
+		Enabled bool `hcl:"enabled,optional"`
+	} `hcl:"kubernetes,block"`
 	Envoy struct {
-		LogLevel string `hcl:"log_level"`
-	} `hcl:"envoy"`
+		LogLevel string `hcl:"log_level,optional"`
+	} `hcl:"envoy,block"`
 	Monitor struct {
-		Prometheus bool `hcl:"prometheus"`
-	} `hcl:"monitor"`
-	Topology           userConfigTopology `hcl:"topology"`
-	InitialMasterToken string             `hcl:"initial_master_token"`
-	RawConfigEntries   []string           `hcl:"config_entries"`
+		Prometheus bool `hcl:"prometheus,optional"`
+	} `hcl:"monitor,block"`
+	Topology           userConfigTopology `hcl:"topology,block"`
+	InitialMasterToken string             `hcl:"initial_master_token,optional"`
+	RawConfigEntries   []string           `hcl:"config_entries,optional"`
+
+	Tests []*test `hcl:"test,block"`
 
 	Enterprise struct {
-		Enabled    bool     `hcl:"enabled"`
-		Namespaces []string `hcl:"namespaces"`
-	} `hcl:"enterprise"`
+		Enabled    bool     `hcl:"enabled,optional"`
+		Namespaces []string `hcl:"namespaces,optional"`
+	} `hcl:"enterprise,block"`
+}
+
+type test struct {
+	Name  string `hcl:"name"`
+	Value string `hcl:"value"`
 }
 
 type userConfigTopology struct {
-	NetworkShape        string                                  `hcl:"network_shape"`
-	DisableWANBootstrap bool                                    `hcl:"disable_wan_bootstrap"`
-	Datacenters         map[string]userConfigTopologyDatacenter `hcl:"datacenters"`
-	NodeConfig          map[string]userConfigTopologyNodeConfig `hcl:"node_config"` // node -> data
+	NetworkShape        string                                   `hcl:"network_shape,optional"`
+	DisableWANBootstrap bool                                     `hcl:"disable_wan_bootstrap,optional"`
+	Datacenters         map[string]*userConfigTopologyDatacenter `hcl:"datacenters,optional"`
+	NodeConfig          map[string]*userConfigTopologyNodeConfig `hcl:"node_config,optional"` // node -> data
 }
 
 type userConfigTopologyDatacenter struct {
-	Servers      int `hcl:"servers"`
-	Clients      int `hcl:"clients"`
-	MeshGateways int `hcl:"mesh_gateways"`
+	Servers      int `hcl:"servers,optional"`
+	Clients      int `hcl:"clients,optional"`
+	MeshGateways int `hcl:"mesh_gateways,optional"`
 }
 
 type userConfigTopologyNodeConfig struct {
-	UpstreamName                string            `hcl:"upstream_name"`
-	UpstreamNamespace           string            `hcl:"upstream_namespace"`
-	UpstreamDatacenter          string            `hcl:"upstream_datacenter"`
-	UpstreamExtraHCL            string            `hcl:"upstream_extra_hcl"`
-	ServiceMeta                 map[string]string `hcl:"service_meta"` // key -> val
-	ServiceNamespace            string            `hcl:"service_namespace"`
-	UseBuiltinProxy             bool              `hcl:"use_builtin_proxy"`
-	Dead                        bool              `hcl:"dead"`
-	Canary                      bool              `hcl:"canary"`
-	RetainInPrimaryGatewaysList bool              `hcl:"retain_in_primary_gateways_list"`
+	UpstreamName                string            `hcl:"upstream_name,optional"`
+	UpstreamNamespace           string            `hcl:"upstream_namespace,optional"`
+	UpstreamDatacenter          string            `hcl:"upstream_datacenter,optional"`
+	UpstreamExtraHCL            string            `hcl:"upstream_extra_hcl,optional"`
+	ServiceMeta                 map[string]string `hcl:"service_meta,optional"` // key -> val
+	ServiceNamespace            string            `hcl:"service_namespace,optional"`
+	UseBuiltinProxy             bool              `hcl:"use_builtin_proxy,optional"`
+	Dead                        bool              `hcl:"dead,optional"`
+	Canary                      bool              `hcl:"canary,optional"`
+	RetainInPrimaryGatewaysList bool              `hcl:"retain_in_primary_gateways_list,optional"`
 }
 
 func (c *userConfigTopologyNodeConfig) Meta() map[string]string {
@@ -157,8 +165,8 @@ func parseConfig(contents []byte) (*FlatConfig, *Topology, error) {
 func parseConfigPartial(contents []byte) (*FlatConfig, *userConfigTopology, error) {
 	var uc userConfig
 	err := serialDecodeHCL(&uc, []string{
-		defaultUserConfig,
-		string(contents),
+		"defaults.hcl", defaultUserConfig,
+		"config.hcl", string(contents),
 	})
 	if err != nil {
 		return nil, nil, err
@@ -178,6 +186,7 @@ func parseConfigPartial(contents []byte) (*FlatConfig, *userConfigTopology, erro
 		InitialMasterToken:   uc.InitialMasterToken,
 		EnterpriseEnabled:    uc.Enterprise.Enabled,
 		EnterpriseNamespaces: uc.Enterprise.Namespaces,
+		Tests:                uc.Tests,
 	}
 
 	for i, raw := range uc.RawConfigEntries {
@@ -192,14 +201,32 @@ func parseConfigPartial(contents []byte) (*FlatConfig, *userConfigTopology, erro
 }
 
 func serialDecodeHCL(out interface{}, configs []string) error {
-	for i, config := range configs {
-		n, err := hclparser.Parse([]byte(config))
-		if err != nil {
-			return fmt.Errorf("could not parse snippet #%d: %v", i, err)
+	for i := 0; i < len(configs); i += 2 {
+		name := configs[i]
+		config := configs[i+1]
+		if err := decodeHCL(out, name, config); err != nil {
+			return err
 		}
-		if err := hcl.DecodeObject(out, n); err != nil {
-			return fmt.Errorf("could not decode snippet #%d: %v", i, err)
+	}
+	return nil
+}
+
+func decodeHCL(out interface{}, name, config string) (xerr error) {
+	defer func() {
+		if r := recover(); r != nil {
+			panic(fmt.Sprintf(
+				"could not parse and decode snippet %q: %v", name, r,
+			))
 		}
+	}()
+	err := hclsimple.Decode(
+		name,
+		[]byte(config),
+		nil,
+		out,
+	)
+	if err != nil {
+		return fmt.Errorf("could not parse and decode snippet %q: %v", name, err)
 	}
 	return nil
 }
@@ -218,8 +245,8 @@ monitor {
 }
 topology {
   network_shape = "flat"
-  datacenters {
-    dc1 {
+  datacenters = {
+    dc1 = {
       servers       = 1
       clients       = 2
       mesh_gateways = 0
