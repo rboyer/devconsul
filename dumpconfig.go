@@ -3,7 +3,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"os"
 )
 
 func (c *Core) RunConfigDump() error {
@@ -35,9 +34,6 @@ func (c *Core) RunConfigDump() error {
 	for _, dc := range c.topology.Datacenters() {
 		datacenters = append(datacenters, dc.Name)
 	}
-
-	fmt.Printf(jsonPretty(c.config) + "\n")
-	os.Exit(0)
 
 	m := map[string]interface{}{
 		"image":            c.config.ConsulImage,

@@ -26,7 +26,6 @@ type FlatConfig struct {
 	AgentMasterToken     string
 	EnterpriseEnabled    bool
 	EnterpriseNamespaces []string
-	Tests                []*test
 }
 
 func (c *FlatConfig) Namespaces() []string {
@@ -44,12 +43,9 @@ type userConfig struct {
 	Envoy              *userConfigEnvoy         `hcl:"envoy,block"`
 	Monitor            *userConfigMonitor       `hcl:"monitor,block"`
 	Topology           *userConfigTopology      `hcl:"topology,block"`
+	Enterprise         *userConfigEnterprise    `hcl:"enterprise,block"`
 	InitialMasterToken string                   `hcl:"initial_master_token,optional"`
 	RawConfigEntries   []string                 `hcl:"config_entries,optional"`
-
-	Tests []*test `hcl:"test,block"`
-
-	Enterprise *userConfigEnterprise `hcl:"enterprise,block"`
 }
 
 func (uc *userConfig) DEPRECATED() {
@@ -118,11 +114,6 @@ type userConfigCanaryProxies struct {
 type userConfigEnterprise struct {
 	Enabled    bool     `hcl:"enabled,optional"`
 	Namespaces []string `hcl:"namespaces,optional"`
-}
-
-type test struct {
-	Name  string `hcl:"name,label"`
-	Value string `hcl:"value"`
 }
 
 type userConfigTopology struct {
@@ -246,7 +237,6 @@ func parseConfigPartial(contents []byte) (*FlatConfig, *userConfigTopology, erro
 		InitialMasterToken:   uc.InitialMasterToken,
 		EnterpriseEnabled:    uc.Enterprise.Enabled,
 		EnterpriseNamespaces: uc.Enterprise.Namespaces,
-		Tests:                uc.Tests,
 	}
 
 	for i, raw := range uc.RawConfigEntries {
