@@ -115,7 +115,7 @@ func TestInferTopology(t *testing.T) {
 		tc := tc
 		t.Run(name, func(t *testing.T) {
 			_ = tc
-			topo, err := InferTopology(tc.uc, tc.enterprise, false)
+			topo, err := InferTopology(tc.uc, tc.enterprise, false, nil)
 			if tc.expectExactErr != "" {
 				require.EqualError(t, err, tc.expectExactErr)
 				require.Nil(t, topo)

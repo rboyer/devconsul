@@ -30,8 +30,15 @@ func TestParseConfigPartial_EmptyInferDefaults(t *testing.T) {
 func TestParseConfigPartial_AllFields(t *testing.T) {
 	body := `
 		consul_image = "my-dev-image:blah"
+		envoy_version = "v1.18.3"
+		canary_proxies {
+			consul_image = "consul:1.9.5"
+			envoy_version = "v1.17.2"
+			nodes = [ "abc", "def" ]
+		}
 		encryption {
 			tls = true
+			tls_api = true
 			gossip = true
 		}
 		kubernetes {
@@ -42,6 +49,11 @@ func TestParseConfigPartial_AllFields(t *testing.T) {
 		}
 		monitor {
 			prometheus = true
+		}
+		initial_master_token = "root"
+		enterprise {
+			enabled = true
+			namespaces = ["foo", "bar"]
 		}
 		topology {
 			network_shape = "islands"
@@ -65,7 +77,6 @@ func TestParseConfigPartial_AllFields(t *testing.T) {
 				use_builtin_proxy = true
 			}
 		}
-		initial_master_token = "root"
 		config_entries = [
 			<<EOF
 {
@@ -96,14 +107,20 @@ EOF
 	require.NoError(t, err)
 
 	require.Equal(t, &FlatConfig{
-		ConsulImage:        "my-dev-image:blah",
-		EncryptionTLS:      true,
-		EncryptionGossip:   true,
-		KubernetesEnabled:  true,
-		PrometheusEnabled:  true,
-		EnvoyLogLevel:      "debug",
-		EnvoyVersion:       "v1.16.0",
-		InitialMasterToken: "root",
+		ConsulImage:          "my-dev-image:blah",
+		EnvoyVersion:         "v1.18.3",
+		CanaryConsulImage:    "consul:1.9.5",
+		CanaryEnvoyVersion:   "v1.17.2",
+		CanaryNodes:          []string{"abc", "def"},
+		EncryptionTLS:        true,
+		EncryptionTLSAPI:     true,
+		EncryptionGossip:     true,
+		KubernetesEnabled:    true,
+		EnvoyLogLevel:        "debug",
+		PrometheusEnabled:    true,
+		InitialMasterToken:   "root",
+		EnterpriseEnabled:    true,
+		EnterpriseNamespaces: []string{"foo", "bar"},
 		ConfigEntries: []api.ConfigEntry{
 			&api.ProxyConfigEntry{
 				Kind: api.ProxyDefaults,

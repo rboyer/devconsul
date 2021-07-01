@@ -35,7 +35,12 @@ func (s NetworkShape) GetNetworkName(dc string) string {
 	}
 }
 
-func InferTopology(uct *userConfigTopology, enterpriseEnabled, canaryConfigured bool) (*Topology, error) {
+func InferTopology(
+	uct *userConfigTopology,
+	enterpriseEnabled bool,
+	canaryConfigured bool,
+	canaryNodes map[string]struct{},
+) (*Topology, error) {
 	topology := &Topology{}
 
 	needsAllNetworks := false
