@@ -36,10 +36,13 @@ func TestParseConfigPartial_AllFields(t *testing.T) {
 			envoy_version = "v1.17.2"
 			nodes = [ "abc", "def" ]
 		}
-		encryption {
-			tls = true
-			tls_api = true
-			gossip = true
+		security {
+			encryption {
+				tls = true
+				tls_api = true
+				gossip = true
+			}
+			initial_master_token = "root"
 		}
 		kubernetes {
 			enabled = true
@@ -50,7 +53,6 @@ func TestParseConfigPartial_AllFields(t *testing.T) {
 		monitor {
 			prometheus = true
 		}
-		initial_master_token = "root"
 		enterprise {
 			enabled = true
 			namespaces = ["foo", "bar"]

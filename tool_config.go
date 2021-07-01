@@ -35,28 +35,28 @@ func (c *FlatConfig) Namespaces() []string {
 	return out
 }
 
-// TODO: security{}
-
 type userConfig struct {
-	ConsulImage        string                   `hcl:"consul_image,optional"`
-	EnvoyVersion       string                   `hcl:"envoy_version,optional"`
-	CanaryProxies      *userConfigCanaryProxies `hcl:"canary_proxies,block"`
-	Encryption         *userConfigEncryption    `hcl:"encryption,block"`
-	Kubernetes         *userConfigK8S           `hcl:"kubernetes,block"`
-	Envoy              *userConfigEnvoy         `hcl:"envoy,block"`
-	Monitor            *userConfigMonitor       `hcl:"monitor,block"`
-	InitialMasterToken string                   `hcl:"initial_master_token,optional"`
-	Enterprise         *userConfigEnterprise    `hcl:"enterprise,block"`
-	Topology           *userConfigTopology      `hcl:"topology,block"`
-	RawConfigEntries   []string                 `hcl:"config_entries,optional"`
+	ConsulImage      string                   `hcl:"consul_image,optional"`
+	EnvoyVersion     string                   `hcl:"envoy_version,optional"`
+	CanaryProxies    *userConfigCanaryProxies `hcl:"canary_proxies,block"`
+	Security         *userConfigSecurity      `hcl:"security,block"`
+	Kubernetes       *userConfigK8S           `hcl:"kubernetes,block"`
+	Envoy            *userConfigEnvoy         `hcl:"envoy,block"`
+	Monitor          *userConfigMonitor       `hcl:"monitor,block"`
+	Enterprise       *userConfigEnterprise    `hcl:"enterprise,block"`
+	Topology         *userConfigTopology      `hcl:"topology,block"`
+	RawConfigEntries []string                 `hcl:"config_entries,optional"`
 }
 
 func (uc *userConfig) removeNilFields() {
 	if uc.CanaryProxies == nil {
 		uc.CanaryProxies = &userConfigCanaryProxies{}
 	}
-	if uc.Encryption == nil {
-		uc.Encryption = &userConfigEncryption{}
+	if uc.Security == nil {
+		uc.Security = &userConfigSecurity{}
+	}
+	if uc.Security.Encryption == nil {
+		uc.Security.Encryption = &userConfigEncryption{}
 	}
 	if uc.Kubernetes == nil {
 		uc.Kubernetes = &userConfigK8S{}
@@ -85,6 +85,11 @@ type userConfigEnvoy struct {
 
 type userConfigK8S struct {
 	Enabled bool `hcl:"enabled,optional"`
+}
+
+type userConfigSecurity struct {
+	Encryption         *userConfigEncryption `hcl:"encryption,block"`
+	InitialMasterToken string                `hcl:"initial_master_token,optional"`
 }
 
 type userConfigEncryption struct {
@@ -235,13 +240,13 @@ func parseConfigPartial(contents []byte) (*FlatConfig, *userConfigTopology, erro
 		CanaryConsulImage:    uc.CanaryProxies.ConsulImage,
 		CanaryEnvoyVersion:   uc.CanaryProxies.EnvoyVersion,
 		CanaryNodes:          uc.CanaryProxies.Nodes,
-		EncryptionTLS:        uc.Encryption.TLS,
-		EncryptionTLSAPI:     uc.Encryption.TLSAPI,
-		EncryptionGossip:     uc.Encryption.Gossip,
+		EncryptionTLS:        uc.Security.Encryption.TLS,
+		EncryptionTLSAPI:     uc.Security.Encryption.TLSAPI,
+		EncryptionGossip:     uc.Security.Encryption.Gossip,
 		KubernetesEnabled:    uc.Kubernetes.Enabled,
 		EnvoyLogLevel:        uc.Envoy.LogLevel,
 		PrometheusEnabled:    uc.Monitor.Prometheus,
-		InitialMasterToken:   uc.InitialMasterToken,
+		InitialMasterToken:   uc.Security.InitialMasterToken,
 		EnterpriseEnabled:    uc.Enterprise.Enabled,
 		EnterpriseNamespaces: uc.Enterprise.Namespaces,
 	}
