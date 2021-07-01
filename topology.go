@@ -190,10 +190,9 @@ func InferTopology(
 				node.Service = &svc
 			}
 
-			if nodeConfig.Canary && !canaryConfigured {
-				return fmt.Errorf("cannot mark a node as a canary node without configuring canary_proxies section")
+			if canaryConfigured {
+				_, node.Canary = canaryNodes[nodeName]
 			}
-			node.Canary = nodeConfig.Canary
 
 			if nodeConfig.Dead {
 				if node.MeshGateway && node.Datacenter == PrimaryDC && nodeConfig.RetainInPrimaryGatewaysList {

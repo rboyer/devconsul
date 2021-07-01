@@ -147,8 +147,6 @@ type userConfigTopologyNodeConfig struct {
 	UseBuiltinProxy             bool              `hcl:"use_builtin_proxy,optional"`
 	Dead                        bool              `hcl:"dead,optional"`
 	RetainInPrimaryGatewaysList bool              `hcl:"retain_in_primary_gateways_list,optional"`
-	//DEPRECATED
-	Canary bool `hcl:"canary,optional"`
 }
 
 func (c *userConfigTopologyNodeConfig) Meta() map[string]string {
