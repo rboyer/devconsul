@@ -150,18 +150,6 @@ EOF
 			UseBuiltinProxy: true,
 		},
 	}
-	expectUCT.NodeConfig = map[string]*userConfigTopologyNodeConfig{
-		"dc1-client2": {
-			NodeName:           "dc1-client2",
-			UpstreamName:       "fake-service",
-			UpstreamDatacenter: "fake-dc",
-			UpstreamExtraHCL:   "super invalid",
-			ServiceMeta: map[string]string{
-				"version": "v2",
-			},
-			UseBuiltinProxy: true,
-		},
-	}
 
 	require.Equal(t, expectUCT, *uct)
 }

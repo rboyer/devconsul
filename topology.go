@@ -66,7 +66,7 @@ func InferTopology(uct *userConfigTopology, enterpriseEnabled, canaryConfigured 
 		})
 	}
 
-	nodeConfigs := uct.NodeConfig
+	nodeConfigs := uct.NodeMap()
 
 	forDC := func(dc, baseIP, wanBaseIP string, servers, clients, meshGateways int) error {
 		for idx := 1; idx <= servers; idx++ {
@@ -130,10 +130,8 @@ func InferTopology(uct *userConfigTopology, enterpriseEnabled, canaryConfigured 
 			}
 
 			nodeConfig := userConfigTopologyNodeConfig{} // yay zero value!
-			if nodeConfigs != nil {
-				if c, ok := nodeConfigs[nodeName]; ok {
-					nodeConfig = *c
-				}
+			if c, ok := nodeConfigs[nodeName]; ok {
+				nodeConfig = *c
 			}
 
 			if isGatewayClient {

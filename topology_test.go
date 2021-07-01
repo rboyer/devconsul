@@ -43,14 +43,16 @@ func TestInferTopology(t *testing.T) {
 						MeshGateways: 1,
 					},
 				},
-				NodeConfig: map[string]*userConfigTopologyNodeConfig{
-					"dc1-client1": {
+				Nodes: []*userConfigTopologyNodeConfig{
+					{
+						NodeName: "dc1-client1",
 						ServiceMeta: map[string]string{
 							"foo": "bar",
 							"RAB": "OOF",
 						},
 					},
-					"dc2-client2": {
+					{
+						NodeName:           "dc2-client2",
 						UpstreamName:       "blah",
 						UpstreamDatacenter: "fake",
 						UpstreamExtraHCL:   "// not real",

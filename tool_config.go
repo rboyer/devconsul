@@ -55,13 +55,6 @@ func (uc *userConfig) DEPRECATED() {
 			uc.Topology.Datacenters[dc.Name] = dc
 		}
 	}
-
-	if len(uc.Topology.Nodes) > 0 {
-		uc.Topology.NodeConfig = make(map[string]*userConfigTopologyNodeConfig)
-		for _, nc := range uc.Topology.Nodes {
-			uc.Topology.NodeConfig[nc.NodeName] = nc
-		}
-	}
 }
 
 func (uc *userConfig) removeNilFields() {
@@ -123,7 +116,14 @@ type userConfigTopology struct {
 	Nodes               []*userConfigTopologyNodeConfig `hcl:"node,block"`
 
 	Datacenters map[string]*userConfigTopologyDatacenter
-	NodeConfig  map[string]*userConfigTopologyNodeConfig
+}
+
+func (t *userConfigTopology) NodeMap() map[string]*userConfigTopologyNodeConfig {
+	m := make(map[string]*userConfigTopologyNodeConfig)
+	for _, n := range t.Nodes {
+		m[n.NodeName] = n
+	}
+	return m
 }
 
 type userConfigTopologyDatacenter struct {
