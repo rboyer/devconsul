@@ -116,20 +116,13 @@ func (t *userConfigTopology) GetDatacenter(name string) *userConfigTopologyDatac
 	return nil
 }
 
-func (t *userConfigTopology) DatacenterMap() map[string]*userConfigTopologyDatacenter {
-	m := make(map[string]*userConfigTopologyDatacenter)
-	for _, dc := range t.Datacenter {
-		m[dc.Name] = dc
-	}
-	return m
-}
-
-func (t *userConfigTopology) NodeMap() map[string]*userConfigTopologyNodeConfig {
-	m := make(map[string]*userConfigTopologyNodeConfig)
+func (t *userConfigTopology) GetNode(name string) *userConfigTopologyNodeConfig {
 	for _, n := range t.Nodes {
-		m[n.NodeName] = n
+		if n.NodeName == name {
+			return n
+		}
 	}
-	return m
+	return nil
 }
 
 type userConfigTopologyDatacenter struct {
