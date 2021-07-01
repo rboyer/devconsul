@@ -23,9 +23,6 @@ func TestParseConfigPartial_EmptyInferDefaults(t *testing.T) {
 	expectUCT.Datacenter = []*userConfigTopologyDatacenter{
 		{Name: "dc1", Servers: 1, Clients: 2},
 	}
-	expectUCT.Datacenters = map[string]*userConfigTopologyDatacenter{
-		"dc1": {Name: "dc1", Servers: 1, Clients: 2},
-	}
 
 	require.Equal(t, expectUCT, *uct)
 }
@@ -130,10 +127,6 @@ EOF
 
 	var expectUCT userConfigTopology
 	expectUCT.NetworkShape = "islands"
-	expectUCT.Datacenters = map[string]*userConfigTopologyDatacenter{
-		"dc1": {Name: "dc1", Servers: 3, Clients: 2, MeshGateways: 1},
-		"dc2": {Name: "dc2", Servers: 3, Clients: 2, MeshGateways: 1},
-	}
 	expectUCT.Datacenter = []*userConfigTopologyDatacenter{
 		{Name: "dc1", Servers: 3, Clients: 2, MeshGateways: 1},
 		{Name: "dc2", Servers: 3, Clients: 2, MeshGateways: 1},

@@ -48,15 +48,6 @@ type userConfig struct {
 	RawConfigEntries   []string                 `hcl:"config_entries,optional"`
 }
 
-func (uc *userConfig) DEPRECATED() {
-	if len(uc.Topology.Datacenter) > 0 {
-		uc.Topology.Datacenters = make(map[string]*userConfigTopologyDatacenter)
-		for _, dc := range uc.Topology.Datacenter {
-			uc.Topology.Datacenters[dc.Name] = dc
-		}
-	}
-}
-
 func (uc *userConfig) removeNilFields() {
 	if uc.CanaryProxies == nil {
 		uc.CanaryProxies = &userConfigCanaryProxies{}
@@ -114,8 +105,23 @@ type userConfigTopology struct {
 	DisableWANBootstrap bool                            `hcl:"disable_wan_bootstrap,optional"`
 	Datacenter          []*userConfigTopologyDatacenter `hcl:"datacenter,block"`
 	Nodes               []*userConfigTopologyNodeConfig `hcl:"node,block"`
+}
 
-	Datacenters map[string]*userConfigTopologyDatacenter
+func (t *userConfigTopology) GetDatacenter(name string) *userConfigTopologyDatacenter {
+	for _, dc := range t.Datacenter {
+		if dc.Name == name {
+			return dc
+		}
+	}
+	return nil
+}
+
+func (t *userConfigTopology) DatacenterMap() map[string]*userConfigTopologyDatacenter {
+	m := make(map[string]*userConfigTopologyDatacenter)
+	for _, dc := range t.Datacenter {
+		m[dc.Name] = dc
+	}
+	return m
 }
 
 func (t *userConfigTopology) NodeMap() map[string]*userConfigTopologyNodeConfig {
@@ -221,7 +227,6 @@ func parseConfigPartial(contents []byte) (*FlatConfig, *userConfigTopology, erro
 	}
 
 	uc.removeNilFields()
-	uc.DEPRECATED()
 
 	cfg := &FlatConfig{
 		ConsulImage:          uc.ConsulImage,
