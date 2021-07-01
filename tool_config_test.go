@@ -57,6 +57,7 @@ func TestParseConfigPartial_AllFields(t *testing.T) {
 		}
 		topology {
 			network_shape = "islands"
+			disable_wan_bootstrap = true
 			datacenter "dc1" {
 				servers = 3
 				clients = 2
@@ -69,12 +70,16 @@ func TestParseConfigPartial_AllFields(t *testing.T) {
 			}
 			node "dc1-client2" {
 				upstream_name = "fake-service"
+				upstream_namespace = "foo"
 				upstream_datacenter = "fake-dc"
 				upstream_extra_hcl = "super invalid"
 				service_meta ={
 					version = "v2"
 				}
+				service_namespace = "bar"
 				use_builtin_proxy = true
+				dead = true
+				retain_in_primary_gateways_list = true
 			}
 		}
 		config_entries = [
@@ -142,24 +147,30 @@ EOF
 		},
 	}, fc)
 
-	var expectUCT userConfigTopology
-	expectUCT.NetworkShape = "islands"
-	expectUCT.Datacenter = []*userConfigTopologyDatacenter{
-		{Name: "dc1", Servers: 3, Clients: 2, MeshGateways: 1},
-		{Name: "dc2", Servers: 3, Clients: 2, MeshGateways: 1},
-	}
-	expectUCT.Nodes = []*userConfigTopologyNodeConfig{
-		{
-			NodeName:           "dc1-client2",
-			UpstreamName:       "fake-service",
-			UpstreamDatacenter: "fake-dc",
-			UpstreamExtraHCL:   "super invalid",
-			ServiceMeta: map[string]string{
-				"version": "v2",
+	expectUCT := &userConfigTopology{
+		NetworkShape:        "islands",
+		DisableWANBootstrap: true,
+		Datacenter: []*userConfigTopologyDatacenter{
+			{Name: "dc1", Servers: 3, Clients: 2, MeshGateways: 1},
+			{Name: "dc2", Servers: 3, Clients: 2, MeshGateways: 1},
+		},
+		Nodes: []*userConfigTopologyNodeConfig{
+			{
+				NodeName:           "dc1-client2",
+				UpstreamName:       "fake-service",
+				UpstreamNamespace:  "foo",
+				UpstreamDatacenter: "fake-dc",
+				UpstreamExtraHCL:   "super invalid",
+				ServiceMeta: map[string]string{
+					"version": "v2",
+				},
+				ServiceNamespace:            "bar",
+				UseBuiltinProxy:             true,
+				Dead:                        true,
+				RetainInPrimaryGatewaysList: true,
 			},
-			UseBuiltinProxy: true,
 		},
 	}
 
-	require.Equal(t, expectUCT, *uct)
+	require.Equal(t, expectUCT, uct)
 }
