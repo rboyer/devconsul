@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"io/ioutil"
 
+	"github.com/hashicorp/hcl/v2/hclsimple"
+
 	"github.com/hashicorp/consul/api"
-	"github.com/hashicorp/hcl"
-	hclparser "github.com/hashicorp/hcl/hcl/parser"
 )
 
 type FlatConfig struct {
@@ -14,6 +14,7 @@ type FlatConfig struct {
 	EnvoyVersion         string
 	CanaryConsulImage    string
 	CanaryEnvoyVersion   string
+	CanaryNodes          []string
 	EncryptionTLS        bool
 	EncryptionTLSAPI     bool
 	EncryptionGossip     bool
@@ -35,60 +36,122 @@ func (c *FlatConfig) Namespaces() []string {
 }
 
 type userConfig struct {
-	ConsulImage   string `hcl:"consul_image"`
-	EnvoyVersion  string `hcl:"envoy_version"`
-	CanaryProxies struct {
-		ConsulImage  string `hcl:"consul_image"`
-		EnvoyVersion string `hcl:"envoy_version"`
-	} `hcl:"canary_proxies"`
-	Encryption struct {
-		TLS    bool `hcl:"tls"`
-		TLSAPI bool `hcl:"tls_api"`
-		Gossip bool `hcl:"gossip"`
-	} `hcl:"encryption"`
-	Kubernetes struct {
-		Enabled bool `hcl:"enabled"`
-	} `hcl:"kubernetes"`
-	Envoy struct {
-		LogLevel string `hcl:"log_level"`
-	} `hcl:"envoy"`
-	Monitor struct {
-		Prometheus bool `hcl:"prometheus"`
-	} `hcl:"monitor"`
-	Topology           userConfigTopology `hcl:"topology"`
-	InitialMasterToken string             `hcl:"initial_master_token"`
-	RawConfigEntries   []string           `hcl:"config_entries"`
+	ConsulImage      string                   `hcl:"consul_image,optional"`
+	EnvoyVersion     string                   `hcl:"envoy_version,optional"`
+	CanaryProxies    *userConfigCanaryProxies `hcl:"canary_proxies,block"`
+	Security         *userConfigSecurity      `hcl:"security,block"`
+	Kubernetes       *userConfigK8S           `hcl:"kubernetes,block"`
+	Envoy            *userConfigEnvoy         `hcl:"envoy,block"`
+	Monitor          *userConfigMonitor       `hcl:"monitor,block"`
+	Enterprise       *userConfigEnterprise    `hcl:"enterprise,block"`
+	Topology         *userConfigTopology      `hcl:"topology,block"`
+	RawConfigEntries []string                 `hcl:"config_entries,optional"`
+}
 
-	Enterprise struct {
-		Enabled    bool     `hcl:"enabled"`
-		Namespaces []string `hcl:"namespaces"`
-	} `hcl:"enterprise"`
+func (uc *userConfig) removeNilFields() {
+	if uc.CanaryProxies == nil {
+		uc.CanaryProxies = &userConfigCanaryProxies{}
+	}
+	if uc.Security == nil {
+		uc.Security = &userConfigSecurity{}
+	}
+	if uc.Security.Encryption == nil {
+		uc.Security.Encryption = &userConfigEncryption{}
+	}
+	if uc.Kubernetes == nil {
+		uc.Kubernetes = &userConfigK8S{}
+	}
+	if uc.Envoy == nil {
+		uc.Envoy = &userConfigEnvoy{}
+	}
+	if uc.Monitor == nil {
+		uc.Monitor = &userConfigMonitor{}
+	}
+	if uc.Topology == nil {
+		uc.Topology = &userConfigTopology{}
+	}
+	if uc.Enterprise == nil {
+		uc.Enterprise = &userConfigEnterprise{}
+	}
+}
+
+type userConfigMonitor struct {
+	Prometheus bool `hcl:"prometheus,optional"`
+}
+
+type userConfigEnvoy struct {
+	LogLevel string `hcl:"log_level,optional"`
+}
+
+type userConfigK8S struct {
+	Enabled bool `hcl:"enabled,optional"`
+}
+
+type userConfigSecurity struct {
+	Encryption         *userConfigEncryption `hcl:"encryption,block"`
+	InitialMasterToken string                `hcl:"initial_master_token,optional"`
+}
+
+type userConfigEncryption struct {
+	TLS    bool `hcl:"tls,optional"`
+	TLSAPI bool `hcl:"tls_api,optional"`
+	Gossip bool `hcl:"gossip,optional"`
+}
+
+type userConfigCanaryProxies struct {
+	ConsulImage  string   `hcl:"consul_image,optional"`
+	EnvoyVersion string   `hcl:"envoy_version,optional"`
+	Nodes        []string `hcl:"nodes,optional"`
+}
+
+type userConfigEnterprise struct {
+	Enabled    bool     `hcl:"enabled,optional"`
+	Namespaces []string `hcl:"namespaces,optional"`
 }
 
 type userConfigTopology struct {
-	NetworkShape        string                                  `hcl:"network_shape"`
-	DisableWANBootstrap bool                                    `hcl:"disable_wan_bootstrap"`
-	Datacenters         map[string]userConfigTopologyDatacenter `hcl:"datacenters"`
-	NodeConfig          map[string]userConfigTopologyNodeConfig `hcl:"node_config"` // node -> data
+	NetworkShape        string                          `hcl:"network_shape,optional"`
+	DisableWANBootstrap bool                            `hcl:"disable_wan_bootstrap,optional"`
+	Datacenter          []*userConfigTopologyDatacenter `hcl:"datacenter,block"`
+	Nodes               []*userConfigTopologyNodeConfig `hcl:"node,block"`
+}
+
+func (t *userConfigTopology) GetDatacenter(name string) *userConfigTopologyDatacenter {
+	for _, dc := range t.Datacenter {
+		if dc.Name == name {
+			return dc
+		}
+	}
+	return nil
+}
+
+func (t *userConfigTopology) GetNode(name string) *userConfigTopologyNodeConfig {
+	for _, n := range t.Nodes {
+		if n.NodeName == name {
+			return n
+		}
+	}
+	return nil
 }
 
 type userConfigTopologyDatacenter struct {
-	Servers      int `hcl:"servers"`
-	Clients      int `hcl:"clients"`
-	MeshGateways int `hcl:"mesh_gateways"`
+	Name         string `hcl:"name,label"`
+	Servers      int    `hcl:"servers,optional"`
+	Clients      int    `hcl:"clients,optional"`
+	MeshGateways int    `hcl:"mesh_gateways,optional"`
 }
 
 type userConfigTopologyNodeConfig struct {
-	UpstreamName                string            `hcl:"upstream_name"`
-	UpstreamNamespace           string            `hcl:"upstream_namespace"`
-	UpstreamDatacenter          string            `hcl:"upstream_datacenter"`
-	UpstreamExtraHCL            string            `hcl:"upstream_extra_hcl"`
-	ServiceMeta                 map[string]string `hcl:"service_meta"` // key -> val
-	ServiceNamespace            string            `hcl:"service_namespace"`
-	UseBuiltinProxy             bool              `hcl:"use_builtin_proxy"`
-	Dead                        bool              `hcl:"dead"`
-	Canary                      bool              `hcl:"canary"`
-	RetainInPrimaryGatewaysList bool              `hcl:"retain_in_primary_gateways_list"`
+	NodeName                    string            `hcl:"name,label"`
+	UpstreamName                string            `hcl:"upstream_name,optional"`
+	UpstreamNamespace           string            `hcl:"upstream_namespace,optional"`
+	UpstreamDatacenter          string            `hcl:"upstream_datacenter,optional"`
+	UpstreamExtraHCL            string            `hcl:"upstream_extra_hcl,optional"`
+	ServiceMeta                 map[string]string `hcl:"service_meta,optional"` // key -> val
+	ServiceNamespace            string            `hcl:"service_namespace,optional"`
+	UseBuiltinProxy             bool              `hcl:"use_builtin_proxy,optional"`
+	Dead                        bool              `hcl:"dead,optional"`
+	RetainInPrimaryGatewaysList bool              `hcl:"retain_in_primary_gateways_list,optional"`
 }
 
 func (c *userConfigTopologyNodeConfig) Meta() map[string]string {
@@ -134,7 +197,12 @@ func parseConfig(contents []byte) (*FlatConfig, *Topology, error) {
 
 	canaryConfigured := cfg.CanaryConsulImage != "" && cfg.CanaryEnvoyVersion != ""
 
-	topology, err := InferTopology(uct, cfg.EnterpriseEnabled, canaryConfigured)
+	canaryNodes := make(map[string]struct{})
+	for _, n := range cfg.CanaryNodes {
+		canaryNodes[n] = struct{}{}
+	}
+
+	topology, err := InferTopology(uct, cfg.EnterpriseEnabled, canaryConfigured, canaryNodes)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -157,25 +225,28 @@ func parseConfig(contents []byte) (*FlatConfig, *Topology, error) {
 func parseConfigPartial(contents []byte) (*FlatConfig, *userConfigTopology, error) {
 	var uc userConfig
 	err := serialDecodeHCL(&uc, []string{
-		defaultUserConfig,
-		string(contents),
+		"defaults.hcl", defaultUserConfig,
+		"config.hcl", string(contents),
 	})
 	if err != nil {
 		return nil, nil, err
 	}
+
+	uc.removeNilFields()
 
 	cfg := &FlatConfig{
 		ConsulImage:          uc.ConsulImage,
 		EnvoyVersion:         uc.EnvoyVersion,
 		CanaryConsulImage:    uc.CanaryProxies.ConsulImage,
 		CanaryEnvoyVersion:   uc.CanaryProxies.EnvoyVersion,
-		EncryptionTLS:        uc.Encryption.TLS,
-		EncryptionTLSAPI:     uc.Encryption.TLSAPI,
-		EncryptionGossip:     uc.Encryption.Gossip,
+		CanaryNodes:          uc.CanaryProxies.Nodes,
+		EncryptionTLS:        uc.Security.Encryption.TLS,
+		EncryptionTLSAPI:     uc.Security.Encryption.TLSAPI,
+		EncryptionGossip:     uc.Security.Encryption.Gossip,
 		KubernetesEnabled:    uc.Kubernetes.Enabled,
 		EnvoyLogLevel:        uc.Envoy.LogLevel,
 		PrometheusEnabled:    uc.Monitor.Prometheus,
-		InitialMasterToken:   uc.InitialMasterToken,
+		InitialMasterToken:   uc.Security.InitialMasterToken,
 		EnterpriseEnabled:    uc.Enterprise.Enabled,
 		EnterpriseNamespaces: uc.Enterprise.Namespaces,
 	}
@@ -188,18 +259,36 @@ func parseConfigPartial(contents []byte) (*FlatConfig, *userConfigTopology, erro
 		cfg.ConfigEntries = append(cfg.ConfigEntries, entry)
 	}
 
-	return cfg, &uc.Topology, nil
+	return cfg, uc.Topology, nil
 }
 
 func serialDecodeHCL(out interface{}, configs []string) error {
-	for i, config := range configs {
-		n, err := hclparser.Parse([]byte(config))
-		if err != nil {
-			return fmt.Errorf("could not parse snippet #%d: %v", i, err)
+	for i := 0; i < len(configs); i += 2 {
+		name := configs[i]
+		config := configs[i+1]
+		if err := decodeHCL(out, name, config); err != nil {
+			return err
 		}
-		if err := hcl.DecodeObject(out, n); err != nil {
-			return fmt.Errorf("could not decode snippet #%d: %v", i, err)
+	}
+	return nil
+}
+
+func decodeHCL(out interface{}, name, config string) (xerr error) {
+	defer func() {
+		if r := recover(); r != nil {
+			panic(fmt.Sprintf(
+				"could not parse and decode snippet %q: %v", name, r,
+			))
 		}
+	}()
+	err := hclsimple.Decode(
+		name,
+		[]byte(config),
+		nil,
+		out,
+	)
+	if err != nil {
+		return fmt.Errorf("could not parse and decode snippet %q: %v", name, err)
 	}
 	return nil
 }
@@ -218,12 +307,10 @@ monitor {
 }
 topology {
   network_shape = "flat"
-  datacenters {
-    dc1 {
-      servers       = 1
-      clients       = 2
-      mesh_gateways = 0
-    }
+  datacenter "dc1" {
+    servers       = 1
+    clients       = 2
+    mesh_gateways = 0
   }
 }
 `

@@ -35,7 +35,12 @@ func (s NetworkShape) GetNetworkName(dc string) string {
 	}
 }
 
-func InferTopology(uct *userConfigTopology, enterpriseEnabled, canaryConfigured bool) (*Topology, error) {
+func InferTopology(
+	uct *userConfigTopology,
+	enterpriseEnabled bool,
+	canaryConfigured bool,
+	canaryNodes map[string]struct{},
+) (*Topology, error) {
 	topology := &Topology{}
 
 	needsAllNetworks := false
@@ -65,8 +70,6 @@ func InferTopology(uct *userConfigTopology, enterpriseEnabled, canaryConfigured 
 			CIDR: "10.0.0.0/16",
 		})
 	}
-
-	nodeConfigs := uct.NodeConfig
 
 	forDC := func(dc, baseIP, wanBaseIP string, servers, clients, meshGateways int) error {
 		for idx := 1; idx <= servers; idx++ {
@@ -130,10 +133,8 @@ func InferTopology(uct *userConfigTopology, enterpriseEnabled, canaryConfigured 
 			}
 
 			nodeConfig := userConfigTopologyNodeConfig{} // yay zero value!
-			if nodeConfigs != nil {
-				if c, ok := nodeConfigs[nodeName]; ok {
-					nodeConfig = c
-				}
+			if c := uct.GetNode(nodeName); c != nil {
+				nodeConfig = *c
 			}
 
 			if isGatewayClient {
@@ -189,10 +190,9 @@ func InferTopology(uct *userConfigTopology, enterpriseEnabled, canaryConfigured 
 				node.Service = &svc
 			}
 
-			if nodeConfig.Canary && !canaryConfigured {
-				return fmt.Errorf("cannot mark a node as a canary node without configuring canary_proxies section")
+			if canaryConfigured {
+				_, node.Canary = canaryNodes[nodeName]
 			}
-			node.Canary = nodeConfig.Canary
 
 			if nodeConfig.Dead {
 				if node.MeshGateway && node.Datacenter == PrimaryDC && nodeConfig.RetainInPrimaryGatewaysList {
@@ -206,41 +206,41 @@ func InferTopology(uct *userConfigTopology, enterpriseEnabled, canaryConfigured 
 		return nil
 	}
 
-	if _, ok := uct.Datacenters[PrimaryDC]; !ok {
+	if dc := uct.GetDatacenter(PrimaryDC); dc == nil {
 		return nil, fmt.Errorf("primary datacenter %q is missing from config", PrimaryDC)
 	}
 
 	dcPatt := regexp.MustCompile(`^dc([0-9]+)$`)
 
-	for dc, v := range uct.Datacenters {
-		if v.MeshGateways < 0 {
-			return nil, fmt.Errorf("%s: mesh gateways must be non-negative", dc)
+	for _, dc := range uct.Datacenter {
+		if dc.MeshGateways < 0 {
+			return nil, fmt.Errorf("%s: mesh gateways must be non-negative", dc.Name)
 		}
-		v.Clients += v.MeshGateways // the gateways are just fancy clients
+		dc.Clients += dc.MeshGateways // the gateways are just fancy clients
 
-		if v.Servers <= 0 {
-			return nil, fmt.Errorf("%s: must always have at least one server", dc)
+		if dc.Servers <= 0 {
+			return nil, fmt.Errorf("%s: must always have at least one server", dc.Name)
 		}
-		if v.Clients <= 0 {
-			return nil, fmt.Errorf("%s: must always have at least one client", dc)
+		if dc.Clients <= 0 {
+			return nil, fmt.Errorf("%s: must always have at least one client", dc.Name)
 		}
 
-		m := dcPatt.FindStringSubmatch(dc)
+		m := dcPatt.FindStringSubmatch(dc.Name)
 		if m == nil {
-			return nil, fmt.Errorf("%s: not a valid datacenter name", dc)
+			return nil, fmt.Errorf("%s: not a valid datacenter name", dc.Name)
 		}
 		i, err := strconv.Atoi(m[1])
 		if err != nil {
-			return nil, fmt.Errorf("%s: not a valid datacenter name", dc)
+			return nil, fmt.Errorf("%s: not a valid datacenter name", dc.Name)
 		}
 
 		thisDC := &Datacenter{
-			Name:         dc,
-			Primary:      dc == PrimaryDC,
+			Name:         dc.Name,
+			Primary:      dc.Name == PrimaryDC,
 			Index:        i,
-			Servers:      v.Servers,
-			Clients:      v.Clients,
-			MeshGateways: v.MeshGateways,
+			Servers:      dc.Servers,
+			Clients:      dc.Clients,
+			MeshGateways: dc.MeshGateways,
 			BaseIP:       fmt.Sprintf("10.0.%d", i),
 			WANBaseIP:    fmt.Sprintf("10.1.%d", i),
 		}
