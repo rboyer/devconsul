@@ -36,57 +36,114 @@ func (c *FlatConfig) Namespaces() []string {
 }
 
 type userConfig struct {
-	ConsulImage   string `hcl:"consul_image,optional"`
-	EnvoyVersion  string `hcl:"envoy_version,optional"`
-	CanaryProxies struct {
-		ConsulImage  string `hcl:"consul_image,optional"`
-		EnvoyVersion string `hcl:"envoy_version,optional"`
-	} `hcl:"canary_proxies,block"`
-	Encryption struct {
-		TLS    bool `hcl:"tls,optional"`
-		TLSAPI bool `hcl:"tls_api,optional"`
-		Gossip bool `hcl:"gossip,optional"`
-	} `hcl:"encryption,block"`
-	Kubernetes struct {
-		Enabled bool `hcl:"enabled,optional"`
-	} `hcl:"kubernetes,block"`
-	Envoy struct {
-		LogLevel string `hcl:"log_level,optional"`
-	} `hcl:"envoy,block"`
-	Monitor struct {
-		Prometheus bool `hcl:"prometheus,optional"`
-	} `hcl:"monitor,block"`
-	Topology           userConfigTopology `hcl:"topology,block"`
-	InitialMasterToken string             `hcl:"initial_master_token,optional"`
-	RawConfigEntries   []string           `hcl:"config_entries,optional"`
+	ConsulImage        string                   `hcl:"consul_image,optional"`
+	EnvoyVersion       string                   `hcl:"envoy_version,optional"`
+	CanaryProxies      *userConfigCanaryProxies `hcl:"canary_proxies,block"`
+	Encryption         *userConfigEncryption    `hcl:"encryption,block"`
+	Kubernetes         *userConfigK8S           `hcl:"kubernetes,block"`
+	Envoy              *userConfigEnvoy         `hcl:"envoy,block"`
+	Monitor            *userConfigMonitor       `hcl:"monitor,block"`
+	Topology           *userConfigTopology      `hcl:"topology,block"`
+	InitialMasterToken string                   `hcl:"initial_master_token,optional"`
+	RawConfigEntries   []string                 `hcl:"config_entries,optional"`
 
 	Tests []*test `hcl:"test,block"`
 
-	Enterprise struct {
-		Enabled    bool     `hcl:"enabled,optional"`
-		Namespaces []string `hcl:"namespaces,optional"`
-	} `hcl:"enterprise,block"`
+	Enterprise *userConfigEnterprise `hcl:"enterprise,block"`
+}
+
+func (uc *userConfig) DEPRECATED() {
+	if len(uc.Topology.Datacenter) > 0 {
+		uc.Topology.Datacenters = make(map[string]*userConfigTopologyDatacenter)
+		for _, dc := range uc.Topology.Datacenter {
+			uc.Topology.Datacenters[dc.Name] = dc
+		}
+	}
+
+	if len(uc.Topology.Nodes) > 0 {
+		uc.Topology.NodeConfig = make(map[string]*userConfigTopologyNodeConfig)
+		for _, nc := range uc.Topology.Nodes {
+			uc.Topology.NodeConfig[nc.NodeName] = nc
+		}
+	}
+}
+
+func (uc *userConfig) removeNilFields() {
+	if uc.CanaryProxies == nil {
+		uc.CanaryProxies = &userConfigCanaryProxies{}
+	}
+	if uc.Encryption == nil {
+		uc.Encryption = &userConfigEncryption{}
+	}
+	if uc.Kubernetes == nil {
+		uc.Kubernetes = &userConfigK8S{}
+	}
+	if uc.Envoy == nil {
+		uc.Envoy = &userConfigEnvoy{}
+	}
+	if uc.Monitor == nil {
+		uc.Monitor = &userConfigMonitor{}
+	}
+	if uc.Topology == nil {
+		uc.Topology = &userConfigTopology{}
+	}
+	if uc.Enterprise == nil {
+		uc.Enterprise = &userConfigEnterprise{}
+	}
+}
+
+type userConfigMonitor struct {
+	Prometheus bool `hcl:"prometheus,optional"`
+}
+
+type userConfigEnvoy struct {
+	LogLevel string `hcl:"log_level,optional"`
+}
+
+type userConfigK8S struct {
+	Enabled bool `hcl:"enabled,optional"`
+}
+
+type userConfigEncryption struct {
+	TLS    bool `hcl:"tls,optional"`
+	TLSAPI bool `hcl:"tls_api,optional"`
+	Gossip bool `hcl:"gossip,optional"`
+}
+
+type userConfigCanaryProxies struct {
+	ConsulImage  string `hcl:"consul_image,optional"`
+	EnvoyVersion string `hcl:"envoy_version,optional"`
+}
+
+type userConfigEnterprise struct {
+	Enabled    bool     `hcl:"enabled,optional"`
+	Namespaces []string `hcl:"namespaces,optional"`
 }
 
 type test struct {
-	Name  string `hcl:"name"`
+	Name  string `hcl:"name,label"`
 	Value string `hcl:"value"`
 }
 
 type userConfigTopology struct {
-	NetworkShape        string                                   `hcl:"network_shape,optional"`
-	DisableWANBootstrap bool                                     `hcl:"disable_wan_bootstrap,optional"`
-	Datacenters         map[string]*userConfigTopologyDatacenter `hcl:"datacenters,optional"`
-	NodeConfig          map[string]*userConfigTopologyNodeConfig `hcl:"node_config,optional"` // node -> data
+	NetworkShape        string                          `hcl:"network_shape,optional"`
+	DisableWANBootstrap bool                            `hcl:"disable_wan_bootstrap,optional"`
+	Datacenter          []*userConfigTopologyDatacenter `hcl:"datacenter,block"`
+	Nodes               []*userConfigTopologyNodeConfig `hcl:"node,block"`
+
+	Datacenters map[string]*userConfigTopologyDatacenter
+	NodeConfig  map[string]*userConfigTopologyNodeConfig
 }
 
 type userConfigTopologyDatacenter struct {
-	Servers      int `hcl:"servers,optional"`
-	Clients      int `hcl:"clients,optional"`
-	MeshGateways int `hcl:"mesh_gateways,optional"`
+	Name         string `hcl:"name,label"`
+	Servers      int    `hcl:"servers,optional"`
+	Clients      int    `hcl:"clients,optional"`
+	MeshGateways int    `hcl:"mesh_gateways,optional"`
 }
 
 type userConfigTopologyNodeConfig struct {
+	NodeName                    string            `hcl:"name,label"`
 	UpstreamName                string            `hcl:"upstream_name,optional"`
 	UpstreamNamespace           string            `hcl:"upstream_namespace,optional"`
 	UpstreamDatacenter          string            `hcl:"upstream_datacenter,optional"`
@@ -172,6 +229,9 @@ func parseConfigPartial(contents []byte) (*FlatConfig, *userConfigTopology, erro
 		return nil, nil, err
 	}
 
+	uc.removeNilFields()
+	uc.DEPRECATED()
+
 	cfg := &FlatConfig{
 		ConsulImage:          uc.ConsulImage,
 		EnvoyVersion:         uc.EnvoyVersion,
@@ -197,7 +257,7 @@ func parseConfigPartial(contents []byte) (*FlatConfig, *userConfigTopology, erro
 		cfg.ConfigEntries = append(cfg.ConfigEntries, entry)
 	}
 
-	return cfg, &uc.Topology, nil
+	return cfg, uc.Topology, nil
 }
 
 func serialDecodeHCL(out interface{}, configs []string) error {
@@ -245,12 +305,10 @@ monitor {
 }
 topology {
   network_shape = "flat"
-  datacenters = {
-    dc1 = {
-      servers       = 1
-      clients       = 2
-      mesh_gateways = 0
-    }
+  datacenter "dc1" {
+    servers       = 1
+    clients       = 2
+    mesh_gateways = 0
   }
 }
 `

@@ -19,7 +19,7 @@ func TestInferTopology(t *testing.T) {
 		"missing-primary": {
 			uc: &userConfigTopology{
 				NetworkShape: "flat",
-				Datacenters: map[string]userConfigTopologyDatacenter{
+				Datacenters: map[string]*userConfigTopologyDatacenter{
 					"dc2": {
 						Servers: 1,
 						Clients: 1,
@@ -31,7 +31,7 @@ func TestInferTopology(t *testing.T) {
 		"full-islands": {
 			uc: &userConfigTopology{
 				NetworkShape: "islands",
-				Datacenters: map[string]userConfigTopologyDatacenter{
+				Datacenters: map[string]*userConfigTopologyDatacenter{
 					"dc1": {
 						Servers:      3,
 						Clients:      2,
@@ -43,7 +43,7 @@ func TestInferTopology(t *testing.T) {
 						MeshGateways: 1,
 					},
 				},
-				NodeConfig: map[string]userConfigTopologyNodeConfig{
+				NodeConfig: map[string]*userConfigTopologyNodeConfig{
 					"dc1-client1": {
 						ServiceMeta: map[string]string{
 							"foo": "bar",

@@ -3,8 +3,9 @@ package main
 import (
 	"testing"
 
-	"github.com/hashicorp/consul/api"
 	"github.com/stretchr/testify/require"
+
+	"github.com/hashicorp/consul/api"
 )
 
 func TestParseConfigPartial_EmptyInferDefaults(t *testing.T) {
@@ -19,8 +20,11 @@ func TestParseConfigPartial_EmptyInferDefaults(t *testing.T) {
 
 	var expectUCT userConfigTopology
 	expectUCT.NetworkShape = "flat"
-	expectUCT.Datacenters = map[string]userConfigTopologyDatacenter{
-		"dc1": {Servers: 1, Clients: 2},
+	expectUCT.Datacenter = []*userConfigTopologyDatacenter{
+		{Name: "dc1", Servers: 1, Clients: 2},
+	}
+	expectUCT.Datacenters = map[string]*userConfigTopologyDatacenter{
+		"dc1": {Name: "dc1", Servers: 1, Clients: 2},
 	}
 
 	require.Equal(t, expectUCT, *uct)
@@ -44,28 +48,24 @@ func TestParseConfigPartial_AllFields(t *testing.T) {
 		}
 		topology {
 			network_shape = "islands"
-			datacenters {
-				dc1 {
-					servers = 3
-					clients = 2
-					mesh_gateways = 1
-				}
-				dc2 {
-					servers = 3
-					clients = 2
-					mesh_gateways = 1
-				}
+			datacenter "dc1" {
+				servers = 3
+				clients = 2
+				mesh_gateways = 1
 			}
-			node_config {
-				dc1-client2 {
-					upstream_name = "fake-service"
-					upstream_datacenter = "fake-dc"
-					upstream_extra_hcl = "super invalid"
-					service_meta {
-						version = "v2"
-					}
-					use_builtin_proxy = true
+			datacenter "dc2" {
+				servers = 3
+				clients = 2
+				mesh_gateways = 1
+			}
+			node "dc1-client2" {
+				upstream_name = "fake-service"
+				upstream_datacenter = "fake-dc"
+				upstream_extra_hcl = "super invalid"
+				service_meta ={
+					version = "v2"
 				}
+				use_builtin_proxy = true
 			}
 		}
 		initial_master_token = "root"
@@ -130,12 +130,29 @@ EOF
 
 	var expectUCT userConfigTopology
 	expectUCT.NetworkShape = "islands"
-	expectUCT.Datacenters = map[string]userConfigTopologyDatacenter{
-		"dc1": {Servers: 3, Clients: 2, MeshGateways: 1},
-		"dc2": {Servers: 3, Clients: 2, MeshGateways: 1},
+	expectUCT.Datacenters = map[string]*userConfigTopologyDatacenter{
+		"dc1": {Name: "dc1", Servers: 3, Clients: 2, MeshGateways: 1},
+		"dc2": {Name: "dc2", Servers: 3, Clients: 2, MeshGateways: 1},
 	}
-	expectUCT.NodeConfig = map[string]userConfigTopologyNodeConfig{
+	expectUCT.Datacenter = []*userConfigTopologyDatacenter{
+		{Name: "dc1", Servers: 3, Clients: 2, MeshGateways: 1},
+		{Name: "dc2", Servers: 3, Clients: 2, MeshGateways: 1},
+	}
+	expectUCT.Nodes = []*userConfigTopologyNodeConfig{
+		{
+			NodeName:           "dc1-client2",
+			UpstreamName:       "fake-service",
+			UpstreamDatacenter: "fake-dc",
+			UpstreamExtraHCL:   "super invalid",
+			ServiceMeta: map[string]string{
+				"version": "v2",
+			},
+			UseBuiltinProxy: true,
+		},
+	}
+	expectUCT.NodeConfig = map[string]*userConfigTopologyNodeConfig{
 		"dc1-client2": {
+			NodeName:           "dc1-client2",
 			UpstreamName:       "fake-service",
 			UpstreamDatacenter: "fake-dc",
 			UpstreamExtraHCL:   "super invalid",
