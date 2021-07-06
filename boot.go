@@ -2,13 +2,18 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"strings"
 	"text/template"
 	"time"
 
 	"github.com/hashicorp/consul/api"
+
+	"github.com/rboyer/devconsul/config"
 	"github.com/rboyer/devconsul/consulfunc"
+	"github.com/rboyer/devconsul/infra"
+	"github.com/rboyer/devconsul/util"
 )
 
 type BootInfo struct {
@@ -31,7 +36,7 @@ func (c *Core) runBoot(primaryOnly bool) error {
 	c.primaryOnly = primaryOnly
 
 	if c.primaryOnly {
-		c.logger.Info("only bootstrapping the primary datacenter", "dc", PrimaryDC)
+		c.logger.Info("only bootstrapping the primary datacenter", "dc", config.PrimaryDC)
 	}
 
 	var err error
@@ -54,16 +59,16 @@ func (c *Core) runBoot(primaryOnly bool) error {
 	}
 
 	// now we have master token set we can do anything
-	c.clients[PrimaryDC], err = consulfunc.GetClient(c.topology.LeaderIP(PrimaryDC, false), c.masterToken)
+	c.clients[config.PrimaryDC], err = consulfunc.GetClient(c.topology.LeaderIP(config.PrimaryDC, false), c.masterToken)
 	if err != nil {
-		return fmt.Errorf("error creating final client for dc=%s: %v", PrimaryDC, err)
+		return fmt.Errorf("error creating final client for dc=%s: %v", config.PrimaryDC, err)
 	}
 
 	if err := c.initPrimaryDC(); err != nil {
 		return err
 	}
 
-	if !c.primaryOnly {
+	if !c.primaryOnly && c.topology.HasFederation() {
 		if err := c.initSecondaryDCs(); err != nil {
 			return err
 		}
@@ -104,7 +109,12 @@ func (c *Core) waitForKV(fromDC, toDC string) {
 func (c *Core) initPrimaryDC() error {
 	var err error
 
-	c.waitForUpgrade(PrimaryDC)
+	c.waitForUpgrade(config.PrimaryDC)
+
+	err = c.createPartitions()
+	if err != nil {
+		return fmt.Errorf("createPartitions: %v", err)
+	}
 
 	err = c.createNamespaces()
 	if err != nil {
@@ -126,9 +136,9 @@ func (c *Core) initPrimaryDC() error {
 		return fmt.Errorf("createAgentTokens: %v", err)
 	}
 
-	err = c.injectAgentTokensAndWaitForNodeUpdates(PrimaryDC)
+	err = c.injectAgentTokensAndWaitForNodeUpdates(config.PrimaryDC)
 	if err != nil {
-		return fmt.Errorf("injectAgentTokensAndWaitForNodeUpdates[%s]: %v", PrimaryDC, err)
+		return fmt.Errorf("injectAgentTokensAndWaitForNodeUpdates[%s]: %v", config.PrimaryDC, err)
 	}
 
 	err = c.createAnonymousToken()
@@ -162,9 +172,7 @@ func (c *Core) initPrimaryDC() error {
 }
 
 func (c *Core) initSecondaryDCs() error {
-	var err error
-
-	err = c.injectReplicationToken()
+	err := c.injectReplicationToken()
 	if err != nil {
 		return fmt.Errorf("injectReplicationToken: %v", err)
 	}
@@ -198,7 +206,7 @@ func (c *Core) initSecondaryDCs() error {
 }
 
 func (c *Core) primaryClient() *api.Client {
-	return c.clients[PrimaryDC]
+	return c.clients[config.PrimaryDC]
 }
 
 func (c *Core) clientForDC(dc string) *api.Client {
@@ -261,20 +269,80 @@ TRYAGAIN2:
 	return nil
 }
 
-func (c *Core) createNamespaces() error {
+func (c *Core) createPartitions() error {
 	if !c.config.EnterpriseEnabled {
 		return nil
 	}
 
+	partClient := c.primaryClient().Partitions()
+
+	currentList, _, err := partClient.List(context.Background(), nil)
+	if err != nil {
+		return err
+	}
+
+	currentMap := make(map[string]struct{})
+	for _, ap := range currentList {
+		currentMap[ap.Name] = struct{}{}
+	}
+
+	for _, ap := range c.config.EnterprisePartitions {
+		if _, ok := currentMap[ap.Name]; ok {
+			delete(currentMap, ap.Name)
+			continue
+		}
+
+		if ap.Name == "default" {
+			continue // skip
+		}
+
+		obj := &api.Partition{
+			Name: ap.Name,
+		}
+
+		_, _, err = partClient.Create(context.Background(), obj, nil)
+		if err != nil {
+			return fmt.Errorf("error creating partition %q: %w", ap.Name, err)
+		}
+		c.logger.Info("created partition", "partition", ap.Name)
+	}
+
+	delete(currentMap, "default")
+
+	for ap, _ := range currentMap {
+		if _, err := partClient.Delete(context.Background(), ap, nil); err != nil {
+			return err
+		}
+		c.logger.Info("deleted partition", "partition", ap)
+	}
+
+	return nil
+}
+
+func (c *Core) createNamespaces() error {
+	if !c.config.EnterpriseEnabled {
+		return nil
+	}
+	for _, ap := range c.config.EnterprisePartitions {
+		if err := c.createNamespacesForPartition(ap); err != nil {
+			return fmt.Errorf("error creating namespaces in partition %q: %w", ap.Name, err)
+		}
+	}
+	return nil
+}
+
+func (c *Core) createNamespacesForPartition(ap *config.Partition) error {
 	// Create a policy to allow super permissive catalog reads across namespace
 	// boundaries.
-	if err := c.createCrossNamespaceCatalogReadPolicy(); err != nil {
+	if err := c.createCrossNamespaceCatalogReadPolicy(ap); err != nil {
 		return fmt.Errorf("createCrossNamespaceCatalogReadPolicy(): %v", err)
 	}
 
 	nc := c.primaryClient().Namespaces()
 
-	currentList, _, err := nc.List(nil)
+	opts := &api.QueryOptions{Partition: ap.Name}
+
+	currentList, _, err := nc.List(opts)
 	if err != nil {
 		return err
 	}
@@ -284,7 +352,7 @@ func (c *Core) createNamespaces() error {
 		currentMap[ns.Name] = struct{}{}
 	}
 
-	for _, ns := range c.config.EnterpriseNamespaces {
+	for _, ns := range ap.Namespaces {
 		if _, ok := currentMap[ns]; ok {
 			delete(currentMap, ns)
 			continue
@@ -292,18 +360,20 @@ func (c *Core) createNamespaces() error {
 
 		obj := &api.Namespace{
 			Name: ns,
-			ACLs: &api.NamespaceACLConfig{
+		}
+		if ap.IsDefault() {
+			obj.ACLs = &api.NamespaceACLConfig{
 				PolicyDefaults: []api.ACLLink{
 					{Name: "cross-ns-catalog-read"},
 				},
-			},
+			}
 		}
 
 		_, _, err = nc.Create(obj, nil)
 		if err != nil {
 			return err
 		}
-		c.logger.Info("created namespace", "namespace", ns)
+		c.logger.Info("created namespace", "namespace", ns, "partition", ap.String())
 	}
 
 	delete(currentMap, "default")
@@ -312,7 +382,7 @@ func (c *Core) createNamespaces() error {
 		if _, err := nc.Delete(ns, nil); err != nil {
 			return err
 		}
-		c.logger.Info("deleted namespace", "namespace", ns)
+		c.logger.Info("deleted namespace", "namespace", ns, "partition", ap.String())
 	}
 
 	return nil
@@ -321,18 +391,36 @@ func (c *Core) createNamespaces() error {
 func (c *Core) createReplicationToken() error {
 	const replicationName = "acl-replication"
 
+	// NOTE: this is not partition aware
+
 	p := &api.ACLPolicy{
 		Name:        replicationName,
 		Description: replicationName,
-		Rules: `
-acl      = "write"
-operator = "write"
-service_prefix "" {
-	policy     = "read"
-	intentions = "read"
-}`,
 	}
-	p, err := consulfunc.CreateOrUpdatePolicy(c.primaryClient(), p)
+	if c.config.EnterpriseEnabled {
+		p.Rules = `
+			acl      = "write"
+			operator = "write"
+			service_prefix "" {
+				policy     = "read"
+				intentions = "read"
+			}
+			namespace_prefix "" {
+				service_prefix "" {
+					policy     = "read"
+					intentions = "read"
+				}
+			}`
+	} else {
+		p.Rules = `
+			acl      = "write"
+			operator = "write"
+			service_prefix "" {
+				policy     = "read"
+				intentions = "read"
+			}`
+	}
+	p, err := consulfunc.CreateOrUpdatePolicy(c.primaryClient(), p, nil)
 	if err != nil {
 		return err
 	}
@@ -345,7 +433,7 @@ service_prefix "" {
 		Policies:    []*api.ACLTokenPolicyLink{{ID: p.ID}},
 	}
 
-	token, err = consulfunc.CreateOrUpdateToken(c.primaryClient(), token)
+	token, err = consulfunc.CreateOrUpdateToken(c.primaryClient(), token, nil)
 	if err != nil {
 		return err
 	}
@@ -362,22 +450,45 @@ func (c *Core) createMeshGatewayToken() error {
 	p := &api.ACLPolicy{
 		Name:        meshGatewayName,
 		Description: meshGatewayName,
-		Rules: `
-service "mesh-gateway" {
-	policy     = "write"
-}
-service_prefix "" {
-	policy     = "read"
-}
-node_prefix "" {
-	policy     = "read"
-}
-agent_prefix "" {
-	policy     = "read"
-}
-`,
 	}
-	p, err := consulfunc.CreateOrUpdatePolicy(c.primaryClient(), p)
+
+	if c.config.EnterpriseEnabled {
+		// NOTE: this is not partition aware
+		p.Rules = `
+			partition "default" {
+				namespace_prefix "" {
+					service "mesh-gateway" {
+						policy     = "write"
+					}
+					service_prefix "" {
+						policy     = "read"
+					}
+					node_prefix "" {
+						policy     = "read"
+					}
+				}
+				agent_prefix "" {
+					policy     = "read"
+				}
+			}
+			`
+	} else {
+		p.Rules = `
+			service "mesh-gateway" {
+				policy     = "write"
+			}
+			service_prefix "" {
+				policy     = "read"
+			}
+			node_prefix "" {
+				policy     = "read"
+			}
+			agent_prefix "" {
+				policy     = "read"
+			}
+			`
+	}
+	p, err := consulfunc.CreateOrUpdatePolicy(c.primaryClient(), p, nil)
 	if err != nil {
 		return err
 	}
@@ -385,13 +496,10 @@ agent_prefix "" {
 	token := &api.ACLToken{
 		Description: meshGatewayName,
 		Local:       false,
-		// ServiceIdentities: []*api.ACLServiceIdentity{
-		// 	{ServiceName: "mesh-gateway"},
-		// },
-		Policies: []*api.ACLTokenPolicyLink{{ID: p.ID}},
+		Policies:    []*api.ACLTokenPolicyLink{{ID: p.ID}},
 	}
 
-	token, err = consulfunc.CreateOrUpdateToken(c.primaryClient(), token)
+	token, err = consulfunc.CreateOrUpdateToken(c.primaryClient(), token, nil)
 	if err != nil {
 		return err
 	}
@@ -400,7 +508,7 @@ agent_prefix "" {
 		return err
 	}
 
-	c.setToken("mesh-gateway", "", token.SecretID)
+	// c.setToken("mesh-gateway", "", token.SecretID)
 
 	c.logger.Info("mesh-gateway token", "secretID", token.SecretID)
 
@@ -412,8 +520,8 @@ func (c *Core) injectReplicationToken() error {
 
 	agentMasterToken := c.config.AgentMasterToken
 
-	return c.topology.Walk(func(node *Node) error {
-		if node.Datacenter == PrimaryDC || !node.Server {
+	return c.topology.Walk(func(node *infra.Node) error {
+		if node.Datacenter == config.PrimaryDC || !node.Server {
 			return nil
 		}
 
@@ -441,19 +549,29 @@ func (c *Core) injectReplicationToken() error {
 
 // each agent will get a minimal policy configured
 func (c *Core) createAgentTokens() error {
-	return c.topology.Walk(func(node *Node) error {
+	return c.topology.Walk(func(node *infra.Node) error {
 		policyName := "agent--" + node.Name
 
 		p := &api.ACLPolicy{
 			Name:        policyName,
 			Description: policyName,
-			Rules: `
-node "` + node.Name + `-pod" { policy = "write" }
-service_prefix "" { policy = "read" }
-`,
 		}
 
-		_, err := consulfunc.CreateOrUpdatePolicy(c.primaryClient(), p)
+		if c.config.EnterpriseEnabled {
+			p.Rules = `
+			partition "` + node.Partition + `" {
+				node "` + node.Name + `-pod" { policy = "write" }
+				service_prefix "" { policy = "read" }
+			}
+			`
+		} else {
+			p.Rules = `
+			node "` + node.Name + `-pod" { policy = "write" }
+			service_prefix "" { policy = "read" }
+			`
+		}
+
+		_, err := consulfunc.CreateOrUpdatePolicy(c.primaryClient(), p, nil)
 		if err != nil {
 			return err
 		}
@@ -465,12 +583,15 @@ service_prefix "" { policy = "read" }
 			Policies:    []*api.ACLTokenPolicyLink{{Name: policyName}},
 		}
 
-		token, err = consulfunc.CreateOrUpdateToken(c.primaryClient(), token)
+		token, err = consulfunc.CreateOrUpdateToken(c.primaryClient(), token, nil)
 		if err != nil {
 			return err
 		}
 
-		c.logger.Info("agent token", "node", node.Name, "secretID", token.SecretID)
+		c.logger.Info("agent token",
+			"node", node.Name,
+			"partition", node.Partition,
+			"secretID", token.SecretID)
 
 		c.setToken("agent", node.Name, token.SecretID)
 
@@ -481,7 +602,7 @@ service_prefix "" { policy = "read" }
 // TALK TO EACH AGENT
 func (c *Core) injectAgentTokens(datacenter string) error {
 	agentMasterToken := c.config.AgentMasterToken
-	return c.topology.Walk(func(node *Node) error {
+	return c.topology.Walk(func(node *infra.Node) error {
 		if node.Datacenter != datacenter {
 			return nil
 		}
@@ -574,6 +695,8 @@ func (c *Core) createAnonymousToken() error {
 		return err
 	}
 
+	// TODO: should this be partition aware?
+
 	tok := &api.ACLToken{
 		AccessorID: anonymousTokenAccessorID,
 		// SecretID: "anonymous",
@@ -586,7 +709,7 @@ func (c *Core) createAnonymousToken() error {
 		},
 	}
 
-	_, err := consulfunc.CreateOrUpdateToken(c.primaryClient(), tok)
+	_, err := consulfunc.CreateOrUpdateToken(c.primaryClient(), tok, nil)
 	if err != nil {
 		return err
 	}
@@ -600,16 +723,24 @@ func (c *Core) createAnonymousPolicy() error {
 	p := &api.ACLPolicy{
 		Name:        "anonymous",
 		Description: "anonymous",
-		Rules: `
-node_prefix "" { policy = "read" }
-service_prefix "" { policy = "read" }
-`,
 	}
 	if c.config.EnterpriseEnabled {
-		p.Rules = `namespace_prefix "" { ` + p.Rules + ` }`
+		p.Rules = `
+			partition_prefix "" {
+				namespace_prefix "" {
+					node_prefix "" { policy = "read" }
+					service_prefix "" { policy = "read" }
+				}
+			}
+			`
+	} else {
+		p.Rules = `
+			node_prefix "" { policy = "read" }
+			service_prefix "" { policy = "read" }
+			`
 	}
 
-	op, err := consulfunc.CreateOrUpdatePolicy(c.primaryClient(), p)
+	op, err := consulfunc.CreateOrUpdatePolicy(c.primaryClient(), p, nil)
 	if err != nil {
 		return err
 	}
@@ -619,7 +750,7 @@ service_prefix "" { policy = "read" }
 	return nil
 }
 
-func (c *Core) createCrossNamespaceCatalogReadPolicy() error {
+func (c *Core) createCrossNamespaceCatalogReadPolicy(ap *config.Partition) error {
 	if !c.config.EnterpriseEnabled {
 		return nil
 	}
@@ -635,102 +766,99 @@ namespace_prefix "" {
 `,
 	}
 
-	op, err := consulfunc.CreateOrUpdatePolicy(c.primaryClient(), p)
+	op, err := consulfunc.CreateOrUpdatePolicy(c.primaryClient(), p, apiOptionsFromConfigPartition(ap, ""))
 	if err != nil {
 		return err
 	}
 
-	c.logger.Info("cross-ns-catalog-read policy", "name", p.Name, "id", op.ID)
+	c.logger.Info("cross-ns-catalog-read policy", "name", p.Name, "id", op.ID, "partition", ap.String())
 
 	return nil
 }
 
-func (c *Core) createServiceTokens() error {
-	done := make(map[string]struct{})
+func apiOptionsFromConfigPartition(pc *config.Partition, ns string) *consulfunc.Options {
+	if pc == nil {
+		return &consulfunc.Options{Namespace: ns}
+	}
+	return &consulfunc.Options{
+		Partition: pc.Name,
+		Namespace: ns,
+	}
+}
 
-	return c.topology.Walk(func(n *Node) error {
+func (c *Core) createServiceTokens() error {
+	done := make(map[util.Identifier]struct{})
+
+	return c.topology.Walk(func(n *infra.Node) error {
 		if n.Service == nil {
 			return nil
 		}
-		if _, ok := done[n.Service.Name]; ok {
+		if _, ok := done[n.Service.ID]; ok {
 			return nil
 		}
 
 		token := &api.ACLToken{
-			Description: "service--" + n.Service.Name,
+			Description: "service--" + n.Service.ID.ID(),
 			Local:       false,
 			ServiceIdentities: []*api.ACLServiceIdentity{
 				&api.ACLServiceIdentity{
-					ServiceName: n.Service.Name,
+					ServiceName: n.Service.ID.Name,
 				},
 			},
 		}
-		if n.Service.Namespace != "" {
-			token.Namespace = n.Service.Namespace
+		if c.config.EnterpriseEnabled {
+			token.Namespace = n.Service.ID.Namespace
+			token.Partition = n.Service.ID.Partition
 		}
 
-		token, err := consulfunc.CreateOrUpdateToken(c.primaryClient(), token)
+		token, err := consulfunc.CreateOrUpdateToken(c.primaryClient(), token, nil)
 		if err != nil {
 			return err
 		}
 
 		c.logger.Info("service token created",
-			"service", n.Service.Name,
-			"namespace", n.Service.Namespace,
+			"service", n.Service.ID.Name,
+			"namespace", n.Service.ID.Namespace,
+			"partition", n.Service.ID.Partition,
 			"token", token.SecretID,
 		)
 
-		if err := c.cache.SaveValue("service-token--"+n.Service.Name, token.SecretID); err != nil {
+		if err := c.cache.SaveValue("service-token--"+n.Service.ID.ID(), token.SecretID); err != nil {
 			return err
 		}
 
-		c.setToken("service", n.Service.Name, token.SecretID)
+		// c.setToken("service", sn.ID(), token.SecretID)
 
-		done[n.Service.Name] = struct{}{}
+		done[n.Service.ID] = struct{}{}
 		return nil
 	})
 }
 
 func (c *Core) writeCentralConfigs() error {
 	// Configs live in the primary DC only.
-	client := c.clientForDC(PrimaryDC)
+	client := c.clientForDC(config.PrimaryDC)
 
-	currentEntries, err := consulfunc.ListAllConfigEntries(client)
+	currentEntries, err := consulfunc.ListAllConfigEntries(client, c.config.EnterpriseEnabled)
 	if err != nil {
 		return err
 	}
 
 	ce := client.ConfigEntries()
 
-	type ServiceName struct {
-		Name      string
-		Namespace string
-	}
-
 	// collect upstreams and downstreams
-	dm := make(map[ServiceName]map[ServiceName]struct{}) // dest -> src
-	err = c.topology.Walk(func(n *Node) error {
+	dm := make(map[util.Identifier]map[util.Identifier]struct{}) // dest -> src
+	err = c.topology.Walk(func(n *infra.Node) error {
 		if n.Service == nil {
 			return nil
 		}
 		svc := n.Service
 
-		dst := ServiceName{
-			Name:      svc.Name,
-			Namespace: defaultValue(svc.Namespace, "default"),
-		}
-		src := ServiceName{
-			Name:      svc.UpstreamName,
-			Namespace: defaultValue(svc.UpstreamNamespace, "default"),
-		}
-		if !c.config.EnterpriseEnabled {
-			dst.Namespace = ""
-			src.Namespace = ""
-		}
+		src := svc.ID
+		dst := svc.UpstreamID
 
 		sm, ok := dm[dst]
 		if !ok {
-			sm = make(map[ServiceName]struct{})
+			sm = make(map[util.Identifier]struct{})
 			dm[dst] = sm
 		}
 
@@ -745,8 +873,9 @@ func (c *Core) writeCentralConfigs() error {
 	var stockEntries []api.ConfigEntry
 	if c.config.PrometheusEnabled {
 		stockEntries = append(stockEntries, &api.ProxyConfigEntry{
-			Kind: api.ProxyDefaults,
-			Name: api.ProxyConfigGlobal,
+			Kind:      api.ProxyDefaults,
+			Name:      api.ProxyConfigGlobal,
+			Partition: "default",
 			Config: map[string]interface{}{
 				// hardcoded address of prometheus container
 				"envoy_prometheus_bind_addr": "0.0.0.0:9102",
@@ -759,11 +888,13 @@ func (c *Core) writeCentralConfigs() error {
 			Kind:      api.ServiceIntentions,
 			Name:      dst.Name,
 			Namespace: dst.Namespace,
+			Partition: dst.Partition,
 		}
 		for src, _ := range sm {
 			entry.Sources = append(entry.Sources, &api.SourceIntention{
 				Name:      src.Name,
 				Namespace: src.Namespace,
+				Partition: src.Partition,
 				Action:    api.IntentionActionAllow,
 			})
 		}
@@ -808,24 +939,46 @@ func (c *Core) writeCentralConfigs() error {
 	}
 
 	for _, entry := range entries {
+		// scrub namespace/partition from request for OSS
+		if !c.config.EnterpriseEnabled {
+			switch entry.GetKind() {
+			case api.ProxyDefaults:
+				thisEntry := entry.(*api.ProxyConfigEntry)
+				thisEntry.Namespace = ""
+				thisEntry.Partition = ""
+			case api.ServiceIntentions:
+				thisEntry := entry.(*api.ServiceIntentionsConfigEntry)
+				thisEntry.Namespace = ""
+				thisEntry.Partition = ""
+				for _, src := range thisEntry.Sources {
+					src.Namespace = ""
+					src.Partition = ""
+				}
+			}
+		}
 		if _, _, err := ce.Set(entry, nil); err != nil {
 			return err
 		}
 
 		ckn := consulfunc.ConfigKindName{
-			Kind: entry.GetKind(),
-			Name: entry.GetName(),
+			Kind:      entry.GetKind(),
+			Name:      entry.GetName(),
+			Namespace: entry.GetNamespace(),
+			Partition: entry.GetPartition(),
 		}
 		delete(currentEntries, ckn)
 
 		c.logger.Info("config entry created",
 			"kind", entry.GetKind(),
 			"name", entry.GetName(),
+			"namespace", entry.GetNamespace(),
+			"partition", entry.GetPartition(),
 		)
 	}
 
 	// Loop over the kinds in the order that will make the graph happy during erasure.
 	for _, kind := range []string{
+		api.MeshConfig,
 		api.ServiceIntentions,
 		api.IngressGateway,
 		api.TerminatingGateway,
@@ -843,9 +996,17 @@ func (c *Core) writeCentralConfigs() error {
 			c.logger.Info("nuking config entry",
 				"kind", ckn.Kind,
 				"name", ckn.Name,
+				"namespace", ckn.Namespace,
+				"partition", ckn.Partition,
 			)
 
-			_, err = ce.Delete(ckn.Kind, ckn.Name, nil)
+			var writeOpts api.WriteOptions
+			if c.config.EnterpriseEnabled {
+				writeOpts.Namespace = ckn.Namespace
+				writeOpts.Partition = ckn.Partition
+			}
+
+			_, err = ce.Delete(ckn.Kind, ckn.Name, &writeOpts)
 			if err != nil {
 				return err
 			}
@@ -858,18 +1019,27 @@ func (c *Core) writeCentralConfigs() error {
 }
 
 func (c *Core) writeServiceRegistrationFiles() error {
-	return c.topology.Walk(func(n *Node) error {
+	return c.topology.Walk(func(n *infra.Node) error {
 		if n.Service == nil {
 			return nil
 		}
 
+		type templateOpts struct {
+			Service           *infra.Service
+			EnterpriseEnabled bool
+		}
+		opts := templateOpts{
+			Service:           n.Service,
+			EnterpriseEnabled: c.config.EnterpriseEnabled,
+		}
+
 		var buf bytes.Buffer
-		if err := serviceRegistrationT.Execute(&buf, n.Service); err != nil {
+		if err := serviceRegistrationT.Execute(&buf, opts); err != nil {
 			return err
 		}
 		regHCL := buf.String()
 
-		filename := "servicereg__" + n.Name + "__" + n.Service.Name + ".hcl"
+		filename := "servicereg__" + n.Name + "__" + n.Service.ID.Name + ".hcl"
 		if err := c.cache.WriteStringFile(filename, regHCL); err != nil {
 			return err
 		}
@@ -900,7 +1070,8 @@ func (c *Core) createBindingRulesForK8s() error {
 		BindName:    "${serviceaccount.name}",
 	}
 
-	orule, err := consulfunc.CreateOrUpdateBindingRule(c.primaryClient(), rule)
+	// TODO: conditionally sometimes put these in partitions
+	orule, err := consulfunc.CreateOrUpdateBindingRule(c.primaryClient(), rule, nil)
 	if err != nil {
 		return err
 	}
@@ -924,6 +1095,8 @@ func (c *Core) createAuthMethodForK8S() error {
 		return err
 	}
 
+	// TODO: conditionally sometimes put these in partitions
+
 	kconfig := &api.KubernetesAuthMethodConfig{
 		Host:              k8sHost,
 		CACert:            caCert,
@@ -935,7 +1108,7 @@ func (c *Core) createAuthMethodForK8S() error {
 		Config: kconfig.RenderToConfig(),
 	}
 
-	am, err = consulfunc.CreateOrUpdateAuthMethod(c.primaryClient(), am)
+	am, err = consulfunc.CreateOrUpdateAuthMethod(c.primaryClient(), am, nil)
 	if err != nil {
 		return err
 	}
@@ -948,16 +1121,17 @@ func (c *Core) createAuthMethodForK8S() error {
 var serviceRegistrationT = template.Must(template.New("service_reg").Parse(`
 services = [
   {
-    name = "{{.Name}}"
-{{- if .Namespace }}
-    namespace = "{{.Namespace}}"
+    name = "{{.Service.ID.Name}}"
+{{- if .EnterpriseEnabled }}
+    namespace = "{{.Service.ID.Namespace}}"
+    partition = "{{.Service.ID.Partition}}"
 {{- end }}
-    port = {{.Port}}
+    port = {{.Service.Port}}
 
     checks = [
       {
         name     = "up"
-        http     = "http://localhost:{{.Port}}/healthz"
+        http     = "http://localhost:{{.Service.Port}}/healthz"
         method   = "GET"
         interval = "5s"
         timeout  = "1s"
@@ -965,7 +1139,7 @@ services = [
     ]
 
     meta {
-{{- range $k, $v := .Meta }}
+{{- range $k, $v := .Service.Meta }}
       "{{ $k }}" = "{{ $v }}",
 {{- end }}
     }
@@ -975,15 +1149,16 @@ services = [
         proxy {
           upstreams = [
             {
-              destination_name = "{{.UpstreamName}}"
-{{- if .UpstreamNamespace }}
-              destination_namespace = "{{.UpstreamNamespace}}"
+              destination_name = "{{.Service.UpstreamID.Name}}"
+{{- if .EnterpriseEnabled }}
+              destination_namespace = "{{.Service.UpstreamID.Namespace}}"
+              destination_partition = "{{.Service.UpstreamID.Partition}}"
 {{- end }}
-              local_bind_port  = {{.UpstreamLocalPort}}
-{{- if .UpstreamDatacenter }}
-              datacenter = "{{.UpstreamDatacenter}}"
+              local_bind_port  = {{.Service.UpstreamLocalPort}}
+{{- if .Service.UpstreamDatacenter }}
+              datacenter = "{{.Service.UpstreamDatacenter}}"
 {{- end }}
-{{ .UpstreamExtraHCL }}
+{{ .Service.UpstreamExtraHCL }}
             },
           ]
         }
@@ -993,7 +1168,7 @@ services = [
 ]
 `))
 
-func GetServiceRegistrationHCL(s Service) (string, error) {
+func GetServiceRegistrationHCL(s infra.Service) (string, error) {
 	var buf bytes.Buffer
 	err := serviceRegistrationT.Execute(&buf, &s)
 	if err != nil {
@@ -1009,18 +1184,32 @@ func (c *Core) injectAgentTokensAndWaitForNodeUpdates(datacenter string) error {
 	}
 	cc := client.Catalog()
 
+	// NOTE: this is not partition aware
+
 	for {
 		if err := c.injectAgentTokens(datacenter); err != nil {
 			return fmt.Errorf("injectAgentTokens[%s]: %v", datacenter, err)
 		}
 
 		// Injecting a token should bump the agent to do anti-entropy sync.
-		nodes, _, err := cc.Nodes(&api.QueryOptions{Datacenter: datacenter})
-		if err != nil {
-			nodes = nil
+		var (
+			allNodes []*api.Node
+			err      error
+		)
+		if c.config.EnterpriseEnabled && datacenter == config.PrimaryDC {
+			allNodes, err = consulfunc.ListAllNodes(client, config.PrimaryDC, c.config.EnterpriseEnabled)
+			if err != nil {
+				return err
+			}
+
+		} else {
+			allNodes, _, err = cc.Nodes(&api.QueryOptions{Datacenter: datacenter})
+			if err != nil {
+				allNodes = nil
+			}
 		}
 
-		stragglers := c.determineNodeUpdateStragglers(nodes, datacenter)
+		stragglers := c.determineNodeUpdateStragglers(allNodes, datacenter)
 		if len(stragglers) == 0 {
 			c.logger.Info("all nodes have posted node updates, so agent acl tokens are working", "datacenter", datacenter)
 			return nil
@@ -1039,7 +1228,7 @@ func (c *Core) determineNodeUpdateStragglers(nodes []*api.Node, datacenter strin
 	}
 
 	var out []string
-	c.topology.WalkSilent(func(n *Node) {
+	c.topology.WalkSilent(func(n *infra.Node) {
 		if n.Datacenter != datacenter {
 			return
 		}

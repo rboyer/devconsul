@@ -16,6 +16,9 @@ import (
 
 	"github.com/hashicorp/hcl/v2/hclwrite"
 	"github.com/rboyer/safeio"
+
+	"github.com/rboyer/devconsul/config"
+	"github.com/rboyer/devconsul/infra"
 )
 
 func (c *Core) runGenerate(primaryOnly bool) error {
@@ -23,7 +26,7 @@ func (c *Core) runGenerate(primaryOnly bool) error {
 		return err
 	}
 
-	c.topology.WalkSilent(func(node *Node) {
+	c.topology.WalkSilent(func(node *infra.Node) {
 		c.logger.Info("Generating node",
 			"name", node.Name,
 			"server", node.Server,
@@ -56,10 +59,11 @@ func (c *Core) generateConfigs(primaryOnly bool) error {
 	}
 
 	type terraformPod struct {
-		PodName string
-		Node    *Node
-		HCL     string
-		Labels  map[string]string
+		PodName               string
+		Node                  *infra.Node
+		HCL                   string
+		Labels                map[string]string
+		EnterpriseLicensePath string
 	}
 
 	var (
@@ -101,7 +105,7 @@ resource "docker_image" %[1]q {
 		addImage("consul-envoy-canary", "local/consul-envoy-canary:latest")
 	}
 
-	err = c.topology.Walk(func(node *Node) error {
+	err = c.topology.Walk(func(node *infra.Node) error {
 		podName := node.Name + "-pod"
 
 		podHCL, err := c.generateAgentHCL(node)
@@ -116,6 +120,7 @@ resource "docker_image" %[1]q {
 			Labels:  map[string]string{
 				//
 			},
+			EnterpriseLicensePath: c.config.EnterpriseLicensePath,
 		}
 		node.AddLabels(pod.Labels)
 
@@ -133,7 +138,7 @@ resource "docker_image" %[1]q {
 		// NOTE: primaryOnly implies we still generate empty pods in the remote datacenters
 		populatePodContents := true
 		if primaryOnly {
-			populatePodContents = node.Datacenter == PrimaryDC
+			populatePodContents = node.Datacenter == config.PrimaryDC
 		}
 
 		addVolume(node.Name)
@@ -290,10 +295,18 @@ EOT
     container_path = "/tls"
     read_only      = true
   }
+
+{{- if .EnterpriseLicensePath }}
+  volumes {
+    host_path      = "{{ .EnterpriseLicensePath }}"
+    container_path = "/license.hclic"
+    read_only      = true
+  }
+{{- end }}
 }
 `))
 
-func (c *Core) generateMeshGatewayContainer(podName string, node *Node) (string, error) {
+func (c *Core) generateMeshGatewayContainer(podName string, node *infra.Node) (string, error) {
 	if !node.MeshGateway {
 		return "", nil
 	}
@@ -404,16 +417,16 @@ resource "docker_container" "{{.NodeName}}-mesh-gateway" {
 }
 `))
 
-func (c *Core) generatePingPongContainers(podName string, node *Node) ([]string, error) {
+func (c *Core) generatePingPongContainers(podName string, node *infra.Node) ([]string, error) {
 	if node.Service == nil {
 		return nil, nil
 	}
 	svc := node.Service
 
-	switch svc.Name {
+	switch svc.ID.Name {
 	case "ping", "pong":
 	default:
-		return nil, errors.New("unexpected service: " + svc.Name)
+		return nil, errors.New("unexpected service: " + svc.ID.Name)
 	}
 
 	type pingpongInfo struct {
@@ -430,7 +443,7 @@ func (c *Core) generatePingPongContainers(podName string, node *Node) ([]string,
 	ppi := pingpongInfo{
 		PodName:            podName,
 		NodeName:           node.Name,
-		PingPong:           svc.Name,
+		PingPong:           svc.ID.Name,
 		UseBuiltinProxy:    node.UseBuiltinProxy,
 		EnvoyLogLevel:      c.config.EnvoyLogLevel,
 		EnvoyImageResource: "docker_image.consul-envoy.latest",
@@ -464,11 +477,11 @@ func (c *Core) generatePingPongContainers(podName string, node *Node) ([]string,
 			proxyType,
 			"login",
 			"-t",
-			"/secrets/k8s/service_jwt_token." + svc.Name,
+			"/secrets/k8s/service_jwt_token." + svc.ID.Name,
 			"-s",
 			"/tmp/consul.token",
 			"-r",
-			"/secrets/servicereg__" + node.Name + "__" + svc.Name + ".hcl",
+			"/secrets/servicereg__" + node.Name + "__" + svc.ID.Name + ".hcl",
 		}
 	} else {
 		ppi.SidecarBootArgs = []string{
@@ -476,10 +489,14 @@ func (c *Core) generatePingPongContainers(podName string, node *Node) ([]string,
 			proxyType,
 			"direct",
 			"-t",
-			"/secrets/service-token--" + svc.Name + ".val",
+			"/secrets/service-token--" + svc.ID.ID() + ".val",
 			"-r",
-			"/secrets/servicereg__" + node.Name + "__" + svc.Name + ".hcl",
+			"/secrets/servicereg__" + node.Name + "__" + svc.ID.Name + ".hcl",
 		}
+	}
+
+	if c.config.EnterpriseEnabled && node.Partition != "" {
+		ppi.SidecarBootArgs = append(ppi.SidecarBootArgs, "-p", node.Partition)
 	}
 
 	if c.config.EncryptionTLSAPI {
@@ -649,7 +666,7 @@ resource "docker_container" "grafana" {
   }
 } `
 
-func (c *Core) generateAgentHCL(node *Node) (string, error) {
+func (c *Core) generateAgentHCL(node *infra.Node) (string, error) {
 	type consulAgentConfigInfo struct {
 		AdvertiseAddr    string
 		AdvertiseAddrWAN string
@@ -667,25 +684,31 @@ func (c *Core) generateAgentHCL(node *Node) (string, error) {
 		TLSFilePrefix    string
 		Prometheus       bool
 
-		FederateViaGateway  bool
-		PrimaryGateways     string
-		DisableWANBootstrap bool
+		FederateViaGateway    bool
+		PrimaryGateways       string
+		DisableWANBootstrap   bool
+		EnterpriseLicensePath string
+		EnterprisePartition   string
 	}
 
 	configInfo := consulAgentConfigInfo{
-		AdvertiseAddr:    node.LocalAddress(),
-		RetryJoin:        `"` + strings.Join(c.topology.ServerIPs(node.Datacenter), `", "`) + `"`,
-		Datacenter:       node.Datacenter,
-		AgentMasterToken: c.config.AgentMasterToken,
-		Server:           node.Server,
-		GossipKey:        c.config.GossipKey,
-		TLS:              c.config.EncryptionTLS,
-		TLSAPI:           c.config.EncryptionTLSAPI,
-		Prometheus:       c.config.PrometheusEnabled,
+		AdvertiseAddr:         node.LocalAddress(),
+		RetryJoin:             `"` + strings.Join(c.topology.ServerIPs(node.Datacenter), `", "`) + `"`,
+		Datacenter:            node.Datacenter,
+		AgentMasterToken:      c.config.AgentMasterToken,
+		Server:                node.Server,
+		GossipKey:             c.config.GossipKey,
+		TLS:                   c.config.EncryptionTLS,
+		TLSAPI:                c.config.EncryptionTLSAPI,
+		Prometheus:            c.config.PrometheusEnabled,
+		EnterpriseLicensePath: c.config.EnterpriseLicensePath,
+		EnterprisePartition:   node.Partition,
 	}
 
 	if node.Server {
 		configInfo.MasterToken = c.config.InitialMasterToken
+
+		configInfo.EnterprisePartition = "" // we dont' configure this setting on servers
 
 		wanIP := false
 		wanfed := false
@@ -712,8 +735,8 @@ func (c *Core) generateAgentHCL(node *Node) (string, error) {
 
 		if wanfed {
 			configInfo.FederateViaGateway = true
-			if node.Datacenter != PrimaryDC {
-				primaryGateways := c.topology.GatewayAddrs(PrimaryDC)
+			if node.Datacenter != config.PrimaryDC {
+				primaryGateways := c.topology.GatewayAddrs(config.PrimaryDC)
 				configInfo.PrimaryGateways = `"` + strings.Join(primaryGateways, `", "`) + `"`
 				configInfo.DisableWANBootstrap = c.topology.DisableWANBootstrap
 			}
@@ -721,7 +744,7 @@ func (c *Core) generateAgentHCL(node *Node) (string, error) {
 			configInfo.RetryJoinWAN = `"` + strings.Join(ips, `", "`) + `"`
 		}
 
-		configInfo.SecondaryServer = node.Datacenter != PrimaryDC
+		configInfo.SecondaryServer = node.Datacenter != config.PrimaryDC
 		configInfo.BootstrapExpect = len(c.topology.ServerIPs(node.Datacenter))
 
 		configInfo.TLSFilePrefix = node.Datacenter + "-server-consul-" + strconv.Itoa(node.Index)
@@ -799,6 +822,14 @@ telemetry {
   disable_hostname          = true
   prometheus_retention_time = "168h"
 }
+
+{{ if .EnterprisePartition }}
+partition = "{{ .EnterprisePartition }}"
+{{- end }}
+
+{{ if .EnterpriseLicensePath }}
+license_path = "/license.hclic"
+{{- end }}
 
 {{ if .GossipKey }}
 encrypt                = "{{.GossipKey}}"
@@ -915,7 +946,7 @@ func (c *Core) generatePrometheusConfigFile() error {
 		sort.Strings(j.Targets)
 	}
 
-	err := c.topology.Walk(func(node *Node) error {
+	err := c.topology.Walk(func(node *infra.Node) error {
 		if node.Server {
 			add(&job{
 				Name:        "consul-servers-" + node.Datacenter,
@@ -929,6 +960,7 @@ func (c *Core) generatePrometheusConfigFile() error {
 				},
 				Labels: []kv{
 					{"dc", node.Datacenter},
+					{"partition", "default"},
 					// {"node", node.Name},
 					{"role", "consul-server"},
 				},
@@ -946,6 +978,7 @@ func (c *Core) generatePrometheusConfigFile() error {
 				},
 				Labels: []kv{
 					{"dc", node.Datacenter},
+					{"partition", node.Partition},
 					// {"node", node.Name},
 					{"role", "consul-client"},
 				},
@@ -960,21 +993,25 @@ func (c *Core) generatePrometheusConfigFile() error {
 					},
 					Labels: []kv{
 						{"dc", node.Datacenter},
+						{"namespace", "default"},
+						{"partition", "default"},
 						// {"node", node.Name},
 						{"role", "mesh-gateway"},
 					},
 				})
 			} else if node.Service != nil {
 				add(&job{
-					Name:        node.Service.Name + "-proxy",
+					Name:        node.Service.ID.Name + "-proxy",
 					MetricsPath: "/metrics",
 					Targets: []string{
 						net.JoinHostPort(node.LocalAddress(), "9102"),
 					},
 					Labels: []kv{
 						{"dc", node.Datacenter},
+						{"namespace", node.Service.ID.Namespace},
+						{"partition", node.Service.ID.Partition},
 						// {"node", node.Name},
-						{"role", node.Service.Name + "-proxy"},
+						{"role", node.Service.ID.Name + "-proxy"},
 					},
 				})
 			}

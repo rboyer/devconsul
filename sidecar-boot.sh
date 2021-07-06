@@ -28,10 +28,14 @@ service_register_file=""
 case "${mode}" in
     direct)
         token_file=""
-        while getopts ":t:r:e" opt; do
+        partition=""
+        while getopts ":p:t:r:e" opt; do
             case "${opt}" in
                 e)
                     agent_tls=1
+                    ;;
+                p)
+                    partition="$OPTARG"
                     ;;
                 t)
                     token_file="$OPTARG"
@@ -61,18 +65,25 @@ case "${mode}" in
         fi
 
         api_args+=( -token-file "${token_file}" )
+        if [[ -n "${partition}" ]]; then
+            api_args+=( -partition "${partition}" )
+        fi
 
         ;;
     login)
         bearer_token_file=""
         token_sink_file=""
-        while getopts ":t:s:r:e" opt; do
+        partition=""
+        while getopts ":p:t:s:r:e" opt; do
             case "${opt}" in
                 e)
                     agent_tls=1
                     ;;
                 t)
                     bearer_token_file="$OPTARG"
+                    ;;
+                p)
+                    partition="$OPTARG"
                     ;;
                 s)
                     token_sink_file="$OPTARG"
