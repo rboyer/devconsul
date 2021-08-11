@@ -43,7 +43,7 @@ fi
 path="$1"
 shift
 
-if [[ -z "$CONSUL_HTTP_TOKEN" ]]; then
+if [[ -z "${CONSUL_HTTP_TOKEN:-}" ]]; then
     CONSUL_HTTP_TOKEN="$(master_token)"
     if [[ -z "$CONSUL_HTTP_TOKEN" ]]; then
         exit 1
