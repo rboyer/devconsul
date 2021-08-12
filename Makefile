@@ -22,3 +22,12 @@ vet:
 .PHONY: test
 test:
 	go test ./...
+
+.PHONY: grpc-check
+grpc-check: install
+	@for s in $$($(PROGRAM_NAME) config | jq .datacenters[] -r); do \
+		for d in $$($(PROGRAM_NAME) config | jq .datacenters[] -r); do \
+			echo "=== $$s -> $$d ===" ; \
+			./rootcurl.sh $$s 'v1/health/service/consul?cached&dc='$$d | wc ; \
+		done; \
+	done
