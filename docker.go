@@ -34,7 +34,7 @@ func (c *Core) buildDockerImages(force bool) error {
 		if err := addFileToHash(c.devconsulBin, hash); err != nil {
 			return err
 		}
-		if err := addFileToHash("config.hcl", hash); err != nil {
+		if err := addFileToHash(defaultConfigFile, hash); err != nil {
 			return err
 		}
 		if err := addFileToHash("Dockerfile-envoy", hash); err != nil {

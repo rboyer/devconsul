@@ -38,6 +38,7 @@ func (c *Core) RunConfigDump() error {
 	}
 
 	m := map[string]interface{}{
+		"confName":         c.config.ConfName,
 		"image":            c.config.ConsulImage,
 		"envoyVersion":     c.config.EnvoyVersion,
 		"tls":              bool2str(c.config.EncryptionTLS),

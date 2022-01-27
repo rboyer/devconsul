@@ -38,33 +38,40 @@ This project helps bring up a local Consul Connect cluster using Docker.
 
 3. Set `consul_image = "consul-dev:latest"` in your `config.hcl` file
    (discussed below).  You may wish to just start from the
-   `example-dev-connect--config.hcl` file in this repository.
+   `example-config.hcl` file in this repository using the `simple` configuration.
 
 ## Configuration
 
 There is a `config.hcl` file that should be of the form:
 
 ```hcl
-consul_image = "consul:1.5.0"
+active = "default" # picks which 'config "<name>" { ... }' block to use
 
-encryption {
-  tls    = true
-  gossip = true
-}
+# you can have multiple config blocks and toggle between them
+config "default" {
+  consul_image = "consul:1.5.0"
 
-kubernetes {
-  enabled = false
-}
-
-topology {
-  servers {
-    dc1 = 1
-    dc2 = 1
+  security {
+    encryption {
+      tls    = true
+      gossip = true
+    }
   }
 
-  clients {
-    dc1 = 2
-    dc2 = 2
+  kubernetes {
+    enabled = false
+  }
+
+  topology {
+    network_shape = "flat"
+    datacenter "dc1" {
+      servers = 1
+      clients = 2
+    }
+    datacenter "dc2" {
+      servers = 1
+      clients = 2
+    }
   }
 }
 ```
