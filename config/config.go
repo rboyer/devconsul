@@ -6,6 +6,7 @@ import (
 
 // Config is the runtime configuration struct derived from rawConfig.
 type Config struct {
+	ConfName              string // name from config.hcl
 	ConsulImage           string
 	EnvoyVersion          string
 	CanaryConsulImage     string

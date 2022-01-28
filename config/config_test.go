@@ -9,10 +9,11 @@ import (
 )
 
 func TestParseConfig_EmptyInferDefaults(t *testing.T) {
-	fc, err := parseConfig(nil)
+	fc, err := parseConfig("fake.hcl", nil)
 	require.NoError(t, err)
 
 	require.Equal(t, &Config{
+		ConfName:             "legacy",
 		ConsulImage:          "consul-dev:latest",
 		EnvoyLogLevel:        "info",
 		EnvoyVersion:         "v1.16.0",
@@ -21,6 +22,72 @@ func TestParseConfig_EmptyInferDefaults(t *testing.T) {
 			{Name: "dc1", Servers: 1, Clients: 2},
 		},
 	}, fc)
+}
+
+func TestParseConfig_BothFormats(t *testing.T) {
+	t.Run("legacy", func(t *testing.T) {
+		body := `
+		envoy_version = "v1.18.3"
+		`
+		fc, err := parseConfig("fake.hcl", []byte(body))
+		require.NoError(t, err)
+		require.Equal(t, &Config{
+			ConfName:             "legacy",
+			ConsulImage:          "consul-dev:latest",
+			EnvoyLogLevel:        "info",
+			EnvoyVersion:         "v1.18.3",
+			TopologyNetworkShape: "flat",
+			TopologyDatacenters: []*Datacenter{
+				{Name: "dc1", Servers: 1, Clients: 2},
+			},
+		}, fc)
+	})
+	t.Run("new 1", func(t *testing.T) {
+		body := `
+		active = "beta"
+		config "alpha" {
+		  envoy_version = "v1.17.3"
+		}
+		config "beta" {
+		  envoy_version = "v1.18.3"
+		}
+		`
+		fc, err := parseConfig("fake.hcl", []byte(body))
+		require.NoError(t, err)
+		require.Equal(t, &Config{
+			ConfName:             "beta",
+			ConsulImage:          "consul-dev:latest",
+			EnvoyLogLevel:        "info",
+			EnvoyVersion:         "v1.18.3",
+			TopologyNetworkShape: "flat",
+			TopologyDatacenters: []*Datacenter{
+				{Name: "dc1", Servers: 1, Clients: 2},
+			},
+		}, fc)
+	})
+	t.Run("new 2", func(t *testing.T) {
+		body := `
+		active = "alpha"
+		config "alpha" {
+		  envoy_version = "v1.17.3"
+		}
+		config "beta" {
+		  envoy_version = "v1.18.3"
+		}
+		`
+		fc, err := parseConfig("fake.hcl", []byte(body))
+		require.NoError(t, err)
+		require.Equal(t, &Config{
+			ConfName:             "alpha",
+			ConsulImage:          "consul-dev:latest",
+			EnvoyLogLevel:        "info",
+			EnvoyVersion:         "v1.17.3",
+			TopologyNetworkShape: "flat",
+			TopologyDatacenters: []*Datacenter{
+				{Name: "dc1", Servers: 1, Clients: 2},
+			},
+		}, fc)
+	})
 }
 
 func TestParseConfig_AllFields(t *testing.T) {
@@ -112,10 +179,11 @@ EOF
 		,
 		]
 `
-	fc, err := parseConfig([]byte(body))
+	fc, err := parseConfig("fake.hcl", []byte(body))
 	require.NoError(t, err)
 
 	require.Equal(t, &Config{
+		ConfName:              "legacy",
 		ConsulImage:           "my-dev-image:blah",
 		EnvoyVersion:          "v1.18.3",
 		CanaryConsulImage:     "consul:1.9.5",

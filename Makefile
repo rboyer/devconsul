@@ -7,7 +7,7 @@ all: install
 
 .PHONY: install
 install: $(GOPATH)/bin/$(PROGRAM_NAME)
-$(GOPATH)/bin/$(PROGRAM_NAME): *.go cachestore/*.go consulfunc/*.go go.mod go.sum
+$(GOPATH)/bin/$(PROGRAM_NAME): *.go cachestore/*.go consulfunc/*.go config/*.go infra/*.go util/*.go go.mod go.sum
 	$(info rebuilding binary...)
 	@go install
 

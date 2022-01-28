@@ -25,7 +25,10 @@ import (
 	"github.com/rboyer/devconsul/infra"
 )
 
-const programName = "devconsul"
+const (
+	programName       = "devconsul"
+	defaultConfigFile = "config.hcl"
+)
 
 type command struct {
 	Name    string
@@ -152,11 +155,11 @@ func NewCore(logger hclog.Logger, configOnly, destroying bool) (*Core, error) {
 	}
 	c.rootDir = cwd
 
-	if _, err := os.Stat(filepath.Join(c.rootDir, "config.hcl")); err != nil {
-		return nil, fmt.Errorf("Missing required config.hcl file: %v", err)
+	if _, err := os.Stat(filepath.Join(c.rootDir, defaultConfigFile)); err != nil {
+		return nil, fmt.Errorf("Missing required %s file: %v", defaultConfigFile, err)
 	}
 
-	cfg, err := config.LoadConfig()
+	cfg, err := config.LoadConfig(defaultConfigFile)
 	if err != nil {
 		return nil, err
 	}

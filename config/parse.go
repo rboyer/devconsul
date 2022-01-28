@@ -11,13 +11,13 @@ import (
 
 // LoadConfig loads up the default config file (config.hcl), parses it, and
 // does some light validation.
-func LoadConfig() (*Config, error) {
-	contents, err := ioutil.ReadFile("config.hcl")
+func LoadConfig(pathname string) (*Config, error) {
+	contents, err := ioutil.ReadFile(pathname)
 	if err != nil {
 		return nil, err
 	}
 
-	cfg, err := parseConfig(contents)
+	cfg, err := parseConfig(pathname, contents)
 	if err != nil {
 		return nil, err
 	}
@@ -29,19 +29,38 @@ func LoadConfig() (*Config, error) {
 	return cfg, nil
 }
 
-func parseConfig(contents []byte) (*Config, error) {
-	var uc rawConfig
-	err := serialDecodeHCL(&uc, []string{
-		"defaults.hcl", defaultRawConfig,
-		"config.hcl", string(contents),
-	})
+func parseConfig(pathname string, contents []byte) (*Config, error) {
+	// Extract the actively selected configuration.
+	uc, err := decodeConfig(pathname, contents)
 	if err != nil {
 		return nil, err
 	}
 
 	uc.removeNilFields()
 
+	if uc.ConsulImage == "" {
+		uc.ConsulImage = "consul-dev:latest"
+	}
+	if uc.EnvoyVersion == "" {
+		uc.EnvoyVersion = "v1.16.0"
+	}
+	if uc.Envoy.LogLevel == "" {
+		uc.Envoy.LogLevel = "info"
+	}
+	if uc.Topology.NetworkShape == "" {
+		uc.Topology.NetworkShape = "flat"
+	}
+
+	if _, ok := uc.Topology.GetDatacenter(PrimaryDC); !ok {
+		uc.Topology.Datacenter = append(uc.Topology.Datacenter, &Datacenter{
+			Name:    PrimaryDC,
+			Servers: 1,
+			Clients: 2,
+		})
+	}
+
 	cfg := &Config{
+		ConfName:              uc.Name,
 		ConsulImage:           uc.ConsulImage,
 		EnvoyVersion:          uc.EnvoyVersion,
 		CanaryConsulImage:     uc.CanaryProxies.ConsulImage,
@@ -74,22 +93,40 @@ func parseConfig(contents []byte) (*Config, error) {
 	return cfg, nil
 }
 
-func serialDecodeHCL(out interface{}, configs []string) error {
-	for i := 0; i < len(configs); i += 2 {
-		name := configs[i]
-		config := configs[i+1]
-		if err := decodeHCL(out, name, config); err != nil {
-			return err
+// Extract the actively selected configuration.
+func decodeConfig(pathname string, contents []byte) (*rawConfig, error) {
+	// check legacy first
+	{
+		var raw rawConfig
+		err := decodeHCL(&raw, pathname, string(contents))
+		if err == nil {
+			raw.Name = "legacy"
+			return &raw, nil
 		}
 	}
-	return nil
+
+	// assume non legacy
+	var envelope rawConfigEnvelope
+	err := decodeHCL(&envelope, pathname, string(contents))
+	if err != nil {
+		return nil, err
+	}
+	if envelope.Active == "" {
+		return nil, fmt.Errorf("missing required field 'active'")
+	}
+
+	got, ok := envelope.GetActive()
+	if !ok {
+		return nil, fmt.Errorf("active configuration %q is not defined", envelope.Active)
+	}
+	return got, nil
 }
 
 func decodeHCL(out interface{}, name, config string) (xerr error) {
 	defer func() {
 		if r := recover(); r != nil {
 			panic(fmt.Sprintf(
-				"could not parse and decode snippet %q: %v", name, r,
+				"panic: could not parse and decode snippet %q: %v", name, r,
 			))
 		}
 	}()
@@ -186,25 +223,3 @@ func validateConfig(cfg *Config) error {
 
 	return nil
 }
-
-const defaultRawConfig = `
-consul_image  = "consul-dev:latest"
-envoy_version = "v1.16.0"
-envoy {
-  log_level = "info"
-}
-kubernetes {
-  enabled = false
-}
-monitor {
-  prometheus = false
-}
-topology {
-  network_shape = "flat"
-  datacenter "dc1" {
-    servers       = 1
-    clients       = 2
-    mesh_gateways = 0
-  }
-}
-`

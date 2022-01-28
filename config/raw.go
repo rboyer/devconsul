@@ -1,8 +1,23 @@
 package config
 
+type rawConfigEnvelope struct {
+	Active string       `hcl:"active,optional"`
+	Config []*rawConfig `hcl:"config,block"`
+}
+
+func (e *rawConfigEnvelope) GetActive() (*rawConfig, bool) {
+	for _, cfg := range e.Config {
+		if cfg.Name == e.Active {
+			return cfg, true
+		}
+	}
+	return nil, false
+}
+
 // rawConfig is the top level structure representing the contents of a user
 // provided config file. It is what the file is initially decoded into.
 type rawConfig struct {
+	Name             string                  `hcl:"name,label"`
 	ConsulImage      string                  `hcl:"consul_image,optional"`
 	EnvoyVersion     string                  `hcl:"envoy_version,optional"`
 	CanaryProxies    *rawConfigCanaryProxies `hcl:"canary_proxies,block"`
@@ -82,4 +97,13 @@ type rawTopology struct {
 	DisableWANBootstrap bool          `hcl:"disable_wan_bootstrap,optional"`
 	Datacenter          []*Datacenter `hcl:"datacenter,block"`
 	Nodes               []*Node       `hcl:"node,block"`
+}
+
+func (t *rawTopology) GetDatacenter(name string) (*Datacenter, bool) {
+	for _, dc := range t.Datacenter {
+		if dc.Name == name {
+			return dc, true
+		}
+	}
+	return nil, false
 }
