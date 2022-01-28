@@ -18,12 +18,14 @@ import (
 
 	"github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/go-uuid"
-	"github.com/rboyer/devconsul/cachestore"
 	"github.com/rboyer/safeio"
+
+	"github.com/rboyer/devconsul/cachestore"
+	"github.com/rboyer/devconsul/config"
+	"github.com/rboyer/devconsul/infra"
 )
 
 const programName = "devconsul"
-const PrimaryDC = "dc1"
 
 type command struct {
 	Name    string
@@ -130,9 +132,9 @@ type Core struct {
 	kubectlBin  string // optional
 
 	cache  *cachestore.Store
-	config *FlatConfig
+	config *config.Config
 
-	topology *Topology
+	topology *infra.Topology
 
 	BootInfo // for boot
 }
@@ -154,10 +156,18 @@ func NewCore(logger hclog.Logger, configOnly, destroying bool) (*Core, error) {
 		return nil, fmt.Errorf("Missing required config.hcl file: %v", err)
 	}
 
-	c.config, c.topology, err = LoadConfig()
+	cfg, err := config.LoadConfig()
 	if err != nil {
 		return nil, err
 	}
+
+	topology, err := infra.CompileTopology(cfg)
+	if err != nil {
+		return nil, err
+	}
+
+	c.config = cfg
+	c.topology = topology
 
 	if configOnly {
 		return c, nil
@@ -273,7 +283,7 @@ func (c *Core) initTLS() error {
 		c.logger.Info("created cluster CA")
 	}
 
-	genCert := func(dc *Datacenter, server bool, idx int) error {
+	genCert := func(dc *infra.Datacenter, server bool, idx int) error {
 		typ := "client"
 		if server {
 			typ = "server"

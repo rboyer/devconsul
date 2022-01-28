@@ -1,27 +1,28 @@
-package main
+package infra
 
 import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/rboyer/devconsul/config"
+	"github.com/rboyer/devconsul/util"
 )
 
-func TestInferTopology(t *testing.T) {
+func TestCompileTopology(t *testing.T) {
 	type testcase struct {
-		uc               *userConfigTopology
-		enterprise       bool
-		canaryConfigured bool
-		canaryNodes      []string
-		expectErr        bool
-		expectExactErr   string
-		expectFn         func(t *testing.T, topo *Topology)
+		cfg            *config.Config
+		canaryNodes    []string
+		expectErr      bool
+		expectExactErr string
+		expectFn       func(t *testing.T, topo *Topology)
 	}
 
 	cases := map[string]testcase{
 		"missing-primary": {
-			uc: &userConfigTopology{
-				NetworkShape: "flat",
-				Datacenter: []*userConfigTopologyDatacenter{
+			cfg: &config.Config{
+				TopologyNetworkShape: "flat",
+				TopologyDatacenters: []*config.Datacenter{
 					{
 						Name:    "dc2",
 						Servers: 1,
@@ -32,11 +33,13 @@ func TestInferTopology(t *testing.T) {
 			expectExactErr: `primary datacenter "dc1" is missing from config`,
 		},
 		"full-islands": {
-			canaryConfigured: true,
-			canaryNodes:      []string{"dc2-client2"},
-			uc: &userConfigTopology{
-				NetworkShape: "islands",
-				Datacenter: []*userConfigTopologyDatacenter{
+			cfg: &config.Config{
+				CanaryConsulImage:    "consul-canary:latest",
+				CanaryEnvoyVersion:   "v1.16.0",
+				CanaryNodes:          []string{"dc2-client2"},
+				EncryptionTLS:        true,
+				TopologyNetworkShape: "islands",
+				TopologyDatacenters: []*config.Datacenter{
 					{
 						Name:         "dc1",
 						Servers:      3,
@@ -50,7 +53,7 @@ func TestInferTopology(t *testing.T) {
 						MeshGateways: 1,
 					},
 				},
-				Nodes: []*userConfigTopologyNodeConfig{
+				TopologyNodes: []*config.Node{
 					{
 						NodeName: "dc1-client1",
 						ServiceMeta: map[string]string{
@@ -62,6 +65,7 @@ func TestInferTopology(t *testing.T) {
 						NodeName:           "dc2-client2",
 						UpstreamName:       "blah",
 						UpstreamDatacenter: "fake",
+						UpstreamPartition:  "also-fake",
 						UpstreamExtraHCL:   "// not real",
 						ServiceMeta: map[string]string{
 							"AAA": "BBB",
@@ -115,6 +119,7 @@ func TestInferTopology(t *testing.T) {
 							Index:      0,
 							Datacenter: "dc1",
 							Name:       "dc1-server1",
+							Partition:  "default",
 							Server:     true,
 							Addresses: []Address{
 								{
@@ -127,6 +132,7 @@ func TestInferTopology(t *testing.T) {
 							Index:      1,
 							Datacenter: "dc1",
 							Name:       "dc1-server2",
+							Partition:  "default",
 							Server:     true,
 							Addresses: []Address{
 								{
@@ -139,6 +145,7 @@ func TestInferTopology(t *testing.T) {
 							Index:      2,
 							Datacenter: "dc1",
 							Name:       "dc1-server3",
+							Partition:  "default",
 							Server:     true,
 							Addresses: []Address{
 								{
@@ -151,6 +158,7 @@ func TestInferTopology(t *testing.T) {
 							Index:      0,
 							Datacenter: "dc1",
 							Name:       "dc1-client1",
+							Partition:  "default",
 							Addresses: []Address{
 								{
 									Network:   "dc1",
@@ -158,9 +166,9 @@ func TestInferTopology(t *testing.T) {
 								},
 							},
 							Service: &Service{
-								Name:              "ping",
+								ID:                util.NewIdentifier("ping", "", ""),
 								Port:              8080,
-								UpstreamName:      "pong",
+								UpstreamID:        util.NewIdentifier("pong", "", ""),
 								UpstreamLocalPort: 9090,
 								Meta: map[string]string{
 									"foo": "bar",
@@ -172,6 +180,7 @@ func TestInferTopology(t *testing.T) {
 							Index:      1,
 							Datacenter: "dc1",
 							Name:       "dc1-client2",
+							Partition:  "default",
 							Addresses: []Address{
 								{
 									Network:   "dc1",
@@ -179,9 +188,9 @@ func TestInferTopology(t *testing.T) {
 								},
 							},
 							Service: &Service{
-								Name:              "pong",
+								ID:                util.NewIdentifier("pong", "", ""),
 								Port:              8080,
-								UpstreamName:      "ping",
+								UpstreamID:        util.NewIdentifier("ping", "", ""),
 								UpstreamLocalPort: 9090,
 								Meta:              map[string]string{},
 							},
@@ -190,6 +199,7 @@ func TestInferTopology(t *testing.T) {
 							Index:      2,
 							Datacenter: "dc1",
 							Name:       "dc1-client3",
+							Partition:  "default",
 							Addresses: []Address{
 								{
 									Network:   "dc1",
@@ -207,6 +217,7 @@ func TestInferTopology(t *testing.T) {
 							Index:      0,
 							Datacenter: "dc2",
 							Name:       "dc2-server1",
+							Partition:  "default",
 							Server:     true,
 							Addresses: []Address{
 								{
@@ -223,6 +234,7 @@ func TestInferTopology(t *testing.T) {
 							Index:      1,
 							Datacenter: "dc2",
 							Name:       "dc2-server2",
+							Partition:  "default",
 							Server:     true,
 							Addresses: []Address{
 								{
@@ -239,6 +251,7 @@ func TestInferTopology(t *testing.T) {
 							Index:      2,
 							Datacenter: "dc2",
 							Name:       "dc2-server3",
+							Partition:  "default",
 							Server:     true,
 							Addresses: []Address{
 								{
@@ -255,6 +268,7 @@ func TestInferTopology(t *testing.T) {
 							Index:      0,
 							Datacenter: "dc2",
 							Name:       "dc2-client1",
+							Partition:  "default",
 							Addresses: []Address{
 								{
 									Network:   "dc2",
@@ -262,9 +276,9 @@ func TestInferTopology(t *testing.T) {
 								},
 							},
 							Service: &Service{
-								Name:              "ping",
+								ID:                util.NewIdentifier("ping", "", ""),
 								Port:              8080,
-								UpstreamName:      "pong",
+								UpstreamID:        util.NewIdentifier("pong", "", ""),
 								UpstreamLocalPort: 9090,
 								Meta:              map[string]string{},
 							},
@@ -273,6 +287,7 @@ func TestInferTopology(t *testing.T) {
 							Index:      1,
 							Datacenter: "dc2",
 							Name:       "dc2-client2",
+							Partition:  "default",
 							Addresses: []Address{
 								{
 									Network:   "dc2",
@@ -280,9 +295,9 @@ func TestInferTopology(t *testing.T) {
 								},
 							},
 							Service: &Service{
-								Name:               "pong",
+								ID:                 util.NewIdentifier("pong", "", ""),
 								Port:               8080,
-								UpstreamName:       "blah",
+								UpstreamID:         util.NewIdentifier("blah", "", "also-fake"),
 								UpstreamDatacenter: "fake",
 								UpstreamExtraHCL:   "// not real",
 								UpstreamLocalPort:  9090,
@@ -297,6 +312,7 @@ func TestInferTopology(t *testing.T) {
 							Index:      2,
 							Datacenter: "dc2",
 							Name:       "dc2-client3",
+							Partition:  "default",
 							Addresses: []Address{
 								{
 									Network:   "dc2",
@@ -356,11 +372,7 @@ func TestInferTopology(t *testing.T) {
 	for name, tc := range cases {
 		tc := tc
 		t.Run(name, func(t *testing.T) {
-			canaryNodes := make(map[string]struct{})
-			for _, n := range tc.canaryNodes {
-				canaryNodes[n] = struct{}{}
-			}
-			topo, err := InferTopology(tc.uc, tc.enterprise, tc.canaryConfigured, canaryNodes)
+			topo, err := CompileTopology(tc.cfg)
 			if tc.expectExactErr != "" {
 				require.EqualError(t, err, tc.expectExactErr)
 				require.Nil(t, topo)

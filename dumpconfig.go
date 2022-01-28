@@ -3,6 +3,8 @@ package main
 import (
 	"flag"
 	"fmt"
+
+	"github.com/rboyer/devconsul/infra"
 )
 
 func (c *Core) RunConfigDump() error {
@@ -16,7 +18,7 @@ func (c *Core) RunConfigDump() error {
 		pods        = make(map[string][]string)
 		containers  = make(map[string][]string)
 	)
-	c.topology.WalkSilent(func(n *Node) {
+	c.topology.WalkSilent(func(n *infra.Node) {
 		if n.Server {
 			servers[n.Datacenter]++
 		} else {

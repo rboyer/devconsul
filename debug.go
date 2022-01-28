@@ -3,10 +3,13 @@ package main
 import (
 	"fmt"
 
-	"github.com/hashicorp/consul/api"
 	"github.com/hashicorp/go-cleanhttp"
-	"github.com/rboyer/devconsul/consulfunc"
 	"github.com/rboyer/safeio"
+
+	"github.com/hashicorp/consul/api"
+
+	"github.com/rboyer/devconsul/config"
+	"github.com/rboyer/devconsul/consulfunc"
 )
 
 var knownConfigEntryKinds = []string{
@@ -50,7 +53,7 @@ func (c *Core) debugPrimaryClient() (*api.Client, error) {
 		return nil, err
 	}
 
-	return consulfunc.GetClient(c.topology.LeaderIP(PrimaryDC, false), masterToken)
+	return consulfunc.GetClient(c.topology.LeaderIP(config.PrimaryDC, false), masterToken)
 }
 
 func (c *Core) RunDebugSaveGrafana() error {

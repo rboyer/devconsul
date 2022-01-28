@@ -9,6 +9,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/rboyer/devconsul/infra"
 	"github.com/rboyer/safeio"
 	"golang.org/x/crypto/blake2b"
 )
@@ -131,7 +132,7 @@ func (c *Core) runStopDC2() error {
 		containers = make(map[string][]string)
 	)
 
-	c.topology.WalkSilent(func(n *Node) {
+	c.topology.WalkSilent(func(n *infra.Node) {
 		pods[n.Datacenter] = append(pods[n.Datacenter], n.Name+"-pod")
 		containers[n.Datacenter] = append(containers[n.Datacenter], n.Name)
 		if n.MeshGateway {

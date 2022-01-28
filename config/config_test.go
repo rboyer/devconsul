@@ -1,4 +1,4 @@
-package main
+package config
 
 import (
 	"testing"
@@ -8,26 +8,22 @@ import (
 	"github.com/hashicorp/consul/api"
 )
 
-func TestParseConfigPartial_EmptyInferDefaults(t *testing.T) {
-	fc, uct, err := parseConfigPartial(nil)
+func TestParseConfig_EmptyInferDefaults(t *testing.T) {
+	fc, err := parseConfig(nil)
 	require.NoError(t, err)
 
-	require.Equal(t, &FlatConfig{
-		ConsulImage:   "consul-dev:latest",
-		EnvoyLogLevel: "info",
-		EnvoyVersion:  "v1.16.0",
+	require.Equal(t, &Config{
+		ConsulImage:          "consul-dev:latest",
+		EnvoyLogLevel:        "info",
+		EnvoyVersion:         "v1.16.0",
+		TopologyNetworkShape: "flat",
+		TopologyDatacenters: []*Datacenter{
+			{Name: "dc1", Servers: 1, Clients: 2},
+		},
 	}, fc)
-
-	var expectUCT userConfigTopology
-	expectUCT.NetworkShape = "flat"
-	expectUCT.Datacenter = []*userConfigTopologyDatacenter{
-		{Name: "dc1", Servers: 1, Clients: 2},
-	}
-
-	require.Equal(t, expectUCT, *uct)
 }
 
-func TestParseConfigPartial_AllFields(t *testing.T) {
+func TestParseConfig_AllFields(t *testing.T) {
 	body := `
 		consul_image = "my-dev-image:blah"
 		envoy_version = "v1.18.3"
@@ -55,7 +51,12 @@ func TestParseConfigPartial_AllFields(t *testing.T) {
 		}
 		enterprise {
 			enabled = true
-			namespaces = ["foo", "bar"]
+			license_path = "/tmp/foo.hclic"
+			partition "alpha" {
+			}
+			partition "beta" {
+				namespaces = ["foo", "bar"]
+			}
 		}
 		topology {
 			network_shape = "islands"
@@ -74,6 +75,7 @@ func TestParseConfigPartial_AllFields(t *testing.T) {
 				upstream_name = "fake-service"
 				upstream_namespace = "foo"
 				upstream_datacenter = "fake-dc"
+				upstream_partition = "fake-ap"
 				upstream_extra_hcl = "super invalid"
 				service_meta ={
 					version = "v2"
@@ -110,24 +112,56 @@ EOF
 		,
 		]
 `
-	fc, uct, err := parseConfigPartial([]byte(body))
+	fc, err := parseConfig([]byte(body))
 	require.NoError(t, err)
 
-	require.Equal(t, &FlatConfig{
-		ConsulImage:          "my-dev-image:blah",
-		EnvoyVersion:         "v1.18.3",
-		CanaryConsulImage:    "consul:1.9.5",
-		CanaryEnvoyVersion:   "v1.17.2",
-		CanaryNodes:          []string{"abc", "def"},
-		EncryptionTLS:        true,
-		EncryptionTLSAPI:     true,
-		EncryptionGossip:     true,
-		KubernetesEnabled:    true,
-		EnvoyLogLevel:        "debug",
-		PrometheusEnabled:    true,
-		InitialMasterToken:   "root",
-		EnterpriseEnabled:    true,
-		EnterpriseNamespaces: []string{"foo", "bar"},
+	require.Equal(t, &Config{
+		ConsulImage:           "my-dev-image:blah",
+		EnvoyVersion:          "v1.18.3",
+		CanaryConsulImage:     "consul:1.9.5",
+		CanaryEnvoyVersion:    "v1.17.2",
+		CanaryNodes:           []string{"abc", "def"},
+		EncryptionTLS:         true,
+		EncryptionTLSAPI:      true,
+		EncryptionGossip:      true,
+		KubernetesEnabled:     true,
+		EnvoyLogLevel:         "debug",
+		PrometheusEnabled:     true,
+		InitialMasterToken:    "root",
+		EnterpriseEnabled:     true,
+		EnterpriseLicensePath: "/tmp/foo.hclic",
+		EnterprisePartitions: []*Partition{
+			{
+				Name: "alpha",
+			},
+			{
+				Name:       "beta",
+				Namespaces: []string{"foo", "bar"},
+			},
+		},
+		TopologyNetworkShape: "islands",
+		DisableWANBootstrap:  true,
+		TopologyDatacenters: []*Datacenter{
+			{Name: "dc1", Servers: 3, Clients: 2, MeshGateways: 1},
+			{Name: "dc2", Servers: 3, Clients: 2, MeshGateways: 1},
+		},
+		TopologyNodes: []*Node{
+			{
+				NodeName:           "dc1-client2",
+				UpstreamName:       "fake-service",
+				UpstreamNamespace:  "foo",
+				UpstreamDatacenter: "fake-dc",
+				UpstreamPartition:  "fake-ap",
+				UpstreamExtraHCL:   "super invalid",
+				ServiceMeta: map[string]string{
+					"version": "v2",
+				},
+				ServiceNamespace:            "bar",
+				UseBuiltinProxy:             true,
+				Dead:                        true,
+				RetainInPrimaryGatewaysList: true,
+			},
+		},
 		ConfigEntries: []api.ConfigEntry{
 			&api.ProxyConfigEntry{
 				Kind: api.ProxyDefaults,
@@ -148,31 +182,4 @@ EOF
 			},
 		},
 	}, fc)
-
-	expectUCT := &userConfigTopology{
-		NetworkShape:        "islands",
-		DisableWANBootstrap: true,
-		Datacenter: []*userConfigTopologyDatacenter{
-			{Name: "dc1", Servers: 3, Clients: 2, MeshGateways: 1},
-			{Name: "dc2", Servers: 3, Clients: 2, MeshGateways: 1},
-		},
-		Nodes: []*userConfigTopologyNodeConfig{
-			{
-				NodeName:           "dc1-client2",
-				UpstreamName:       "fake-service",
-				UpstreamNamespace:  "foo",
-				UpstreamDatacenter: "fake-dc",
-				UpstreamExtraHCL:   "super invalid",
-				ServiceMeta: map[string]string{
-					"version": "v2",
-				},
-				ServiceNamespace:            "bar",
-				UseBuiltinProxy:             true,
-				Dead:                        true,
-				RetainInPrimaryGatewaysList: true,
-			},
-		},
-	}
-
-	require.Equal(t, expectUCT, uct)
 }
