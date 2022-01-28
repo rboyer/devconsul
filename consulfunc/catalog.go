@@ -2,8 +2,8 @@ package consulfunc
 
 import "github.com/hashicorp/consul/api"
 
-func ListAllNodes(client *api.Client, dc string, enterprise bool) ([]*api.Node, error) {
-	queryOptionList, err := PartitionQueryOptionsList(client, enterprise)
+func ListAllNodes(client *api.Client, dc string, enterprise, partitionsDisabled bool) ([]*api.Node, error) {
+	queryOptionList, err := PartitionQueryOptionsList(client, enterprise, partitionsDisabled)
 	if err != nil {
 		return nil, err
 	}

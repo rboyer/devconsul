@@ -6,29 +6,30 @@ import (
 
 // Config is the runtime configuration struct derived from rawConfig.
 type Config struct {
-	ConfName              string // name from config.hcl
-	ConsulImage           string
-	EnvoyVersion          string
-	CanaryConsulImage     string
-	CanaryEnvoyVersion    string
-	CanaryNodes           []string
-	EncryptionTLS         bool
-	EncryptionTLSAPI      bool
-	EncryptionGossip      bool
-	KubernetesEnabled     bool
-	EnvoyLogLevel         string
-	PrometheusEnabled     bool
-	InitialMasterToken    string
-	ConfigEntries         []api.ConfigEntry
-	GossipKey             string
-	AgentMasterToken      string
-	EnterpriseEnabled     bool
-	EnterprisePartitions  []*Partition
-	EnterpriseLicensePath string
-	TopologyNetworkShape  string
-	DisableWANBootstrap   bool
-	TopologyDatacenters   []*Datacenter
-	TopologyNodes         []*Node
+	ConfName                    string // name from config.hcl
+	ConsulImage                 string
+	EnvoyVersion                string
+	CanaryConsulImage           string
+	CanaryEnvoyVersion          string
+	CanaryNodes                 []string
+	EncryptionTLS               bool
+	EncryptionTLSAPI            bool
+	EncryptionGossip            bool
+	KubernetesEnabled           bool
+	EnvoyLogLevel               string
+	PrometheusEnabled           bool
+	InitialMasterToken          string
+	ConfigEntries               []api.ConfigEntry
+	GossipKey                   string
+	AgentMasterToken            string
+	EnterpriseEnabled           bool
+	EnterprisePartitions        []*Partition
+	EnterpriseDisablePartitions bool
+	EnterpriseLicensePath       string
+	TopologyNetworkShape        string
+	DisableWANBootstrap         bool
+	TopologyDatacenters         []*Datacenter
+	TopologyNodes               []*Node
 }
 
 func (c *Config) CanaryInfo() (configured bool, nodes map[string]struct{}) {

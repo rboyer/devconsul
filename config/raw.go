@@ -87,9 +87,10 @@ type rawConfigCanaryProxies struct {
 }
 
 type rawConfigEnterprise struct {
-	Enabled     bool         `hcl:"enabled,optional"`
-	Partitions  []*Partition `hcl:"partition,block"`
-	LicensePath string       `hcl:"license_path,optional"`
+	Enabled           bool         `hcl:"enabled,optional"`
+	Partitions        []*Partition `hcl:"partition,block"`
+	LicensePath       string       `hcl:"license_path,optional"`
+	DisablePartitions bool         `hcl:"disable_partitions,optional"`
 }
 
 type rawTopology struct {

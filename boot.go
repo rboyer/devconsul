@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"text/template"
 	"time"
 
 	"github.com/hashicorp/consul/api"
@@ -273,6 +272,9 @@ func (c *Core) createPartitions() error {
 	if !c.config.EnterpriseEnabled {
 		return nil
 	}
+	if c.config.EnterpriseDisablePartitions {
+		return nil
+	}
 
 	partClient := c.primaryClient().Partitions()
 
@@ -453,25 +455,26 @@ func (c *Core) createMeshGatewayToken() error {
 	}
 
 	if c.config.EnterpriseEnabled {
-		// NOTE: this is not partition aware
 		p.Rules = `
-			partition "default" {
-				namespace_prefix "" {
-					service "mesh-gateway" {
-						policy     = "write"
-					}
-					service_prefix "" {
-						policy     = "read"
-					}
-					node_prefix "" {
-						policy     = "read"
-					}
+			namespace_prefix "" {
+				service "mesh-gateway" {
+					policy     = "write"
 				}
-				agent_prefix "" {
+				service_prefix "" {
+					policy     = "read"
+				}
+				node_prefix "" {
 					policy     = "read"
 				}
 			}
-			`
+			agent_prefix "" {
+				policy     = "read"
+			}
+		`
+		if !c.config.EnterpriseDisablePartitions {
+			p.Rules = ` partition "default" { ` + p.Rules + ` } `
+		}
+
 	} else {
 		p.Rules = `
 			service "mesh-gateway" {
@@ -559,11 +562,12 @@ func (c *Core) createAgentTokens() error {
 
 		if c.config.EnterpriseEnabled {
 			p.Rules = `
-			partition "` + node.Partition + `" {
-				node "` + node.Name + `-pod" { policy = "write" }
-				service_prefix "" { policy = "read" }
-			}
+			node "` + node.Name + `-pod" { policy = "write" }
+			service_prefix "" { policy = "read" }
 			`
+			if !c.config.EnterpriseDisablePartitions {
+				p.Rules = ` partition "` + node.Partition + `" { ` + p.Rules + ` } `
+			}
 		} else {
 			p.Rules = `
 			node "` + node.Name + `-pod" { policy = "write" }
@@ -726,13 +730,14 @@ func (c *Core) createAnonymousPolicy() error {
 	}
 	if c.config.EnterpriseEnabled {
 		p.Rules = `
-			partition_prefix "" {
-				namespace_prefix "" {
-					node_prefix "" { policy = "read" }
-					service_prefix "" { policy = "read" }
-				}
+			namespace_prefix "" {
+				node_prefix "" { policy = "read" }
+				service_prefix "" { policy = "read" }
 			}
 			`
+		if !c.config.EnterpriseDisablePartitions {
+			p.Rules = ` partition_prefix "" { ` + p.Rules + ` } `
+		}
 	} else {
 		p.Rules = `
 			node_prefix "" { policy = "read" }
@@ -810,6 +815,9 @@ func (c *Core) createServiceTokens() error {
 			token.Namespace = n.Service.ID.Namespace
 			token.Partition = n.Service.ID.Partition
 		}
+		if c.config.EnterpriseDisablePartitions {
+			token.Partition = ""
+		}
 
 		token, err := consulfunc.CreateOrUpdateToken(c.primaryClient(), token, nil)
 		if err != nil {
@@ -838,7 +846,9 @@ func (c *Core) writeCentralConfigs() error {
 	// Configs live in the primary DC only.
 	client := c.clientForDC(config.PrimaryDC)
 
-	currentEntries, err := consulfunc.ListAllConfigEntries(client, c.config.EnterpriseEnabled)
+	currentEntries, err := consulfunc.ListAllConfigEntries(client,
+		c.config.EnterpriseEnabled,
+		c.config.EnterpriseDisablePartitions)
 	if err != nil {
 		return err
 	}
@@ -956,6 +966,19 @@ func (c *Core) writeCentralConfigs() error {
 				}
 			}
 		}
+		if c.config.EnterpriseDisablePartitions {
+			switch entry.GetKind() {
+			case api.ProxyDefaults:
+				thisEntry := entry.(*api.ProxyConfigEntry)
+				thisEntry.Partition = ""
+			case api.ServiceIntentions:
+				thisEntry := entry.(*api.ServiceIntentionsConfigEntry)
+				thisEntry.Partition = ""
+				for _, src := range thisEntry.Sources {
+					src.Partition = ""
+				}
+			}
+		}
 		if _, _, err := ce.Set(entry, nil); err != nil {
 			return err
 		}
@@ -1025,12 +1048,14 @@ func (c *Core) writeServiceRegistrationFiles() error {
 		}
 
 		type templateOpts struct {
-			Service           *infra.Service
-			EnterpriseEnabled bool
+			Service                     *infra.Service
+			EnterpriseEnabled           bool
+			EnterpriseDisablePartitions bool
 		}
 		opts := templateOpts{
-			Service:           n.Service,
-			EnterpriseEnabled: c.config.EnterpriseEnabled,
+			Service:                     n.Service,
+			EnterpriseEnabled:           c.config.EnterpriseEnabled,
+			EnterpriseDisablePartitions: c.config.EnterpriseDisablePartitions,
 		}
 
 		var buf bytes.Buffer
@@ -1118,56 +1143,6 @@ func (c *Core) createAuthMethodForK8S() error {
 	return nil
 }
 
-var serviceRegistrationT = template.Must(template.New("service_reg").Parse(`
-services = [
-  {
-    name = "{{.Service.ID.Name}}"
-{{- if .EnterpriseEnabled }}
-    namespace = "{{.Service.ID.Namespace}}"
-    partition = "{{.Service.ID.Partition}}"
-{{- end }}
-    port = {{.Service.Port}}
-
-    checks = [
-      {
-        name     = "up"
-        http     = "http://localhost:{{.Service.Port}}/healthz"
-        method   = "GET"
-        interval = "5s"
-        timeout  = "1s"
-      },
-    ]
-
-    meta {
-{{- range $k, $v := .Service.Meta }}
-      "{{ $k }}" = "{{ $v }}",
-{{- end }}
-    }
-
-    connect {
-      sidecar_service {
-        proxy {
-          upstreams = [
-            {
-              destination_name = "{{.Service.UpstreamID.Name}}"
-{{- if .EnterpriseEnabled }}
-              destination_namespace = "{{.Service.UpstreamID.Namespace}}"
-              destination_partition = "{{.Service.UpstreamID.Partition}}"
-{{- end }}
-              local_bind_port  = {{.Service.UpstreamLocalPort}}
-{{- if .Service.UpstreamDatacenter }}
-              datacenter = "{{.Service.UpstreamDatacenter}}"
-{{- end }}
-{{ .Service.UpstreamExtraHCL }}
-            },
-          ]
-        }
-      }
-    }
-  },
-]
-`))
-
 func GetServiceRegistrationHCL(s infra.Service) (string, error) {
 	var buf bytes.Buffer
 	err := serviceRegistrationT.Execute(&buf, &s)
@@ -1197,9 +1172,11 @@ func (c *Core) injectAgentTokensAndWaitForNodeUpdates(datacenter string) error {
 			err      error
 		)
 		if c.config.EnterpriseEnabled && datacenter == config.PrimaryDC {
-			allNodes, err = consulfunc.ListAllNodes(client, config.PrimaryDC, c.config.EnterpriseEnabled)
+			allNodes, err = consulfunc.ListAllNodes(client, config.PrimaryDC,
+				c.config.EnterpriseEnabled,
+				c.config.EnterpriseDisablePartitions)
 			if err != nil {
-				return err
+				return fmt.Errorf("consulfunc.ListAllNodes: %w", err)
 			}
 
 		} else {

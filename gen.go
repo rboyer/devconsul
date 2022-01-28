@@ -261,7 +261,9 @@ resource "docker_container" "{{.Node.Name}}" {
   name         = "{{.Node.Name}}"
   network_mode = "container:${docker_container.{{.PodName}}.id}"
   image        = docker_image.consul.latest
-  restart  = "always"
+  restart      = "always"
+
+  env = [ "CONSUL_UID=0", "CONSUL_GID=0" ]
 
   labels {
     label = "devconsul"
@@ -496,7 +498,9 @@ func (c *Core) generatePingPongContainers(podName string, node *infra.Node) ([]s
 	}
 
 	if c.config.EnterpriseEnabled && node.Partition != "" {
-		ppi.SidecarBootArgs = append(ppi.SidecarBootArgs, "-p", node.Partition)
+		if !c.config.EnterpriseDisablePartitions {
+			ppi.SidecarBootArgs = append(ppi.SidecarBootArgs, "-p", node.Partition)
+		}
 	}
 
 	if c.config.EncryptionTLSAPI {
@@ -705,6 +709,10 @@ func (c *Core) generateAgentHCL(node *infra.Node) (string, error) {
 		EnterprisePartition:   node.Partition,
 	}
 
+	if c.config.EnterpriseDisablePartitions {
+		configInfo.EnterprisePartition = ""
+	}
+
 	if node.Server {
 		configInfo.MasterToken = c.config.InitialMasterToken
 
@@ -824,7 +832,9 @@ telemetry {
 }
 
 {{ if .EnterprisePartition }}
+{{ if not .EnterpriseDisablePartitions }}
 partition = "{{ .EnterprisePartition }}"
+{{- end }}
 {{- end }}
 
 {{ if .EnterpriseLicensePath }}
