@@ -688,28 +688,30 @@ func (c *Core) generateAgentHCL(node *infra.Node) (string, error) {
 		TLSFilePrefix    string
 		Prometheus       bool
 
-		FederateViaGateway    bool
-		PrimaryGateways       string
-		DisableWANBootstrap   bool
-		EnterpriseLicensePath string
-		EnterprisePartition   string
+		FederateViaGateway          bool
+		PrimaryGateways             string
+		DisableWANBootstrap         bool
+		EnterpriseLicensePath       string
+		EnterprisePartition         string
+		EnterpriseDisablePartitions bool
 	}
 
 	configInfo := consulAgentConfigInfo{
-		AdvertiseAddr:         node.LocalAddress(),
-		RetryJoin:             `"` + strings.Join(c.topology.ServerIPs(node.Datacenter), `", "`) + `"`,
-		Datacenter:            node.Datacenter,
-		AgentMasterToken:      c.config.AgentMasterToken,
-		Server:                node.Server,
-		GossipKey:             c.config.GossipKey,
-		TLS:                   c.config.EncryptionTLS,
-		TLSAPI:                c.config.EncryptionTLSAPI,
-		Prometheus:            c.config.PrometheusEnabled,
-		EnterpriseLicensePath: c.config.EnterpriseLicensePath,
-		EnterprisePartition:   node.Partition,
+		AdvertiseAddr:               node.LocalAddress(),
+		RetryJoin:                   `"` + strings.Join(c.topology.ServerIPs(node.Datacenter), `", "`) + `"`,
+		Datacenter:                  node.Datacenter,
+		AgentMasterToken:            c.config.AgentMasterToken,
+		Server:                      node.Server,
+		GossipKey:                   c.config.GossipKey,
+		TLS:                         c.config.EncryptionTLS,
+		TLSAPI:                      c.config.EncryptionTLSAPI,
+		Prometheus:                  c.config.PrometheusEnabled,
+		EnterpriseLicensePath:       c.config.EnterpriseLicensePath,
+		EnterpriseDisablePartitions: c.config.EnterpriseDisablePartitions,
+		EnterprisePartition:         node.Partition,
 	}
 
-	if c.config.EnterpriseDisablePartitions {
+	if c.config.EnterpriseDisablePartitions || !c.config.EnterpriseEnabled {
 		configInfo.EnterprisePartition = ""
 	}
 
