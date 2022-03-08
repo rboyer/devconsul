@@ -19,7 +19,6 @@ func CompileTopology(cfg *config.Config) (*Topology, error) {
 	switch cfg.TopologyNetworkShape {
 	case "islands":
 		topology.NetworkShape = NetworkShapeIslands
-		topology.DisableWANBootstrap = cfg.DisableWANBootstrap
 		needsAllNetworks = true
 	case "dual":
 		topology.NetworkShape = NetworkShapeDual
@@ -29,10 +28,6 @@ func CompileTopology(cfg *config.Config) (*Topology, error) {
 		needsAllNetworks = false
 	default:
 		return nil, fmt.Errorf("unknown network_shape: %s", cfg.TopologyNetworkShape)
-	}
-
-	if topology.NetworkShape != NetworkShapeIslands && topology.DisableWANBootstrap {
-		return nil, fmt.Errorf("disable_wan_bootstrap requires network_shape=islands")
 	}
 
 	if topology.NetworkShape == NetworkShapeIslands && !cfg.EncryptionTLS {
@@ -97,7 +92,7 @@ func CompileTopology(cfg *config.Config) (*Topology, error) {
 
 			switch topology.NetworkShape {
 			case NetworkShapeIslands:
-				if dc != config.PrimaryDC && !topology.DisableWANBootstrap { // Needed for initial join
+				if dc != config.PrimaryDC {
 					node.Addresses = append(node.Addresses, Address{
 						Network:   "wan",
 						IPAddress: wanIP,

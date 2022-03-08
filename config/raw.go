@@ -94,10 +94,9 @@ type rawConfigEnterprise struct {
 }
 
 type rawTopology struct {
-	NetworkShape        string        `hcl:"network_shape,optional"`
-	DisableWANBootstrap bool          `hcl:"disable_wan_bootstrap,optional"`
-	Datacenter          []*Datacenter `hcl:"datacenter,block"`
-	Nodes               []*Node       `hcl:"node,block"`
+	NetworkShape string        `hcl:"network_shape,optional"`
+	Datacenter   []*Datacenter `hcl:"datacenter,block"`
+	Nodes        []*Node       `hcl:"node,block"`
 }
 
 func (t *rawTopology) GetDatacenter(name string) (*Datacenter, bool) {

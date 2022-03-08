@@ -690,7 +690,6 @@ func (c *Core) generateAgentHCL(node *infra.Node) (string, error) {
 
 		FederateViaGateway          bool
 		PrimaryGateways             string
-		DisableWANBootstrap         bool
 		EnterpriseLicensePath       string
 		EnterprisePartition         string
 		EnterpriseDisablePartitions bool
@@ -748,7 +747,6 @@ func (c *Core) generateAgentHCL(node *infra.Node) (string, error) {
 			if node.Datacenter != config.PrimaryDC {
 				primaryGateways := c.topology.GatewayAddrs(config.PrimaryDC)
 				configInfo.PrimaryGateways = `"` + strings.Join(primaryGateways, `", "`) + `"`
-				configInfo.DisableWANBootstrap = c.topology.DisableWANBootstrap
 			}
 		} else {
 			configInfo.RetryJoinWAN = `"` + strings.Join(ips, `", "`) + `"`
@@ -807,9 +805,6 @@ retry_join             = [ {{.RetryJoin}} ]
 {{ if .SecondaryServer -}}
 primary_gateways          = [ {{ .PrimaryGateways }} ]
 primary_gateways_interval = "5s"
-{{ if .DisableWANBootstrap -}}
-disable_primary_gateway_fallback = true
-{{- end}}
 {{- end}}
 {{ else -}}
 {{ if .Server -}}

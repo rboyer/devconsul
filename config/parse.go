@@ -78,7 +78,6 @@ func parseConfig(pathname string, contents []byte) (*Config, error) {
 		EnterpriseDisablePartitions: uc.Enterprise.DisablePartitions,
 		EnterpriseLicensePath:       uc.Enterprise.LicensePath,
 		TopologyNetworkShape:        uc.Topology.NetworkShape,
-		DisableWANBootstrap:         uc.Topology.DisableWANBootstrap,
 		TopologyDatacenters:         uc.Topology.Datacenter,
 		TopologyNodes:               uc.Topology.Nodes,
 	}

@@ -27,7 +27,6 @@ type Config struct {
 	EnterpriseDisablePartitions bool
 	EnterpriseLicensePath       string
 	TopologyNetworkShape        string
-	DisableWANBootstrap         bool
 	TopologyDatacenters         []*Datacenter
 	TopologyNodes               []*Node
 }

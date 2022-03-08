@@ -35,8 +35,7 @@ func (s NetworkShape) GetNetworkName(dc string) string {
 }
 
 type Topology struct {
-	NetworkShape        NetworkShape
-	DisableWANBootstrap bool
+	NetworkShape NetworkShape
 
 	networks map[string]*Network
 	dcs      []*Datacenter

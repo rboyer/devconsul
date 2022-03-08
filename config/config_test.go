@@ -127,7 +127,6 @@ func TestParseConfig_AllFields(t *testing.T) {
 		}
 		topology {
 			network_shape = "islands"
-			disable_wan_bootstrap = true
 			datacenter "dc1" {
 				servers = 3
 				clients = 2
@@ -208,7 +207,6 @@ EOF
 			},
 		},
 		TopologyNetworkShape: "islands",
-		DisableWANBootstrap:  true,
 		TopologyDatacenters: []*Datacenter{
 			{Name: "dc1", Servers: 3, Clients: 2, MeshGateways: 1},
 			{Name: "dc2", Servers: 3, Clients: 2, MeshGateways: 1},
