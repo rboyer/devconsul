@@ -931,16 +931,16 @@ func (c *Core) writeCentralConfigs() error {
 		ckn := consulfunc.ConfigKindName{
 			Kind:      entry.GetKind(),
 			Name:      entry.GetName(),
-			Namespace: entry.GetNamespace(),
-			Partition: entry.GetPartition(),
+			Namespace: util.NamespaceOrDefault(entry.GetNamespace()),
+			Partition: util.PartitionOrDefault(entry.GetPartition()),
 		}
 		delete(currentEntries, ckn)
 
 		c.logger.Info("config entry created",
 			"kind", entry.GetKind(),
 			"name", entry.GetName(),
-			"namespace", entry.GetNamespace(),
-			"partition", entry.GetPartition(),
+			"namespace", util.NamespaceOrDefault(entry.GetNamespace()),
+			"partition", util.PartitionOrDefault(entry.GetPartition()),
 		)
 	}
 
@@ -964,8 +964,8 @@ func (c *Core) writeCentralConfigs() error {
 			c.logger.Info("nuking config entry",
 				"kind", ckn.Kind,
 				"name", ckn.Name,
-				"namespace", ckn.Namespace,
-				"partition", ckn.Partition,
+				"namespace", util.NamespaceOrDefault(ckn.Namespace),
+				"partition", util.PartitionOrDefault(ckn.Partition),
 			)
 
 			var writeOpts api.WriteOptions
