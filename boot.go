@@ -23,8 +23,6 @@ type BootInfo struct {
 	replicationSecretID string
 
 	tokens map[string]string
-
-	upgradedACLs map[string]map[string]struct{}
 }
 
 func (c *Core) runBoot(primaryOnly bool) error {
@@ -108,8 +106,6 @@ func (c *Core) waitForKV(fromDC, toDC string) {
 func (c *Core) initPrimaryDC() error {
 	var err error
 
-	c.waitForUpgrade(config.PrimaryDC)
-
 	err = c.createPartitions()
 	if err != nil {
 		return fmt.Errorf("createPartitions: %v", err)
@@ -184,7 +180,6 @@ func (c *Core) initSecondaryDCs() error {
 		if err != nil {
 			return fmt.Errorf("error creating final client for dc=%s: %v", dc.Name, err)
 		}
-		c.waitForUpgrade(dc.Name)
 
 		err = c.injectAgentTokensAndWaitForNodeUpdates(dc.Name)
 		if err != nil {
@@ -615,8 +610,6 @@ func (c *Core) injectAgentTokens(datacenter string) error {
 			return err
 		}
 
-		// c.waitForACLUpgrade(agentClient, node.Datacenter, node.Name)
-
 		ac := agentClient.Agent()
 
 		token := c.mustGetToken("agent", node.Name)
@@ -642,54 +635,6 @@ func (c *Core) waitForLeader(dc string) {
 		c.logger.Info("datacenter has no leader yet", "datacenter", dc)
 		time.Sleep(500 * time.Millisecond)
 	}
-}
-
-func (c *Core) waitForUpgrade(dc string) {
-	c.waitForACLUpgrade(c.clients[dc], dc, dc+"-server1")
-}
-
-func (c *Core) waitForACLUpgrade(client *api.Client, dc, node string) error {
-	if c.isUpgradedACLs(dc, node) {
-		return nil
-	}
-
-	for {
-		mode, err := consulfunc.GetACLMode(client, node)
-		if err == nil && mode == 1 {
-			c.logger.Info("acl mode is now in v2 mode", "node", node)
-			break
-		}
-		c.logger.Info("acl mode not upgraded to v2 yet", "node", node)
-
-		time.Sleep(500 * time.Millisecond)
-	}
-
-	c.markUpgradedACLs(dc, node)
-	return nil
-}
-
-func (c *Core) isUpgradedACLs(dc, node string) bool {
-	if len(c.upgradedACLs) == 0 {
-		return false
-	}
-	m, ok := c.upgradedACLs[dc]
-	if !ok {
-		return false
-	}
-	_, ok = m[node]
-	return ok
-}
-
-func (c *Core) markUpgradedACLs(dc, node string) {
-	if c.upgradedACLs == nil {
-		c.upgradedACLs = make(map[string]map[string]struct{})
-	}
-	m, ok := c.upgradedACLs[dc]
-	if !ok {
-		m = make(map[string]struct{})
-		c.upgradedACLs[dc] = m
-	}
-	m[node] = struct{}{}
 }
 
 const anonymousTokenAccessorID = "00000000-0000-0000-0000-000000000002"
