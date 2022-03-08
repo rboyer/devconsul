@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/hashicorp/go-cleanhttp"
 	"github.com/rboyer/safeio"
@@ -21,6 +22,8 @@ var knownConfigEntryKinds = []string{
 	api.TerminatingGateway,
 	api.IngressGateway,
 	api.ServiceIntentions,
+	api.MeshConfig,
+	api.ExportedServices,
 }
 
 func (c *Core) RunDebugListConfigs() error {
@@ -34,6 +37,9 @@ func (c *Core) RunDebugListConfigs() error {
 	for _, kind := range knownConfigEntryKinds {
 		entries, _, err := configClient.List(kind, nil)
 		if err != nil {
+			if strings.Contains(err.Error(), "invalid config entry kind") {
+				continue
+			}
 			return err
 		}
 		for _, entry := range entries {
