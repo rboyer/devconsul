@@ -30,7 +30,7 @@ func (c *Core) runGenerate(primaryOnly bool) error {
 		c.logger.Info("Generating node",
 			"name", node.Name,
 			"server", node.Server,
-			"dc", node.Datacenter,
+			"dc", node.Cluster,
 			"ip", node.LocalAddress(),
 		)
 	})
@@ -124,21 +124,10 @@ resource "docker_image" %[1]q {
 		}
 		node.AddLabels(pod.Labels)
 
-		// if !node.Server {
-		// 	pod.DependsOn = append(pod.DependsOn,
-		// 		"docker_container."+node.Datacenter+"-server1",
-		// 	)
-		// }
-		/*
-					depends_on = [
-			    aws_iam_role_policy.example,
-			  ]
-		*/
-
 		// NOTE: primaryOnly implies we still generate empty pods in the remote datacenters
 		populatePodContents := true
 		if primaryOnly {
-			populatePodContents = node.Datacenter == config.PrimaryDC
+			populatePodContents = node.Cluster == config.PrimaryCluster
 		}
 
 		addVolume(node.Name)
@@ -314,29 +303,53 @@ func (c *Core) generateMeshGatewayContainer(podName string, node *infra.Node) (s
 	}
 
 	type tfMeshGatewayInfo struct {
-		PodName         string
-		NodeName        string
-		EnvoyLogLevel   string
-		EnableWAN       bool
-		LANAddress      string
-		WANAddress      string
-		ExposeServers   bool
-		SidecarBootArgs []string
-		Labels          map[string]string
+		PodName            string
+		NodeName           string
+		EnvoyLogLevel      string
+		EnableACLs         bool
+		EnableWAN          bool
+		LANAddress         string
+		WANAddress         string
+		ExposeServers      bool
+		SidecarBootEnvVars []string
+		Labels             map[string]string
 	}
 
 	mgi := tfMeshGatewayInfo{
 		PodName:       podName,
 		NodeName:      node.Name,
 		EnvoyLogLevel: c.config.EnvoyLogLevel,
+		EnableACLs:    !c.config.SecurityDisableACLs,
 		Labels:        map[string]string{
 			//
+		},
+		SidecarBootEnvVars: []string{
+			"SBOOT_READY_FILE=/secrets/ready.val",
 		},
 	}
 	node.AddLabels(mgi.Labels)
 
+	if c.config.SecurityDisableACLs {
+		mgi.SidecarBootEnvVars = append(mgi.SidecarBootEnvVars,
+			"SBOOT_MODE=insecure",
+		)
+	} else {
+		mgi.SidecarBootEnvVars = append(mgi.SidecarBootEnvVars,
+			"SBOOT_MODE=direct",
+			"SBOOT_TOKEN_FILE=/secrets/mesh-gateway.val",
+		)
+	}
+
+	if c.config.EnterpriseEnabled && node.Partition != "" {
+		if !c.config.EnterpriseDisablePartitions {
+			mgi.SidecarBootEnvVars = append(mgi.SidecarBootEnvVars,
+				"SBOOT_PARTITION="+node.Partition)
+		}
+	}
+
 	if c.config.EncryptionTLSAPI {
-		mgi.SidecarBootArgs = append(mgi.SidecarBootArgs, "-e")
+		mgi.SidecarBootEnvVars = append(mgi.SidecarBootEnvVars,
+			"SBOOT_AGENT_TLS=1")
 	}
 
 	switch c.topology.NetworkShape {
@@ -391,15 +404,14 @@ resource "docker_container" "{{.NodeName}}-mesh-gateway" {
     read_only      = true
   }
 
-  command = [
-      "/bin/mesh-gateway-sidecar-boot.sh",
-      "/secrets/ready.val",
-      "-t",
-      "/secrets/mesh-gateway.val",
-{{- range .SidecarBootArgs }}
+  env = [
+{{- range .SidecarBootEnvVars }}
       "{{.}}",
 {{- end}}
-      "--",
+  ]
+
+  command = [
+      "/bin/mesh-gateway-sidecar-boot.sh",
 {{- if .ExposeServers }}
       "-expose-servers",
 {{- end }}
@@ -436,10 +448,11 @@ func (c *Core) generatePingPongContainers(podName string, node *infra.Node) ([]s
 		NodeName           string
 		PingPong           string // ping or pong
 		MetaString         string
-		SidecarBootArgs    []string
+		SidecarBootEnvVars []string
 		UseBuiltinProxy    bool
 		EnvoyLogLevel      string
 		EnvoyImageResource string
+		EnableACLs         bool
 	}
 
 	ppi := pingpongInfo{
@@ -449,6 +462,7 @@ func (c *Core) generatePingPongContainers(podName string, node *infra.Node) ([]s
 		UseBuiltinProxy:    node.UseBuiltinProxy,
 		EnvoyLogLevel:      c.config.EnvoyLogLevel,
 		EnvoyImageResource: "docker_image.consul-envoy.latest",
+		EnableACLs:         !c.config.SecurityDisableACLs,
 	}
 	if node.Canary {
 		ppi.EnvoyImageResource = "docker_image.consul-envoy-canary.latest"
@@ -473,38 +487,45 @@ func (c *Core) generatePingPongContainers(podName string, node *infra.Node) ([]s
 		proxyType = "builtin"
 	}
 
-	if c.config.KubernetesEnabled {
-		ppi.SidecarBootArgs = []string{
-			"/secrets/ready.val",
-			proxyType,
-			"login",
-			"-t",
-			"/secrets/k8s/service_jwt_token." + svc.ID.Name,
-			"-s",
-			"/tmp/consul.token",
-			"-r",
-			"/secrets/servicereg__" + node.Name + "__" + svc.ID.Name + ".hcl",
+	if c.config.SecurityDisableACLs {
+		ppi.SidecarBootEnvVars = []string{
+			"SBOOT_READY_FILE=/secrets/ready.val",
+			"SBOOT_PROXY_TYPE=" + proxyType,
+			"SBOOT_REGISTER_FILE=/secrets/servicereg__" + node.Name + "__" + svc.ID.Name + ".hcl",
+			//
+			"SBOOT_MODE=insecure",
+		}
+	} else if c.config.KubernetesEnabled {
+		ppi.SidecarBootEnvVars = []string{
+			"SBOOT_READY_FILE=/secrets/ready.val",
+			"SBOOT_PROXY_TYPE=" + proxyType,
+			"SBOOT_REGISTER_FILE=/secrets/servicereg__" + node.Name + "__" + svc.ID.Name + ".hcl",
+			//
+			"SBOOT_MODE=login",
+			"SBOOT_BEARER_TOKEN_FILE=/secrets/k8s/service_jwt_token." + svc.ID.Name,
+			"SBOOT_TOKEN_SINK_FILE=/tmp/consul.token",
 		}
 	} else {
-		ppi.SidecarBootArgs = []string{
-			"/secrets/ready.val",
-			proxyType,
-			"direct",
-			"-t",
-			"/secrets/service-token--" + svc.ID.ID() + ".val",
-			"-r",
-			"/secrets/servicereg__" + node.Name + "__" + svc.ID.Name + ".hcl",
+		ppi.SidecarBootEnvVars = []string{
+			"SBOOT_READY_FILE=/secrets/ready.val",
+			"SBOOT_PROXY_TYPE=" + proxyType,
+			"SBOOT_REGISTER_FILE=/secrets/servicereg__" + node.Name + "__" + svc.ID.Name + ".hcl",
+			//
+			"SBOOT_MODE=direct",
+			"SBOOT_TOKEN_FILE=/secrets/service-token--" + svc.ID.ID() + ".val",
 		}
 	}
 
 	if c.config.EnterpriseEnabled && node.Partition != "" {
 		if !c.config.EnterpriseDisablePartitions {
-			ppi.SidecarBootArgs = append(ppi.SidecarBootArgs, "-p", node.Partition)
+			ppi.SidecarBootEnvVars = append(ppi.SidecarBootEnvVars,
+				"SBOOT_PARTITION="+node.Partition)
 		}
 	}
 
 	if c.config.EncryptionTLSAPI {
-		ppi.SidecarBootArgs = append(ppi.SidecarBootArgs, "-e")
+		ppi.SidecarBootEnvVars = append(ppi.SidecarBootEnvVars,
+			"SBOOT_AGENT_TLS=1")
 	}
 
 	appRes, err := stringTemplate(tfPingPongAppT, &ppi)
@@ -581,13 +602,14 @@ resource "docker_container" "{{.NodeName}}-{{.PingPong}}-sidecar" {
     read_only      = true
   }
 
-  command = [
-      "/bin/sidecar-boot.sh",
-{{- range .SidecarBootArgs }}
+  env = [
+{{- range .SidecarBootEnvVars }}
       "{{.}}",
 {{- end}}
-      "--",
-      #################
+  ]
+
+  command = [
+      "/bin/sidecar-boot.sh",
       "-sidecar-for",
       "{{.PingPong}}",
 {{- if not .UseBuiltinProxy }}
@@ -672,21 +694,23 @@ resource "docker_container" "grafana" {
 
 func (c *Core) generateAgentHCL(node *infra.Node) (string, error) {
 	type consulAgentConfigInfo struct {
-		AdvertiseAddr    string
-		AdvertiseAddrWAN string
-		RetryJoin        string
-		RetryJoinWAN     string
-		Datacenter       string
-		SecondaryServer  bool
-		MasterToken      string
-		AgentMasterToken string
-		Server           bool
-		BootstrapExpect  int
-		GossipKey        string
-		TLS              bool
-		TLSAPI           bool
-		TLSFilePrefix    string
-		Prometheus       bool
+		AdvertiseAddr     string
+		AdvertiseAddrWAN  string
+		RetryJoin         string
+		RetryJoinWAN      string
+		Cluster           string
+		PrimaryDatacenter string
+		SecondaryServer   bool
+		MasterToken       string
+		AgentMasterToken  string
+		Server            bool
+		BootstrapExpect   int
+		GossipKey         string
+		TLS               bool
+		TLSAPI            bool
+		TLSFilePrefix     string
+		EnableACLs        bool
+		Prometheus        bool
 
 		FederateViaGateway          bool
 		PrimaryGateways             string
@@ -697,17 +721,28 @@ func (c *Core) generateAgentHCL(node *infra.Node) (string, error) {
 
 	configInfo := consulAgentConfigInfo{
 		AdvertiseAddr:               node.LocalAddress(),
-		RetryJoin:                   `"` + strings.Join(c.topology.ServerIPs(node.Datacenter), `", "`) + `"`,
-		Datacenter:                  node.Datacenter,
-		AgentMasterToken:            c.config.AgentMasterToken,
+		RetryJoin:                   `"` + strings.Join(c.topology.ServerIPs(node.Cluster), `", "`) + `"`,
+		Cluster:                     node.Cluster,
 		Server:                      node.Server,
 		GossipKey:                   c.config.GossipKey,
 		TLS:                         c.config.EncryptionTLS,
 		TLSAPI:                      c.config.EncryptionTLSAPI,
+		EnableACLs:                  !c.config.SecurityDisableACLs,
 		Prometheus:                  c.config.PrometheusEnabled,
 		EnterpriseLicensePath:       c.config.EnterpriseLicensePath,
 		EnterpriseDisablePartitions: c.config.EnterpriseDisablePartitions,
 		EnterprisePartition:         node.Partition,
+	}
+
+	if !c.config.SecurityDisableACLs {
+		configInfo.AgentMasterToken = c.config.AgentMasterToken
+	}
+
+	switch c.topology.LinkMode {
+	case infra.ClusterLinkModeFederate:
+		configInfo.PrimaryDatacenter = config.PrimaryCluster
+	case infra.ClusterLinkModePeer:
+		configInfo.PrimaryDatacenter = node.Cluster
 	}
 
 	if c.config.EnterpriseDisablePartitions || !c.config.EnterpriseEnabled {
@@ -715,7 +750,9 @@ func (c *Core) generateAgentHCL(node *infra.Node) (string, error) {
 	}
 
 	if node.Server {
-		configInfo.MasterToken = c.config.InitialMasterToken
+		if !c.config.SecurityDisableACLs {
+			configInfo.MasterToken = c.config.InitialMasterToken
+		}
 
 		configInfo.EnterprisePartition = "" // we dont' configure this setting on servers
 
@@ -737,27 +774,28 @@ func (c *Core) generateAgentHCL(node *infra.Node) (string, error) {
 			panic("unknown shape: " + c.topology.NetworkShape)
 		}
 
-		var ips []string
-		for _, dc := range c.topology.Datacenters() {
-			ips = append(ips, c.topology.LeaderIP(dc.Name, wanIP))
-		}
-
-		if wanfed {
-			configInfo.FederateViaGateway = true
-			if node.Datacenter != config.PrimaryDC {
-				primaryGateways := c.topology.GatewayAddrs(config.PrimaryDC)
-				configInfo.PrimaryGateways = `"` + strings.Join(primaryGateways, `", "`) + `"`
+		if c.topology.LinkWithFederation() {
+			if wanfed {
+				configInfo.FederateViaGateway = true
+				if node.Cluster != config.PrimaryCluster {
+					primaryGateways := c.topology.GatewayAddrs(config.PrimaryCluster)
+					configInfo.PrimaryGateways = `"` + strings.Join(primaryGateways, `", "`) + `"`
+				}
+			} else {
+				var ips []string
+				for _, cluster := range c.topology.Clusters() {
+					ips = append(ips, c.topology.LeaderIP(cluster.Name, wanIP))
+				}
+				configInfo.RetryJoinWAN = `"` + strings.Join(ips, `", "`) + `"`
 			}
-		} else {
-			configInfo.RetryJoinWAN = `"` + strings.Join(ips, `", "`) + `"`
+
+			configInfo.SecondaryServer = node.Cluster != config.PrimaryCluster
 		}
+		configInfo.BootstrapExpect = len(c.topology.ServerIPs(node.Cluster))
 
-		configInfo.SecondaryServer = node.Datacenter != config.PrimaryDC
-		configInfo.BootstrapExpect = len(c.topology.ServerIPs(node.Datacenter))
-
-		configInfo.TLSFilePrefix = node.Datacenter + "-server-consul-" + strconv.Itoa(node.Index)
+		configInfo.TLSFilePrefix = node.Cluster + "-server-consul-" + strconv.Itoa(node.Index)
 	} else {
-		configInfo.TLSFilePrefix = node.Datacenter + "-client-consul-" + strconv.Itoa(node.Index)
+		configInfo.TLSFilePrefix = node.Cluster + "-client-consul-" + strconv.Itoa(node.Index)
 	}
 
 	var buf bytes.Buffer
@@ -781,7 +819,7 @@ advertise_addr_wan     = "{{.AdvertiseAddrWAN }}"
 {{- end}}
 translate_wan_addrs    = true
 client_addr            = "0.0.0.0"
-datacenter             = "{{.Datacenter}}"
+datacenter             = "{{.Cluster}}"
 disable_update_check   = true
 log_level              = "trace"
 
@@ -799,7 +837,9 @@ rpc {
 }
 {{ end }}
 
-primary_datacenter     = "dc1"
+{{ if .PrimaryDatacenter -}}
+primary_datacenter     = "{{ .PrimaryDatacenter }}"
+{{- end }}
 retry_join             = [ {{.RetryJoin}} ]
 {{ if .FederateViaGateway -}}
 {{ if .SecondaryServer -}}
@@ -889,6 +929,7 @@ ports {
 {{ end }}
 }
 
+{{ if .EnableACLs -}}
 acl {
   enabled                  = true
   default_policy           = "deny"
@@ -904,6 +945,7 @@ acl {
     agent_master = "{{.AgentMasterToken}}"
   }
 }
+{{- end }}
 `))
 
 func indent(s string, n int) string {
@@ -926,6 +968,9 @@ func indent(s string, n int) string {
 }
 
 func (c *Core) generatePrometheusConfigFile() error {
+	if c.config.SecurityDisableACLs {
+		return fmt.Errorf("prometheus setup is incompatible with insecure consul")
+	}
 	type kv struct {
 		Key, Val string
 	}
@@ -956,17 +1001,17 @@ func (c *Core) generatePrometheusConfigFile() error {
 	err := c.topology.Walk(func(node *infra.Node) error {
 		if node.Server {
 			add(&job{
-				Name:        "consul-servers-" + node.Datacenter,
+				Name:        "consul-servers-" + node.Cluster,
 				MetricsPath: "/v1/agent/metrics",
 				Params: map[string][]string{
-					"format": []string{"prometheus"},
-					"token":  []string{c.config.AgentMasterToken},
+					"format": {"prometheus"},
+					"token":  {c.config.AgentMasterToken},
 				},
 				Targets: []string{
 					net.JoinHostPort(node.LocalAddress(), "8500"),
 				},
 				Labels: []kv{
-					{"dc", node.Datacenter},
+					{"cluster", node.Cluster},
 					{"partition", "default"},
 					// {"node", node.Name},
 					{"role", "consul-server"},
@@ -974,17 +1019,17 @@ func (c *Core) generatePrometheusConfigFile() error {
 			})
 		} else {
 			add(&job{
-				Name:        "consul-clients-" + node.Datacenter,
+				Name:        "consul-clients-" + node.Cluster,
 				MetricsPath: "/v1/agent/metrics",
 				Params: map[string][]string{
-					"format": []string{"prometheus"},
-					"token":  []string{c.config.AgentMasterToken},
+					"format": {"prometheus"},
+					"token":  {c.config.AgentMasterToken},
 				},
 				Targets: []string{
 					net.JoinHostPort(node.LocalAddress(), "8500"),
 				},
 				Labels: []kv{
-					{"dc", node.Datacenter},
+					{"cluster", node.Cluster},
 					{"partition", node.Partition},
 					// {"node", node.Name},
 					{"role", "consul-client"},
@@ -993,13 +1038,13 @@ func (c *Core) generatePrometheusConfigFile() error {
 
 			if node.MeshGateway {
 				add(&job{
-					Name:        "mesh-gateways-" + node.Datacenter,
+					Name:        "mesh-gateways-" + node.Cluster,
 					MetricsPath: "/metrics",
 					Targets: []string{
 						net.JoinHostPort(node.LocalAddress(), "9102"),
 					},
 					Labels: []kv{
-						{"dc", node.Datacenter},
+						{"cluster", node.Cluster},
 						{"namespace", "default"},
 						{"partition", "default"},
 						// {"node", node.Name},
@@ -1014,7 +1059,7 @@ func (c *Core) generatePrometheusConfigFile() error {
 						net.JoinHostPort(node.LocalAddress(), "9102"),
 					},
 					Labels: []kv{
-						{"dc", node.Datacenter},
+						{"cluster", node.Cluster},
 						{"namespace", node.Service.ID.Namespace},
 						{"partition", node.Service.ID.Partition},
 						// {"node", node.Name},

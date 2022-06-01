@@ -21,17 +21,16 @@ master_token() {
 }
 
 if [[ $# -lt 1 ]]; then
-    echo "Missing required dc arg" >&2
+    echo "Missing required cluster arg" >&2
     exit 1
 fi
-datacenter=$1
+cluster=$1
 shift
 
-
-node="${datacenter}-server1"
+node="${cluster}-server1"
 ip="$(devconsul config | jq -r ".localAddrs[\"${node}\"]")"
 if [[ "$ip" = "null" ]]; then
-    echo "unknown dc: ${datacenter}" >&2
+    echo "unknown cluster: ${cluster}" >&2
     exit 1
 fi
 
@@ -43,11 +42,15 @@ fi
 path="$1"
 shift
 
-if [[ -z "${CONSUL_HTTP_TOKEN:-}" ]]; then
-    CONSUL_HTTP_TOKEN="$(master_token)"
-    if [[ -z "$CONSUL_HTTP_TOKEN" ]]; then
-        exit 1
+readonly acls="$(devconsul config | jq -r ".acls")"
+if [[ -z "$acls" ]]; then
+    exec curl -sL "http://${ip}:8500/${path}" "$@"
+else
+    if [[ -z "${CONSUL_HTTP_TOKEN:-}" ]]; then
+        CONSUL_HTTP_TOKEN="$(master_token)"
+        if [[ -z "$CONSUL_HTTP_TOKEN" ]]; then
+            exit 1
+        fi
     fi
+    exec curl -sL -H "x-consul-token: $CONSUL_HTTP_TOKEN" "http://${ip}:8500/${path}" "$@"
 fi
-
-exec curl -sL -H "x-consul-token: $CONSUL_HTTP_TOKEN" "http://${ip}:8500/${path}" "$@"

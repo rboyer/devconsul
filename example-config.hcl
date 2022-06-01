@@ -25,15 +25,15 @@ config "simple" {
   }
 
   topology {
-    datacenter "dc1" {
+    cluster "dc1" {
       servers = 1
       clients = 2
     }
-    datacenter "dc2" {
+    cluster "dc2" {
       servers = 1
       clients = 2
     }
-    datacenter "dc3" {
+    cluster "dc3" {
       servers = 1
       clients = 2
     }
@@ -88,19 +88,19 @@ EOF
   ]
 
   topology {
-    datacenter "dc1" {
+    cluster "dc1" {
       servers = 1
       clients = 4
       # Gateways are the last client in each DC.
       # mesh_gateways = 1
     }
-    datacenter "dc2" {
+    cluster "dc2" {
       servers = 1
       clients = 4
       # Gateways are the last client in each DC.
       # mesh_gateways = 1
     }
-    datacenter "dc3" {
+    cluster "dc3" {
       servers = 1
       clients = 4
       # Gateways are the last client in each DC.
@@ -193,13 +193,13 @@ config "wan-federation-via-mesh-gateways" {
     # network_shape = "dual"
     # network_shape = "flat"
 
-    datacenter "dc1" {
+    cluster "dc1" {
       servers = 3
       clients = 2
       # Gateways are the last client in each DC.
       mesh_gateways = 1
     }
-    datacenter "dc2" {
+    cluster "dc2" {
       servers = 3
       clients = 2
       # Gateways are the last client in each DC.

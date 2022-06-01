@@ -4,9 +4,8 @@ import (
 	"fmt"
 	"io/ioutil"
 
-	"github.com/hashicorp/hcl/v2/hclsimple"
-
 	"github.com/hashicorp/consul/api"
+	"github.com/hashicorp/hcl/v2/hclsimple"
 )
 
 // LoadConfig loads up the default config file (config.hcl), parses it, and
@@ -50,10 +49,31 @@ func parseConfig(pathname string, contents []byte) (*Config, error) {
 	if uc.Topology.NetworkShape == "" {
 		uc.Topology.NetworkShape = "flat"
 	}
+	if uc.Topology.LinkMode == "" {
+		uc.Topology.LinkMode = "federate"
+	}
 
-	if _, ok := uc.Topology.GetDatacenter(PrimaryDC); !ok {
-		uc.Topology.Datacenter = append(uc.Topology.Datacenter, &Datacenter{
-			Name:    PrimaryDC,
+	if len(uc.Topology.DeprecatedDatacenter) > 0 {
+		if len(uc.Topology.Cluster) > 0 {
+			return nil, fmt.Errorf("both datacenter and cluster configured")
+		}
+		uc.Topology.Cluster = uc.Topology.DeprecatedDatacenter
+		uc.Topology.DeprecatedDatacenter = nil
+	}
+
+	for _, node := range uc.Topology.Nodes {
+		if node.DeprecatedUpstreamDatacenter != "" {
+			if node.UpstreamCluster != "" {
+				return nil, fmt.Errorf("both upstream_datacenter and upstream_cluster configured")
+			}
+			node.UpstreamCluster = node.DeprecatedUpstreamDatacenter
+			node.DeprecatedUpstreamDatacenter = ""
+		}
+	}
+
+	if _, ok := uc.Topology.GetCluster(PrimaryCluster); !ok {
+		uc.Topology.Cluster = append(uc.Topology.Cluster, &Cluster{
+			Name:    PrimaryCluster,
 			Servers: 1,
 			Clients: 2,
 		})
@@ -69,6 +89,7 @@ func parseConfig(pathname string, contents []byte) (*Config, error) {
 		EncryptionTLS:               uc.Security.Encryption.TLS,
 		EncryptionTLSAPI:            uc.Security.Encryption.TLSAPI,
 		EncryptionGossip:            uc.Security.Encryption.Gossip,
+		SecurityDisableACLs:         uc.Security.DisableACLs,
 		KubernetesEnabled:           uc.Kubernetes.Enabled,
 		EnvoyLogLevel:               uc.Envoy.LogLevel,
 		PrometheusEnabled:           uc.Monitor.Prometheus,
@@ -78,7 +99,8 @@ func parseConfig(pathname string, contents []byte) (*Config, error) {
 		EnterpriseDisablePartitions: uc.Enterprise.DisablePartitions,
 		EnterpriseLicensePath:       uc.Enterprise.LicensePath,
 		TopologyNetworkShape:        uc.Topology.NetworkShape,
-		TopologyDatacenters:         uc.Topology.Datacenter,
+		TopologyLinkMode:            uc.Topology.LinkMode,
+		TopologyClusters:            uc.Topology.Cluster,
 		TopologyNodes:               uc.Topology.Nodes,
 	}
 
@@ -177,9 +199,11 @@ func validateConfig(cfg *Config) error {
 	}
 
 	hasSecondaryDatacenter := false
-	for _, dc := range cfg.TopologyDatacenters {
-		if dc.Name != PrimaryDC {
-			hasSecondaryDatacenter = true
+	if cfg.TopologyLinkMode == "federate" {
+		for _, c := range cfg.TopologyClusters {
+			if c.Name != PrimaryCluster {
+				hasSecondaryDatacenter = true
+			}
 		}
 	}
 

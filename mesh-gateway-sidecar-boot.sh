@@ -2,8 +2,10 @@
 
 set -euo pipefail
 
-ready_file="${1:-}"
-shift
+readonly ready_file="${SBOOT_READY_FILE:-}"
+readonly mode="${SBOOT_MODE:-}"
+readonly agent_tls="${SBOOT_AGENT_TLS:-}"
+readonly partition="${SBOOT_PARTITION:-}"
 
 # wait until ready
 while : ; do
@@ -14,44 +16,40 @@ while : ; do
     sleep 0.1
 done
 
-agent_tls=""
-token_file=""
-while getopts ":t:e" opt; do
-    case "${opt}" in
-        e)
-            agent_tls=1
-            ;;
-        t)
-            token_file="$OPTARG"
-            ;;
-        \?)
-            echo "invalid option: -$OPTARG" >&2
+api_args=()
+case "${mode}" in
+    insecure)
+        ;;
+    direct)
+        readonly token_file="${SBOOT_TOKEN_FILE:-}"
+        if [[ -z "${token_file}" ]]; then
+            echo "missing required env var SBOOT_TOKEN_FILE" >&2
             exit 1
-            ;;
-        :)
-            echo "invalid option: -$OPTARG requires an argument" >&2
-            exit 1
-            ;;
-    esac
-done
-shift $((OPTIND - 1))
+        fi
 
-if [[ -z "${token_file}" ]]; then
-    echo "missing required argument -t <BOOT_TOKEN_FILE>" >&2
-    exit 1
+        token=''
+        while : ; do
+            read -r token < "${token_file}" || true
+            if [[ -n "${token}" ]]; then
+                break
+            fi
+            echo "waiting for secret to show up at ${token_file}..."
+            sleep 0.1
+        done
+
+        api_args+=( -token-file "${token_file}" )
+
+        ;;
+    *)
+        echo "unknown mode: $mode" >&2
+        exit 1
+        ;;
+esac
+
+if [[ -n "${partition}" ]]; then
+    api_args+=( -partition "${partition}" )
 fi
 
-token=''
-while : ; do
-    read -r token < "${token_file}" || true
-    if [[ -n "${token}" ]]; then
-        break
-    fi
-    echo "waiting for secret to show up at ${token_file}..."
-    sleep 0.1
-done
-
-api_args=()
 grpc_args=()
 if [[ -n "$agent_tls" ]]; then
     api_args+=(
@@ -69,5 +67,4 @@ exec consul connect envoy \
     -register \
     -mesh-gateway \
     "${grpc_args[@]}" "${api_args[@]}" \
-    -token-file "${token_file}" \
     "$@"

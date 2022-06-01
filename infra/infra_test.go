@@ -22,7 +22,8 @@ func TestCompileTopology(t *testing.T) {
 		"missing-primary": {
 			cfg: &config.Config{
 				TopologyNetworkShape: "flat",
-				TopologyDatacenters: []*config.Datacenter{
+				TopologyLinkMode:     "federate",
+				TopologyClusters: []*config.Cluster{
 					{
 						Name:    "dc2",
 						Servers: 1,
@@ -30,7 +31,7 @@ func TestCompileTopology(t *testing.T) {
 					},
 				},
 			},
-			expectExactErr: `primary datacenter "dc1" is missing from config`,
+			expectExactErr: `primary cluster "dc1" is missing from config`,
 		},
 		"full-islands": {
 			cfg: &config.Config{
@@ -39,7 +40,8 @@ func TestCompileTopology(t *testing.T) {
 				CanaryNodes:          []string{"dc2-client2"},
 				EncryptionTLS:        true,
 				TopologyNetworkShape: "islands",
-				TopologyDatacenters: []*config.Datacenter{
+				TopologyLinkMode:     "federate",
+				TopologyClusters: []*config.Cluster{
 					{
 						Name:         "dc1",
 						Servers:      3,
@@ -62,11 +64,11 @@ func TestCompileTopology(t *testing.T) {
 						},
 					},
 					{
-						NodeName:           "dc2-client2",
-						UpstreamName:       "blah",
-						UpstreamDatacenter: "fake",
-						UpstreamPartition:  "also-fake",
-						UpstreamExtraHCL:   "// not real",
+						NodeName:          "dc2-client2",
+						UpstreamName:      "blah",
+						UpstreamCluster:   "fake",
+						UpstreamPartition: "also-fake",
+						UpstreamExtraHCL:  "// not real",
 						ServiceMeta: map[string]string{
 							"AAA": "BBB",
 						},
@@ -77,6 +79,7 @@ func TestCompileTopology(t *testing.T) {
 			expectFn: func(t *testing.T, topo *Topology) {
 				expect := &Topology{
 					NetworkShape: NetworkShapeIslands,
+					LinkMode:     ClusterLinkModeFederate,
 					networks: map[string]*Network{
 						"dc1": {
 							Name: "dc1",
@@ -91,7 +94,7 @@ func TestCompileTopology(t *testing.T) {
 							CIDR: "10.1.0.0/16",
 						},
 					},
-					dcs: []*Datacenter{
+					clusters: []*Cluster{
 						{
 							Name:         "dc1",
 							Primary:      true,
@@ -116,11 +119,11 @@ func TestCompileTopology(t *testing.T) {
 					nm: map[string]*Node{
 						// ============= dc1 ==============
 						"dc1-server1": {
-							Index:      0,
-							Datacenter: "dc1",
-							Name:       "dc1-server1",
-							Partition:  "default",
-							Server:     true,
+							Index:     0,
+							Cluster:   "dc1",
+							Name:      "dc1-server1",
+							Partition: "default",
+							Server:    true,
 							Addresses: []Address{
 								{
 									Network:   "dc1",
@@ -129,11 +132,11 @@ func TestCompileTopology(t *testing.T) {
 							},
 						},
 						"dc1-server2": {
-							Index:      1,
-							Datacenter: "dc1",
-							Name:       "dc1-server2",
-							Partition:  "default",
-							Server:     true,
+							Index:     1,
+							Cluster:   "dc1",
+							Name:      "dc1-server2",
+							Partition: "default",
+							Server:    true,
 							Addresses: []Address{
 								{
 									Network:   "dc1",
@@ -142,11 +145,11 @@ func TestCompileTopology(t *testing.T) {
 							},
 						},
 						"dc1-server3": {
-							Index:      2,
-							Datacenter: "dc1",
-							Name:       "dc1-server3",
-							Partition:  "default",
-							Server:     true,
+							Index:     2,
+							Cluster:   "dc1",
+							Name:      "dc1-server3",
+							Partition: "default",
+							Server:    true,
 							Addresses: []Address{
 								{
 									Network:   "dc1",
@@ -155,10 +158,10 @@ func TestCompileTopology(t *testing.T) {
 							},
 						},
 						"dc1-client1": {
-							Index:      0,
-							Datacenter: "dc1",
-							Name:       "dc1-client1",
-							Partition:  "default",
+							Index:     0,
+							Cluster:   "dc1",
+							Name:      "dc1-client1",
+							Partition: "default",
 							Addresses: []Address{
 								{
 									Network:   "dc1",
@@ -177,10 +180,10 @@ func TestCompileTopology(t *testing.T) {
 							},
 						},
 						"dc1-client2": {
-							Index:      1,
-							Datacenter: "dc1",
-							Name:       "dc1-client2",
-							Partition:  "default",
+							Index:     1,
+							Cluster:   "dc1",
+							Name:      "dc1-client2",
+							Partition: "default",
 							Addresses: []Address{
 								{
 									Network:   "dc1",
@@ -196,10 +199,10 @@ func TestCompileTopology(t *testing.T) {
 							},
 						},
 						"dc1-client3": {
-							Index:      2,
-							Datacenter: "dc1",
-							Name:       "dc1-client3",
-							Partition:  "default",
+							Index:     2,
+							Cluster:   "dc1",
+							Name:      "dc1-client3",
+							Partition: "default",
 							Addresses: []Address{
 								{
 									Network:   "dc1",
@@ -214,11 +217,11 @@ func TestCompileTopology(t *testing.T) {
 						},
 						// ============= dc2 ==============
 						"dc2-server1": {
-							Index:      0,
-							Datacenter: "dc2",
-							Name:       "dc2-server1",
-							Partition:  "default",
-							Server:     true,
+							Index:     0,
+							Cluster:   "dc2",
+							Name:      "dc2-server1",
+							Partition: "default",
+							Server:    true,
 							Addresses: []Address{
 								{
 									Network:   "dc2",
@@ -231,11 +234,11 @@ func TestCompileTopology(t *testing.T) {
 							},
 						},
 						"dc2-server2": {
-							Index:      1,
-							Datacenter: "dc2",
-							Name:       "dc2-server2",
-							Partition:  "default",
-							Server:     true,
+							Index:     1,
+							Cluster:   "dc2",
+							Name:      "dc2-server2",
+							Partition: "default",
+							Server:    true,
 							Addresses: []Address{
 								{
 									Network:   "dc2",
@@ -248,11 +251,11 @@ func TestCompileTopology(t *testing.T) {
 							},
 						},
 						"dc2-server3": {
-							Index:      2,
-							Datacenter: "dc2",
-							Name:       "dc2-server3",
-							Partition:  "default",
-							Server:     true,
+							Index:     2,
+							Cluster:   "dc2",
+							Name:      "dc2-server3",
+							Partition: "default",
+							Server:    true,
 							Addresses: []Address{
 								{
 									Network:   "dc2",
@@ -265,10 +268,10 @@ func TestCompileTopology(t *testing.T) {
 							},
 						},
 						"dc2-client1": {
-							Index:      0,
-							Datacenter: "dc2",
-							Name:       "dc2-client1",
-							Partition:  "default",
+							Index:     0,
+							Cluster:   "dc2",
+							Name:      "dc2-client1",
+							Partition: "default",
 							Addresses: []Address{
 								{
 									Network:   "dc2",
@@ -284,10 +287,10 @@ func TestCompileTopology(t *testing.T) {
 							},
 						},
 						"dc2-client2": {
-							Index:      1,
-							Datacenter: "dc2",
-							Name:       "dc2-client2",
-							Partition:  "default",
+							Index:     1,
+							Cluster:   "dc2",
+							Name:      "dc2-client2",
+							Partition: "default",
 							Addresses: []Address{
 								{
 									Network:   "dc2",
@@ -295,12 +298,12 @@ func TestCompileTopology(t *testing.T) {
 								},
 							},
 							Service: &Service{
-								ID:                 util.NewIdentifier("pong", "", ""),
-								Port:               8080,
-								UpstreamID:         util.NewIdentifier("blah", "", "also-fake"),
-								UpstreamDatacenter: "fake",
-								UpstreamExtraHCL:   "// not real",
-								UpstreamLocalPort:  9090,
+								ID:                util.NewIdentifier("pong", "", ""),
+								Port:              8080,
+								UpstreamID:        util.NewIdentifier("blah", "", "also-fake"),
+								UpstreamCluster:   "fake",
+								UpstreamExtraHCL:  "// not real",
+								UpstreamLocalPort: 9090,
 								Meta: map[string]string{
 									"AAA": "BBB",
 								},
@@ -309,10 +312,10 @@ func TestCompileTopology(t *testing.T) {
 							Canary:          true,
 						},
 						"dc2-client3": {
-							Index:      2,
-							Datacenter: "dc2",
-							Name:       "dc2-client3",
-							Partition:  "default",
+							Index:     2,
+							Cluster:   "dc2",
+							Name:      "dc2-client3",
+							Partition: "default",
 							Addresses: []Address{
 								{
 									Network:   "dc2",
@@ -348,9 +351,9 @@ func TestCompileTopology(t *testing.T) {
 
 				// Check helper methods
 				require.Len(t, topo.Networks(), 3)
-				require.Len(t, topo.Datacenters(), 2)
+				require.Len(t, topo.Clusters(), 2)
 
-				require.Len(t, topo.DatacenterNodes("dc1"), 6)
+				require.Len(t, topo.ClusterNodes("dc1"), 6)
 				require.Len(t, topo.ServerIPs("dc1"), 3)
 				require.Len(t, topo.GatewayAddrs("dc1"), 1)
 
@@ -358,7 +361,7 @@ func TestCompileTopology(t *testing.T) {
 				require.NotNil(t, node1)
 				require.Equal(t, "dc1-client1", node1.Name)
 
-				require.Len(t, topo.DatacenterNodes("dc2"), 6)
+				require.Len(t, topo.ClusterNodes("dc2"), 6)
 				require.Len(t, topo.ServerIPs("dc2"), 3)
 				require.Len(t, topo.GatewayAddrs("dc2"), 1)
 
@@ -379,7 +382,7 @@ func TestCompileTopology(t *testing.T) {
 			} else if tc.expectErr {
 				require.Error(t, err)
 				require.Nil(t, topo)
-				// primary datacenter "dc1" is missing from config
+				// primary cluster "dc1" is missing from config
 
 			} else {
 				require.NoError(t, err)

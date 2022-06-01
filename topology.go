@@ -11,3 +11,10 @@ const (
 	NetworkShapeDual    = infra.NetworkShapeDual
 	NetworkShapeFlat    = infra.NetworkShapeFlat
 )
+
+type ClusterLinkMode = infra.ClusterLinkMode
+
+const (
+	ClusterLinkModePeer     = infra.ClusterLinkModePeer
+	ClusterLinkModeFederate = infra.ClusterLinkModeFederate
+)

@@ -3,8 +3,9 @@ package main
 import (
 	"testing"
 
-	"github.com/rboyer/devconsul/config"
 	"github.com/stretchr/testify/require"
+
+	"github.com/rboyer/devconsul/config"
 )
 
 func TestExamples(t *testing.T) {

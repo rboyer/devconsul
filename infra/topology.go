@@ -34,11 +34,19 @@ func (s NetworkShape) GetNetworkName(dc string) string {
 	}
 }
 
+type ClusterLinkMode string
+
+const (
+	ClusterLinkModePeer     = ClusterLinkMode("peer")
+	ClusterLinkModeFederate = ClusterLinkMode("federate")
+)
+
 type Topology struct {
 	NetworkShape NetworkShape
+	LinkMode     ClusterLinkMode
 
 	networks map[string]*Network
-	dcs      []*Datacenter
+	clusters []*Cluster
 
 	nm      map[string]*Node
 	servers []string // node names
@@ -47,10 +55,13 @@ type Topology struct {
 	additionalPrimaryGateways []string
 }
 
-func (t *Topology) LeaderIP(datacenter string, wan bool) string {
+func (t *Topology) LinkWithFederation() bool { return t.LinkMode == ClusterLinkModeFederate }
+func (t *Topology) LinkWithPeering() bool    { return t.LinkMode == ClusterLinkModePeer }
+
+func (t *Topology) LeaderIP(cluster string, wan bool) string {
 	for _, name := range t.servers {
 		n := t.Node(name)
-		if n.Datacenter == datacenter {
+		if n.Cluster == cluster {
 			if wan {
 				return n.PublicAddress()
 			} else {
@@ -61,21 +72,14 @@ func (t *Topology) LeaderIP(datacenter string, wan bool) string {
 	panic("no such dc")
 }
 
-func (t *Topology) Datacenters() []Datacenter {
-	out := make([]Datacenter, len(t.dcs))
-	for i, dc := range t.dcs {
-		out[i] = *dc
+// Deprecated: Clusters
+func (t *Topology) Datacenters() []Datacenter { return t.Clusters() }
+func (t *Topology) Clusters() []Cluster {
+	out := make([]Cluster, len(t.clusters))
+	for i, c := range t.clusters {
+		out[i] = *c
 	}
 	return out
-}
-
-func (t *Topology) HasFederation() bool {
-	for _, dc := range t.Datacenters() {
-		if !dc.Primary {
-			return true
-		}
-	}
-	return false
 }
 
 func (t *Topology) Networks() []*Network {
@@ -89,31 +93,33 @@ func (t *Topology) Networks() []*Network {
 	return out
 }
 
-func (t *Topology) DC(name string) *Datacenter {
-	for _, dc := range t.dcs {
-		if dc.Name == name {
-			return dc
+// Deprecated: Cluster
+func (t *Topology) DC(name string) *Datacenter { return t.Cluster(name) }
+func (t *Topology) Cluster(name string) *Cluster {
+	for _, c := range t.clusters {
+		if c.Name == name {
+			return c
 		}
 	}
-	panic("no such dc")
+	panic("no such cluster")
 }
 
-func (t *Topology) ServerIPs(datacenter string) []string {
+func (t *Topology) ServerIPs(cluster string) []string {
 	var out []string
 	for _, name := range t.servers {
 		n := t.Node(name)
-		if n.Datacenter == datacenter {
+		if n.Cluster == cluster {
 			out = append(out, n.LocalAddress())
 		}
 	}
 	return out
 }
 
-func (t *Topology) GatewayAddrs(datacenter string) []string {
+func (t *Topology) GatewayAddrs(cluster string) []string {
 	var out []string
 	for _, name := range t.clients {
 		n := t.Node(name)
-		if n.Datacenter == datacenter && n.MeshGateway {
+		if n.Cluster == cluster && n.MeshGateway {
 			out = append(out, n.PublicAddress()+":8443")
 		}
 	}
@@ -147,10 +153,12 @@ func (t *Topology) Nodes() []*Node {
 	return out
 }
 
-func (t *Topology) DatacenterNodes(dc string) []*Node {
+// Deprecated: ClusterNodes
+func (t *Topology) DatacenterNodes(dc string) []*Node { return t.ClusterNodes(dc) }
+func (t *Topology) ClusterNodes(cluster string) []*Node {
 	out := make([]*Node, 0, len(t.nm))
 	t.WalkSilent(func(n *Node) {
-		if n.Datacenter == dc {
+		if n.Cluster == cluster {
 			out = append(out, n)
 		}
 	})
@@ -196,7 +204,9 @@ func (t *Topology) AddAdditionalPrimaryGateway(addr string) {
 	t.additionalPrimaryGateways = append(t.additionalPrimaryGateways, addr)
 }
 
-type Datacenter struct {
+// Deprecated: Cluster
+type Datacenter = Cluster
+type Cluster struct {
 	Name    string
 	Primary bool
 
@@ -219,7 +229,7 @@ func (n *Network) DockerName() string {
 }
 
 type Node struct {
-	Datacenter      string
+	Cluster         string
 	Name            string
 	Partition       string // will be not empty
 	Server          bool
@@ -232,7 +242,7 @@ type Node struct {
 }
 
 func (n *Node) AddLabels(m map[string]string) {
-	m["devconsul.datacenter"] = n.Datacenter
+	m["devconsul.cluster"] = n.Cluster
 
 	var agentType string
 	if n.Server {
@@ -250,7 +260,7 @@ func (n *Node) TokenName() string { return "agent--" + n.Name }
 func (n *Node) LocalAddress() string {
 	for _, a := range n.Addresses {
 		switch a.Network {
-		case n.Datacenter, "lan":
+		case n.Cluster, "lan":
 			return a.IPAddress
 		}
 	}
@@ -276,13 +286,10 @@ type Service struct {
 	// Name               string
 	// Namespace          string // will not be empty
 	// Partition          string // will be not empty
-	Port       int
-	UpstreamID util.Identifier
-	// UpstreamName       string
-	// UpstreamNamespace  string
-	// UpstreamPartition  string
-	UpstreamDatacenter string
-	UpstreamLocalPort  int
-	UpstreamExtraHCL   string
-	Meta               map[string]string
+	Port              int
+	UpstreamID        util.Identifier
+	UpstreamCluster   string
+	UpstreamLocalPort int
+	UpstreamExtraHCL  string
+	Meta              map[string]string
 }

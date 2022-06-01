@@ -25,9 +25,22 @@ func CompileTopology(cfg *config.Config) (*Topology, error) {
 		needsAllNetworks = true
 	case "flat", "":
 		topology.NetworkShape = NetworkShapeFlat
-		needsAllNetworks = false
 	default:
 		return nil, fmt.Errorf("unknown network_shape: %s", cfg.TopologyNetworkShape)
+	}
+
+	// TODO(peering): require TLS for peering
+	switch cfg.TopologyLinkMode {
+	case string(ClusterLinkModePeer):
+		topology.LinkMode = ClusterLinkModePeer
+	case string(ClusterLinkModeFederate):
+		topology.LinkMode = ClusterLinkModeFederate
+	default:
+		return nil, fmt.Errorf("unknown link_mode: %s", cfg.TopologyLinkMode)
+	}
+
+	if topology.NetworkShape != NetworkShapeFlat && topology.LinkMode == ClusterLinkModePeer {
+		return nil, fmt.Errorf("network_shape=%q is incompatible with link_mode=%q", topology.NetworkShape, topology.LinkMode)
 	}
 
 	if topology.NetworkShape == NetworkShapeIslands && !cfg.EncryptionTLS {
@@ -40,10 +53,10 @@ func CompileTopology(cfg *config.Config) (*Topology, error) {
 
 	canaryConfigured, canaryNodes := cfg.CanaryInfo()
 
-	getDatacenter := func(name string) *config.Datacenter {
-		for _, dc := range cfg.TopologyDatacenters {
-			if dc.Name == name {
-				return dc
+	getCluster := func(name string) *config.Cluster {
+		for _, c := range cfg.TopologyClusters {
+			if c.Name == name {
+				return c
 			}
 		}
 		return nil
@@ -70,20 +83,20 @@ func CompileTopology(cfg *config.Config) (*Topology, error) {
 		})
 	}
 
-	forDC := func(dc, baseIP, wanBaseIP string, servers, clients, meshGateways int) error {
+	forCluster := func(clusterName, baseIP, wanBaseIP string, servers, clients, meshGateways int) error {
 		for idx := 1; idx <= servers; idx++ {
 			id := strconv.Itoa(idx)
 			ip := baseIP + "." + strconv.Itoa(10+idx)
 			wanIP := wanBaseIP + "." + strconv.Itoa(10+idx)
 
 			node := &Node{
-				Datacenter: dc,
-				Name:       dc + "-server" + id,
-				Server:     true,
-				Partition:  "default",
+				Cluster:   clusterName,
+				Name:      clusterName + "-server" + id,
+				Server:    true,
+				Partition: "default",
 				Addresses: []Address{
 					{
-						Network:   topology.NetworkShape.GetNetworkName(dc),
+						Network:   topology.NetworkShape.GetNetworkName(clusterName),
 						IPAddress: ip,
 					},
 				},
@@ -92,7 +105,7 @@ func CompileTopology(cfg *config.Config) (*Topology, error) {
 
 			switch topology.NetworkShape {
 			case NetworkShapeIslands:
-				if dc != config.PrimaryDC {
+				if clusterName != config.PrimaryCluster {
 					node.Addresses = append(node.Addresses, Address{
 						Network:   "wan",
 						IPAddress: wanIP,
@@ -118,14 +131,14 @@ func CompileTopology(cfg *config.Config) (*Topology, error) {
 			ip := baseIP + "." + strconv.Itoa(20+idx)
 			wanIP := wanBaseIP + "." + strconv.Itoa(20+idx)
 
-			nodeName := dc + "-client" + id
+			nodeName := clusterName + "-client" + id
 			node := &Node{
-				Datacenter: dc,
-				Name:       nodeName,
-				Server:     false,
+				Cluster: clusterName,
+				Name:    nodeName,
+				Server:  false,
 				Addresses: []Address{
 					{
-						Network:   topology.NetworkShape.GetNetworkName(dc),
+						Network:   topology.NetworkShape.GetNetworkName(clusterName),
 						IPAddress: ip,
 					},
 				},
@@ -182,27 +195,16 @@ func CompileTopology(cfg *config.Config) (*Topology, error) {
 				if idx%2 == 1 {
 					svc.ID = util.NewIdentifier("ping", nodeConfig.ServiceNamespace, node.Partition)
 					svc.UpstreamID = util.NewIdentifier("pong", nodeConfig.UpstreamNamespace, nodeConfig.UpstreamPartition)
-					// svc.Name = "ping"
-					// svc.UpstreamName = "pong"
 				} else {
 					svc.ID = util.NewIdentifier("pong", nodeConfig.ServiceNamespace, node.Partition)
 					svc.UpstreamID = util.NewIdentifier("ping", nodeConfig.UpstreamNamespace, nodeConfig.UpstreamPartition)
-					// svc.Name = "pong"
-					// svc.UpstreamName = "ping"
 				}
-
-				// svc.Partition = node.Partition
-				// svc.UpstreamPartition = nodeConfig.UpstreamPartition
-
-				// svc.Namespace = nodeConfig.ServiceNamespace
-				// svc.UpstreamNamespace = nodeConfig.UpstreamNamespace
 
 				if nodeConfig.UpstreamName != "" {
 					svc.UpstreamID.Name = nodeConfig.UpstreamName
-					// svc.UpstreamName = nodeConfig.UpstreamName
 				}
-				if nodeConfig.UpstreamDatacenter != "" {
-					svc.UpstreamDatacenter = nodeConfig.UpstreamDatacenter
+				if nodeConfig.UpstreamCluster != "" {
+					svc.UpstreamCluster = nodeConfig.UpstreamCluster
 				}
 
 				node.Service = &svc
@@ -213,8 +215,10 @@ func CompileTopology(cfg *config.Config) (*Topology, error) {
 			}
 
 			if nodeConfig.Dead {
-				if node.MeshGateway && node.Datacenter == config.PrimaryDC && nodeConfig.RetainInPrimaryGatewaysList {
-					topology.AddAdditionalPrimaryGateway(node.PublicAddress() + ":8443")
+				if cfg.TopologyLinkMode == "federate" {
+					if node.MeshGateway && node.Cluster == config.PrimaryCluster && nodeConfig.RetainInPrimaryGatewaysList {
+						topology.AddAdditionalPrimaryGateway(node.PublicAddress() + ":8443")
+					}
 				}
 				continue // act like this isn't there
 			}
@@ -224,59 +228,63 @@ func CompileTopology(cfg *config.Config) (*Topology, error) {
 		return nil
 	}
 
-	if dc := getDatacenter(config.PrimaryDC); dc == nil {
-		return nil, fmt.Errorf("primary datacenter %q is missing from config", config.PrimaryDC)
+	if c := getCluster(config.PrimaryCluster); c == nil {
+		return nil, fmt.Errorf("primary cluster %q is missing from config", config.PrimaryCluster)
 	}
 
-	dcPatt := regexp.MustCompile(`^dc([0-9]+)$`)
+	clusterNamePatt := regexp.MustCompile(`^dc([0-9]+)$`)
 
-	for _, dc := range cfg.TopologyDatacenters {
-		if dc.MeshGateways < 0 {
-			return nil, fmt.Errorf("%s: mesh gateways must be non-negative", dc.Name)
+	for _, c := range cfg.TopologyClusters {
+		if c.MeshGateways < 0 {
+			return nil, fmt.Errorf("%s: mesh gateways must be non-negative", c.Name)
 		}
-		dc.Clients += dc.MeshGateways // the gateways are just fancy clients
+		c.Clients += c.MeshGateways // the gateways are just fancy clients
 
-		if dc.Servers <= 0 {
-			return nil, fmt.Errorf("%s: must always have at least one server", dc.Name)
+		if c.Servers <= 0 {
+			return nil, fmt.Errorf("%s: must always have at least one server", c.Name)
 		}
-		if dc.Clients <= 0 {
-			return nil, fmt.Errorf("%s: must always have at least one client", dc.Name)
+		if c.Clients <= 0 {
+			return nil, fmt.Errorf("%s: must always have at least one client", c.Name)
 		}
 
-		m := dcPatt.FindStringSubmatch(dc.Name)
+		m := clusterNamePatt.FindStringSubmatch(c.Name)
 		if m == nil {
-			return nil, fmt.Errorf("%s: not a valid datacenter name", dc.Name)
+			return nil, fmt.Errorf("%s: not a valid cluster name", c.Name)
 		}
 		i, err := strconv.Atoi(m[1])
 		if err != nil {
-			return nil, fmt.Errorf("%s: not a valid datacenter name", dc.Name)
+			return nil, fmt.Errorf("%s: not a valid cluster name", c.Name)
 		}
 
-		thisDC := &Datacenter{
-			Name:         dc.Name,
-			Primary:      dc.Name == config.PrimaryDC,
+		thisCluster := &Cluster{
+			Name:         c.Name,
 			Index:        i,
-			Servers:      dc.Servers,
-			Clients:      dc.Clients,
-			MeshGateways: dc.MeshGateways,
+			Servers:      c.Servers,
+			Clients:      c.Clients,
+			MeshGateways: c.MeshGateways,
 			BaseIP:       fmt.Sprintf("10.0.%d", i),
 			WANBaseIP:    fmt.Sprintf("10.1.%d", i),
 		}
-		topology.dcs = append(topology.dcs, thisDC)
+		if cfg.TopologyLinkMode == string(ClusterLinkModePeer) {
+			thisCluster.Primary = true
+		} else if c.Name == config.PrimaryCluster {
+			thisCluster.Primary = true
+		}
+		topology.clusters = append(topology.clusters, thisCluster)
 
 		if needsAllNetworks {
 			topology.AddNetwork(&Network{
-				Name: thisDC.Name,
-				CIDR: thisDC.BaseIP + ".0/24",
+				Name: thisCluster.Name,
+				CIDR: thisCluster.BaseIP + ".0/24",
 			})
 		}
 	}
-	sort.Slice(topology.dcs, func(i, j int) bool {
-		return topology.dcs[i].Name < topology.dcs[j].Name
+	sort.Slice(topology.clusters, func(i, j int) bool {
+		return topology.clusters[i].Name < topology.clusters[j].Name
 	})
 
-	for _, dc := range topology.dcs {
-		err := forDC(dc.Name, dc.BaseIP, dc.WANBaseIP, dc.Servers, dc.Clients, dc.MeshGateways)
+	for _, cluster := range topology.clusters {
+		err := forCluster(cluster.Name, cluster.BaseIP, cluster.WANBaseIP, cluster.Servers, cluster.Clients, cluster.MeshGateways)
 		if err != nil {
 			return nil, err
 		}

@@ -2,16 +2,13 @@
 
 set -euo pipefail
 
-ready_file="${1:-}"
-shift
-
-proxy_type="${1:-}"
-shift
+readonly ready_file="${SBOOT_READY_FILE:-}"
+readonly proxy_type="${SBOOT_PROXY_TYPE:-}"
+readonly mode="${SBOOT_MODE:-}"
+readonly agent_tls="${SBOOT_AGENT_TLS:-}"
+readonly partition="${SBOOT_PARTITION:-}"
 
 echo "launching a '${proxy_type}' sidecar proxy"
-
-mode="${1:-}"
-shift
 
 # wait until ready
 while : ; do
@@ -22,97 +19,36 @@ while : ; do
     sleep 0.1
 done
 
-api_args=()
-agent_tls=""
-service_register_file=""
-case "${mode}" in
-    direct)
-        token_file=""
-        partition=""
-        while getopts ":p:t:r:e" opt; do
-            case "${opt}" in
-                e)
-                    agent_tls=1
-                    ;;
-                p)
-                    partition="$OPTARG"
-                    ;;
-                t)
-                    token_file="$OPTARG"
-                    ;;
-                r)
-                    service_register_file="$OPTARG"
-                    ;;
-                \?)
-                    echo "invalid option: -$OPTARG" >&2
-                    exit 1
-                    ;;
-                :)
-                    echo "invalid option: -$OPTARG requires an argument" >&2
-                    exit 1
-                    ;;
-            esac
-        done
-        shift $((OPTIND - 1))
+readonly service_register_file="${SBOOT_REGISTER_FILE:-}"
+if [[ -z "${service_register_file}" ]]; then
+    echo "missing required env var SBOOT_REGISTER_FILE" >&2
+    exit 1
+fi
 
+api_args=()
+case "${mode}" in
+    insecure)
+        ;;
+    direct)
+        readonly token_file="${SBOOT_TOKEN_FILE:-}"
         if [[ -z "${token_file}" ]]; then
-            echo "missing required argument -t <BOOT_TOKEN_FILE>" >&2
-            exit 1
-        fi
-        if [[ -z "${service_register_file}" ]]; then
-            echo "missing required argument -r <SERVICE_REGISTER_FILE>" >&2
+            echo "missing required env var SBOOT_TOKEN_FILE" >&2
             exit 1
         fi
 
         api_args+=( -token-file "${token_file}" )
-        if [[ -n "${partition}" ]]; then
-            api_args+=( -partition "${partition}" )
-        fi
 
         ;;
     login)
-        bearer_token_file=""
-        token_sink_file=""
-        partition=""
-        while getopts ":p:t:s:r:e" opt; do
-            case "${opt}" in
-                e)
-                    agent_tls=1
-                    ;;
-                t)
-                    bearer_token_file="$OPTARG"
-                    ;;
-                p)
-                    partition="$OPTARG"
-                    ;;
-                s)
-                    token_sink_file="$OPTARG"
-                    ;;
-                r)
-                    service_register_file="$OPTARG"
-                    ;;
-                \?)
-                    echo "invalid option: -$OPTARG" >&2
-                    exit 1
-                    ;;
-                :)
-                    echo "invalid option: -$OPTARG requires an argument" >&2
-                    exit 1
-                    ;;
-            esac
-        done
-        shift $((OPTIND - 1))
-
+        readonly bearer_token_file="${SBOOT_BEARER_TOKEN_FILE:-}"
         if [[ -z "${bearer_token_file}" ]]; then
-            echo "missing required argument -t <BEARER_TOKEN_FILE>" >&2
+            echo "missing required env var SBOOT_BEARER_TOKEN_FILE" >&2
             exit 1
         fi
+
+        readonly token_sink_file="${SBOOT_TOKEN_SINK_FILE:-}"
         if [[ -z "${token_sink_file}" ]]; then
-            echo "missing required argument -s <TOKEN_SINK_FILE>" >&2
-            exit 1
-        fi
-        if [[ -z "${service_register_file}" ]]; then
-            echo "missing required argument -r <SERVICE_REGISTER_FILE>" >&2
+            echo "missing required env var SBOOT_TOKEN_SINK_FILE" >&2
             exit 1
         fi
 
@@ -134,6 +70,10 @@ case "${mode}" in
         ;;
 esac
 
+if [[ -n "${partition}" ]]; then
+    api_args+=( -partition "${partition}" )
+fi
+
 grpc_args=()
 if [[ -n "$agent_tls" ]]; then
     api_args+=(
@@ -146,14 +86,17 @@ else
     grpc_args+=( -grpc-addr http://127.0.0.1:8502 )
 fi
 
-while : ; do
-    if consul acl token read "${api_args[@]}" -self &> /dev/null ; then
-        break
-    fi
 
-    echo "waiting for ACLs to work..."
-    sleep 0.1
-done
+if [[ "${mode}" != "insecure" ]]; then
+    while : ; do
+        if consul acl token read "${api_args[@]}" -self &> /dev/null ; then
+            break
+        fi
+
+        echo "waiting for ACLs to work..."
+        sleep 0.1
+    done
+fi
 
 echo "Registering service..."
 consul services register "${api_args[@]}" "${service_register_file}"

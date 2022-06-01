@@ -3,7 +3,7 @@ module github.com/rboyer/devconsul
 go 1.18
 
 require (
-	github.com/hashicorp/consul/api v1.12.0
+	github.com/hashicorp/consul/api v1.10.1-0.20220602165122-dc72659296a1
 	github.com/hashicorp/go-cleanhttp v0.5.1
 	github.com/hashicorp/go-hclog v0.12.0
 	github.com/hashicorp/go-multierror v1.1.0
@@ -22,7 +22,7 @@ require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/fatih/color v1.9.0 // indirect
 	github.com/google/btree v1.0.0 // indirect
-	github.com/google/go-cmp v0.3.1 // indirect
+	github.com/google/go-cmp v0.5.7 // indirect
 	github.com/hashicorp/errwrap v1.0.0 // indirect
 	github.com/hashicorp/go-immutable-radix v1.0.0 // indirect
 	github.com/hashicorp/go-msgpack v0.5.4 // indirect

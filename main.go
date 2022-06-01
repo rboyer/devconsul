@@ -48,6 +48,7 @@ var allCommands = []command{
 	{"restart-dc2", (*Core).RunRestartDC2, nil},
 	{"save-grafana", (*Core).RunDebugSaveGrafana, nil},
 	{"config-entries", (*Core).RunDebugListConfigs, nil},
+	{"grpc-check", (*Core).RunGRPCCheck, nil},
 }
 
 func main() {
@@ -211,8 +212,14 @@ func NewCore(logger hclog.Logger, configOnly, destroying bool) (*Core, error) {
 		}
 	}
 
-	if err := c.initAgentMasterToken(); err != nil {
-		return nil, err
+	if c.config.SecurityDisableACLs {
+		if err := c.cache.DelValue("agent-master-token"); err != nil {
+			return nil, err
+		}
+	} else {
+		if err := c.initAgentMasterToken(); err != nil {
+			return nil, err
+		}
 	}
 
 	return c, nil
@@ -286,13 +293,14 @@ func (c *Core) initTLS() error {
 		c.logger.Info("created cluster CA")
 	}
 
-	genCert := func(dc *infra.Datacenter, server bool, idx int) error {
+	// TODO: peering
+	genCert := func(cluster *infra.Cluster, server bool, idx int) error {
 		typ := "client"
 		if server {
 			typ = "server"
 		}
 
-		prefix := fmt.Sprintf("%s-%s-consul-%d", dc.Name, typ, idx)
+		prefix := fmt.Sprintf("%s-%s-consul-%d", cluster.Name, typ, idx)
 
 		exists, err := filesExist(tlsDir, prefix+"-key.pem", prefix+".pem")
 		if err != nil {
@@ -307,18 +315,18 @@ func (c *Core) initTLS() error {
 
 		var args []string
 		if server {
-			nodeName := fmt.Sprintf("%s-server%d-pod", dc.Name, idx+1)
+			nodeName := fmt.Sprintf("%s-server%d-pod", cluster.Name, idx+1)
 			args = []string{
 				"tls", "cert", "create",
 				"-server",
-				"-dc=" + dc.Name,
+				"-dc=" + cluster.Name,
 				"-node=" + nodeName,
 			}
 		} else {
 			args = []string{
 				"tls", "cert", "create",
 				"-client",
-				"-dc=" + dc.Name,
+				"-dc=" + cluster.Name,
 			}
 		}
 
@@ -334,14 +342,14 @@ func (c *Core) initTLS() error {
 		return nil
 	}
 
-	for _, dc := range c.topology.Datacenters() {
-		for i := 0; i < dc.Servers; i++ {
-			if err := genCert(&dc, true, i); err != nil {
+	for _, cluster := range c.topology.Clusters() {
+		for i := 0; i < cluster.Servers; i++ {
+			if err := genCert(&cluster, true, i); err != nil {
 				return err
 			}
 		}
-		for i := 0; i < dc.Clients; i++ {
-			if err := genCert(&dc, false, i); err != nil {
+		for i := 0; i < cluster.Clients; i++ {
+			if err := genCert(&cluster, false, i); err != nil {
 				return err
 			}
 		}

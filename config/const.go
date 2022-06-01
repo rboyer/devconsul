@@ -1,3 +1,3 @@
 package config
 
-const PrimaryDC = "dc1"
+const PrimaryCluster = "dc1"

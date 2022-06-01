@@ -26,21 +26,19 @@ master_token() {
 }
 
 if [[ $# -lt 1 ]]; then
-    echo "Missing required dc arg" >&2
+    echo "Missing required cluster arg" >&2
     exit 1
 fi
-datacenter=$1
+cluster=$1
 shift
 
-node="${datacenter}-server1"
-error_message="unknown dc: ${datacenter}"
-if [[ "$datacenter" == *-* ]]; then
+node="${cluster}-server1"
+error_message="unknown cluster: ${cluster}"
+if [[ "$cluster" == *-* ]]; then
     # actually this is a node query
-    node="${datacenter}"
+    node="${cluster}"
     error_message="unknown node: ${node}"
 fi
-
-
 
 ip="$(devconsul config | jq -r ".localAddrs[\"${node}\"]")"
 if [[ "$ip" = "null" ]]; then
@@ -48,11 +46,14 @@ if [[ "$ip" = "null" ]]; then
     exit 1
 fi
 
-export CONSUL_HTTP_TOKEN="$(master_token)"
 export CONSUL_HTTP_ADDR="http://${ip}:8500"
 
-if [[ -z "$CONSUL_HTTP_TOKEN" ]]; then
-    exit 1
+readonly acls="$(devconsul config | jq -r ".acls")"
+if [[ -n "$acls" ]]; then
+    export CONSUL_HTTP_TOKEN="$(master_token)"
+    if [[ -z "$CONSUL_HTTP_TOKEN" ]]; then
+        exit 1
+    fi
 fi
 
 exec consul "$@"

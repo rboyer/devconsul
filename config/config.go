@@ -15,6 +15,7 @@ type Config struct {
 	EncryptionTLS               bool
 	EncryptionTLSAPI            bool
 	EncryptionGossip            bool
+	SecurityDisableACLs         bool
 	KubernetesEnabled           bool
 	EnvoyLogLevel               string
 	PrometheusEnabled           bool
@@ -27,7 +28,8 @@ type Config struct {
 	EnterpriseDisablePartitions bool
 	EnterpriseLicensePath       string
 	TopologyNetworkShape        string
-	TopologyDatacenters         []*Datacenter
+	TopologyLinkMode            string
+	TopologyClusters            []*Cluster
 	TopologyNodes               []*Node
 }
 
@@ -58,7 +60,9 @@ func (c *Partition) IsDefault() bool {
 	return c == nil || c.Name == "" || c.Name == "default"
 }
 
-type Datacenter struct {
+// Deprecated: use Cluster
+type Datacenter = Cluster
+type Cluster struct {
 	Name         string `hcl:"name,label"`
 	Servers      int    `hcl:"servers,optional"`
 	Clients      int    `hcl:"clients,optional"`
@@ -70,14 +74,16 @@ type Node struct {
 	Partition                   string            `hcl:"partition,optional"`
 	UpstreamName                string            `hcl:"upstream_name,optional"`
 	UpstreamNamespace           string            `hcl:"upstream_namespace,optional"`
-	UpstreamDatacenter          string            `hcl:"upstream_datacenter,optional"`
 	UpstreamPartition           string            `hcl:"upstream_partition,optional"`
+	UpstreamCluster             string            `hcl:"upstream_cluster,optional"`
 	UpstreamExtraHCL            string            `hcl:"upstream_extra_hcl,optional"`
 	ServiceMeta                 map[string]string `hcl:"service_meta,optional"` // key -> val
 	ServiceNamespace            string            `hcl:"service_namespace,optional"`
 	UseBuiltinProxy             bool              `hcl:"use_builtin_proxy,optional"`
 	Dead                        bool              `hcl:"dead,optional"`
 	RetainInPrimaryGatewaysList bool              `hcl:"retain_in_primary_gateways_list,optional"`
+
+	DeprecatedUpstreamDatacenter string `hcl:"upstream_datacenter,optional"`
 }
 
 func (c *Node) Meta() map[string]string {

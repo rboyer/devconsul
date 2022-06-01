@@ -43,8 +43,13 @@ services = [
 {{- end }}
 {{- end }}
               local_bind_port  = {{.Service.UpstreamLocalPort}}
-{{- if .Service.UpstreamDatacenter }}
-              datacenter = "{{.Service.UpstreamDatacenter}}"
+{{- if .Service.UpstreamCluster }}
+{{- if .LinkWithFederation }}
+              datacenter = "{{.Service.UpstreamCluster}}"
+{{- end }}
+{{- if .LinkWithPeering }}
+              destination_peer = "{{.Service.UpstreamCluster}}"
+{{- end }}
 {{- end }}
 {{ .Service.UpstreamExtraHCL }}
             },

@@ -30,7 +30,7 @@ func ListPartitionNames(client *api.Client) ([]string, error) {
 
 func PartitionQueryOptionsList(client *api.Client, enterprise, partitionsDisabled bool) ([]*api.QueryOptions, error) {
 	if !enterprise || partitionsDisabled {
-		return []*api.QueryOptions{&api.QueryOptions{}}, nil
+		return []*api.QueryOptions{{}}, nil
 	}
 
 	names, err := ListPartitionNames(client)

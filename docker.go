@@ -9,9 +9,10 @@ import (
 	"os"
 	"strings"
 
-	"github.com/rboyer/devconsul/infra"
 	"github.com/rboyer/safeio"
 	"golang.org/x/crypto/blake2b"
+
+	"github.com/rboyer/devconsul/infra"
 )
 
 func (c *Core) RunForceDocker() error {
@@ -133,10 +134,10 @@ func (c *Core) runStopDC2() error {
 	)
 
 	c.topology.WalkSilent(func(n *infra.Node) {
-		pods[n.Datacenter] = append(pods[n.Datacenter], n.Name+"-pod")
-		containers[n.Datacenter] = append(containers[n.Datacenter], n.Name)
+		pods[n.Cluster] = append(pods[n.Cluster], n.Name+"-pod")
+		containers[n.Cluster] = append(containers[n.Cluster], n.Name)
 		if n.MeshGateway {
-			containers[n.Datacenter] = append(containers[n.Datacenter], n.Name+"-mesh-gateway")
+			containers[n.Cluster] = append(containers[n.Cluster], n.Name+"-mesh-gateway")
 		}
 	})
 
@@ -231,7 +232,7 @@ func (c *Core) namesForContainerIDs(cids []string) (map[string]string, error) { 
 
 		name = strings.TrimLeft(name, "/")
 
-		for short, _ := range ret {
+		for short := range ret {
 			if strings.HasPrefix(fullID, short) {
 				ret[short] = name
 				break

@@ -3,9 +3,8 @@ package config
 import (
 	"testing"
 
-	"github.com/stretchr/testify/require"
-
 	"github.com/hashicorp/consul/api"
+	"github.com/stretchr/testify/require"
 )
 
 func TestParseConfig_EmptyInferDefaults(t *testing.T) {
@@ -18,7 +17,8 @@ func TestParseConfig_EmptyInferDefaults(t *testing.T) {
 		EnvoyLogLevel:        "info",
 		EnvoyVersion:         "v1.20.2",
 		TopologyNetworkShape: "flat",
-		TopologyDatacenters: []*Datacenter{
+		TopologyLinkMode:     "federate",
+		TopologyClusters: []*Cluster{
 			{Name: "dc1", Servers: 1, Clients: 2},
 		},
 	}, fc)
@@ -37,7 +37,8 @@ func TestParseConfig_BothFormats(t *testing.T) {
 			EnvoyLogLevel:        "info",
 			EnvoyVersion:         "v1.18.3",
 			TopologyNetworkShape: "flat",
-			TopologyDatacenters: []*Datacenter{
+			TopologyLinkMode:     "federate",
+			TopologyClusters: []*Cluster{
 				{Name: "dc1", Servers: 1, Clients: 2},
 			},
 		}, fc)
@@ -60,7 +61,8 @@ func TestParseConfig_BothFormats(t *testing.T) {
 			EnvoyLogLevel:        "info",
 			EnvoyVersion:         "v1.18.3",
 			TopologyNetworkShape: "flat",
-			TopologyDatacenters: []*Datacenter{
+			TopologyLinkMode:     "federate",
+			TopologyClusters: []*Cluster{
 				{Name: "dc1", Servers: 1, Clients: 2},
 			},
 		}, fc)
@@ -83,7 +85,8 @@ func TestParseConfig_BothFormats(t *testing.T) {
 			EnvoyLogLevel:        "info",
 			EnvoyVersion:         "v1.17.3",
 			TopologyNetworkShape: "flat",
-			TopologyDatacenters: []*Datacenter{
+			TopologyLinkMode:     "federate",
+			TopologyClusters: []*Cluster{
 				{Name: "dc1", Servers: 1, Clients: 2},
 			},
 		}, fc)
@@ -100,6 +103,7 @@ func TestParseConfig_AllFields(t *testing.T) {
 			nodes = [ "abc", "def" ]
 		}
 		security {
+			disable_acls = true
 			encryption {
 				tls = true
 				tls_api = true
@@ -127,12 +131,13 @@ func TestParseConfig_AllFields(t *testing.T) {
 		}
 		topology {
 			network_shape = "islands"
-			datacenter "dc1" {
+			link_mode     = "peer"
+			cluster "dc1" {
 				servers = 3
 				clients = 2
 				mesh_gateways = 1
 			}
-			datacenter "dc2" {
+			cluster "dc2" {
 				servers = 3
 				clients = 2
 				mesh_gateways = 1
@@ -140,7 +145,7 @@ func TestParseConfig_AllFields(t *testing.T) {
 			node "dc1-client2" {
 				upstream_name = "fake-service"
 				upstream_namespace = "foo"
-				upstream_datacenter = "fake-dc"
+				upstream_cluster = "fake-dc"
 				upstream_partition = "fake-ap"
 				upstream_extra_hcl = "super invalid"
 				service_meta ={
@@ -191,6 +196,7 @@ EOF
 		EncryptionTLS:         true,
 		EncryptionTLSAPI:      true,
 		EncryptionGossip:      true,
+		SecurityDisableACLs:   true,
 		KubernetesEnabled:     true,
 		EnvoyLogLevel:         "debug",
 		PrometheusEnabled:     true,
@@ -207,18 +213,19 @@ EOF
 			},
 		},
 		TopologyNetworkShape: "islands",
-		TopologyDatacenters: []*Datacenter{
+		TopologyLinkMode:     "peer",
+		TopologyClusters: []*Cluster{
 			{Name: "dc1", Servers: 3, Clients: 2, MeshGateways: 1},
 			{Name: "dc2", Servers: 3, Clients: 2, MeshGateways: 1},
 		},
 		TopologyNodes: []*Node{
 			{
-				NodeName:           "dc1-client2",
-				UpstreamName:       "fake-service",
-				UpstreamNamespace:  "foo",
-				UpstreamDatacenter: "fake-dc",
-				UpstreamPartition:  "fake-ap",
-				UpstreamExtraHCL:   "super invalid",
+				NodeName:          "dc1-client2",
+				UpstreamName:      "fake-service",
+				UpstreamNamespace: "foo",
+				UpstreamCluster:   "fake-dc",
+				UpstreamPartition: "fake-ap",
+				UpstreamExtraHCL:  "super invalid",
 				ServiceMeta: map[string]string{
 					"version": "v2",
 				},

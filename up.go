@@ -1,5 +1,7 @@
 package main
 
+import "fmt"
+
 // TODO: rename file to porcelain
 
 func (c *Core) RunBringUp() error {
@@ -11,6 +13,9 @@ func (c *Core) RunBringUpPrimary() error {
 }
 
 func (c *Core) runBringUp(primaryOnly bool) error {
+	if primaryOnly && c.topology.LinkWithPeering() {
+		return fmt.Errorf("primary only is not available with peering")
+	}
 	if err := c.runInit(); err != nil {
 		return err
 	}

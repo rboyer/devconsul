@@ -4,10 +4,9 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/hashicorp/consul/api"
 	"github.com/hashicorp/go-cleanhttp"
 	"github.com/rboyer/safeio"
-
-	"github.com/hashicorp/consul/api"
 
 	"github.com/rboyer/devconsul/config"
 	"github.com/rboyer/devconsul/consulfunc"
@@ -59,7 +58,7 @@ func (c *Core) debugPrimaryClient() (*api.Client, error) {
 		return nil, err
 	}
 
-	return consulfunc.GetClient(c.topology.LeaderIP(config.PrimaryDC, false), masterToken)
+	return consulfunc.GetClient(c.topology.LeaderIP(config.PrimaryCluster, false), masterToken)
 }
 
 func (c *Core) RunDebugSaveGrafana() error {
@@ -83,5 +82,36 @@ func (c *Core) RunDebugSaveGrafana() error {
 
 	c.logger.Info("Updated 'connect_service_dashboard.json' locally, you'll still have to commit it")
 
+	return nil
+}
+
+func (c *Core) RunGRPCCheck() error {
+	for _, srcCluster := range c.topology.Clusters() {
+		client, err := consulfunc.GetClient(c.topology.LeaderIP(srcCluster.Name, false), c.masterToken)
+		if err != nil {
+			return fmt.Errorf("error creating client for cluster=%s: %w", srcCluster.Name, err)
+		}
+		for _, dstCluster := range c.topology.Clusters() {
+			c.logger.Info("Checking gRPC",
+				"src-cluster", srcCluster.Name,
+				"dst-cluster", dstCluster.Name)
+			nodes, _, err := client.Health().Service("consul", "", false, &api.QueryOptions{
+				UseCache:   true,
+				AllowStale: true,
+				Datacenter: dstCluster.Name,
+			})
+			if err != nil {
+				c.logger.Error("...ERROR",
+					"src-cluster", srcCluster.Name,
+					"dst-cluster", dstCluster.Name,
+					"error", err)
+			} else {
+				c.logger.Error("...OK",
+					"src-cluster", srcCluster.Name,
+					"dst-cluster", dstCluster.Name,
+					"nodes", len(nodes))
+			}
+		}
+	}
 	return nil
 }

@@ -11,30 +11,30 @@ func (c *Core) RunConfigDump() error {
 	args := flag.Args()
 
 	var (
-		servers     = make(map[string]int)
-		clients     = make(map[string]int)
-		localAddrs  = make(map[string]string)
-		datacenters []string
-		pods        = make(map[string][]string)
-		containers  = make(map[string][]string)
+		servers    = make(map[string]int)
+		clients    = make(map[string]int)
+		localAddrs = make(map[string]string)
+		clusters   []string
+		pods       = make(map[string][]string)
+		containers = make(map[string][]string)
 	)
 	c.topology.WalkSilent(func(n *infra.Node) {
 		if n.Server {
-			servers[n.Datacenter]++
+			servers[n.Cluster]++
 		} else {
-			clients[n.Datacenter]++
+			clients[n.Cluster]++
 		}
 		localAddrs[n.Name] = n.LocalAddress()
 
-		pods[n.Datacenter] = append(pods[n.Datacenter], n.Name+"-pod")
-		containers[n.Datacenter] = append(containers[n.Datacenter], n.Name)
+		pods[n.Cluster] = append(pods[n.Cluster], n.Name+"-pod")
+		containers[n.Cluster] = append(containers[n.Cluster], n.Name)
 		if n.MeshGateway {
-			containers[n.Datacenter] = append(containers[n.Datacenter], n.Name+"-mesh-gateway")
+			containers[n.Cluster] = append(containers[n.Cluster], n.Name+"-mesh-gateway")
 		}
 	})
 
-	for _, dc := range c.topology.Datacenters() {
-		datacenters = append(datacenters, dc.Name)
+	for _, dc := range c.topology.Clusters() {
+		clusters = append(clusters, dc.Name)
 	}
 
 	m := map[string]interface{}{
@@ -44,12 +44,14 @@ func (c *Core) RunConfigDump() error {
 		"tls":              bool2str(c.config.EncryptionTLS),
 		"gossip":           bool2str(c.config.EncryptionGossip),
 		"k8s":              bool2str(c.config.KubernetesEnabled),
+		"acls":             bool2str(!c.config.SecurityDisableACLs),
 		"gossipKey":        c.config.GossipKey,
 		"agentMasterToken": c.config.AgentMasterToken,
 		"localAddrs":       localAddrs,
-		"datacenters":      datacenters,
+		"clusters":         clusters,
 		"pods":             pods,
 		"containers":       containers,
+		"linkMode":         c.topology.LinkMode,
 	}
 
 	for dc, n := range servers {

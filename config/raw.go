@@ -70,6 +70,7 @@ type rawConfigK8S struct {
 }
 
 type rawConfigSecurity struct {
+	DisableACLs        bool                 `hcl:"disable_acls,optional"`
 	Encryption         *rawConfigEncryption `hcl:"encryption,block"`
 	InitialMasterToken string               `hcl:"initial_master_token,optional"`
 }
@@ -94,15 +95,20 @@ type rawConfigEnterprise struct {
 }
 
 type rawTopology struct {
-	NetworkShape string        `hcl:"network_shape,optional"`
-	Datacenter   []*Datacenter `hcl:"datacenter,block"`
-	Nodes        []*Node       `hcl:"node,block"`
+	NetworkShape string     `hcl:"network_shape,optional"`
+	LinkMode     string     `hcl:"link_mode,optional"`
+	Cluster      []*Cluster `hcl:"cluster,block"`
+	Nodes        []*Node    `hcl:"node,block"`
+
+	DeprecatedDatacenter []*Datacenter `hcl:"datacenter,block"`
 }
 
-func (t *rawTopology) GetDatacenter(name string) (*Datacenter, bool) {
-	for _, dc := range t.Datacenter {
-		if dc.Name == name {
-			return dc, true
+// Deprecated: GetCluster
+func (t *rawTopology) GetDatacenter(name string) (*Datacenter, bool) { return t.GetCluster(name) }
+func (t *rawTopology) GetCluster(name string) (*Cluster, bool) {
+	for _, c := range t.Cluster {
+		if c.Name == name {
+			return c, true
 		}
 	}
 	return nil, false
