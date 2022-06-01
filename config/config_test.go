@@ -16,7 +16,7 @@ func TestParseConfig_EmptyInferDefaults(t *testing.T) {
 		ConfName:             "legacy",
 		ConsulImage:          "consul-dev:latest",
 		EnvoyLogLevel:        "info",
-		EnvoyVersion:         "v1.16.0",
+		EnvoyVersion:         "v1.20.2",
 		TopologyNetworkShape: "flat",
 		TopologyDatacenters: []*Datacenter{
 			{Name: "dc1", Servers: 1, Clients: 2},
