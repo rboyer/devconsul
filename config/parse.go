@@ -62,12 +62,13 @@ func parseConfig(pathname string, contents []byte) (*Config, error) {
 	}
 
 	for _, node := range uc.Topology.Nodes {
-		if node.DeprecatedUpstreamDatacenter != "" {
-			if node.UpstreamCluster != "" {
-				return nil, fmt.Errorf("both upstream_datacenter and upstream_cluster configured")
-			}
-			node.UpstreamCluster = node.DeprecatedUpstreamDatacenter
-			node.DeprecatedUpstreamDatacenter = ""
+		if node.DeprecatedUpstreamCluster != "" {
+			// TODO: remove
+			node.UpstreamPeer = node.DeprecatedUpstreamCluster
+			node.DeprecatedUpstreamCluster = ""
+		}
+		if node.UpstreamDatacenter != "" && node.UpstreamPeer != "" {
+			return nil, fmt.Errorf("both upstream_datacenter and upstream_peer configured")
 		}
 	}
 

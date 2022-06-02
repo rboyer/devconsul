@@ -75,7 +75,8 @@ type Node struct {
 	UpstreamName                string            `hcl:"upstream_name,optional"`
 	UpstreamNamespace           string            `hcl:"upstream_namespace,optional"`
 	UpstreamPartition           string            `hcl:"upstream_partition,optional"`
-	UpstreamCluster             string            `hcl:"upstream_cluster,optional"`
+	UpstreamPeer                string            `hcl:"upstream_peer,optional"`
+	UpstreamDatacenter          string            `hcl:"upstream_datacenter,optional"`
 	UpstreamExtraHCL            string            `hcl:"upstream_extra_hcl,optional"`
 	ServiceMeta                 map[string]string `hcl:"service_meta,optional"` // key -> val
 	ServiceNamespace            string            `hcl:"service_namespace,optional"`
@@ -83,7 +84,8 @@ type Node struct {
 	Dead                        bool              `hcl:"dead,optional"`
 	RetainInPrimaryGatewaysList bool              `hcl:"retain_in_primary_gateways_list,optional"`
 
-	DeprecatedUpstreamDatacenter string `hcl:"upstream_datacenter,optional"`
+	// Deprecated: lol
+	DeprecatedUpstreamCluster string `hcl:"upstream_cluster,optional"`
 }
 
 func (c *Node) Meta() map[string]string {

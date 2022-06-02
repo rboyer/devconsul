@@ -94,6 +94,18 @@ func TestParseConfig_BothFormats(t *testing.T) {
 }
 
 func TestParseConfig_AllFields(t *testing.T) {
+	t.Run("datacenter", func(t *testing.T) {
+		testParseConfig_AllFields(t, false)
+	})
+	t.Run("peer", func(t *testing.T) {
+		testParseConfig_AllFields(t, true)
+	})
+}
+func testParseConfig_AllFields(t *testing.T, peerInsteadOfDatacenter bool) {
+	upstreamField := `upstream_datacenter = "fake-dc"`
+	if peerInsteadOfDatacenter {
+		upstreamField = `upstream_peer = "fake-peer"`
+	}
 	body := `
 		consul_image = "my-dev-image:blah"
 		envoy_version = "v1.18.3"
@@ -145,7 +157,7 @@ func TestParseConfig_AllFields(t *testing.T) {
 			node "dc1-client2" {
 				upstream_name = "fake-service"
 				upstream_namespace = "foo"
-				upstream_cluster = "fake-dc"
+				` + upstreamField + `
 				upstream_partition = "fake-ap"
 				upstream_extra_hcl = "super invalid"
 				service_meta ={
@@ -186,7 +198,7 @@ EOF
 	fc, err := parseConfig("fake.hcl", []byte(body))
 	require.NoError(t, err)
 
-	require.Equal(t, &Config{
+	expected := &Config{
 		ConfName:              "legacy",
 		ConsulImage:           "my-dev-image:blah",
 		EnvoyVersion:          "v1.18.3",
@@ -223,7 +235,6 @@ EOF
 				NodeName:          "dc1-client2",
 				UpstreamName:      "fake-service",
 				UpstreamNamespace: "foo",
-				UpstreamCluster:   "fake-dc",
 				UpstreamPartition: "fake-ap",
 				UpstreamExtraHCL:  "super invalid",
 				ServiceMeta: map[string]string{
@@ -254,5 +265,13 @@ EOF
 				},
 			},
 		},
-	}, fc)
+	}
+	if peerInsteadOfDatacenter {
+		expected.TopologyNodes[0].UpstreamPeer = "fake-peer"
+		expected.TopologyNodes[0].UpstreamDatacenter = ""
+	} else {
+		expected.TopologyNodes[0].UpstreamPeer = ""
+		expected.TopologyNodes[0].UpstreamDatacenter = "fake-dc"
+	}
+	require.Equal(t, expected, fc)
 }
