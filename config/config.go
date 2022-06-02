@@ -60,8 +60,6 @@ func (c *Partition) IsDefault() bool {
 	return c == nil || c.Name == "" || c.Name == "default"
 }
 
-// Deprecated: use Cluster
-type Datacenter = Cluster
 type Cluster struct {
 	Name         string `hcl:"name,label"`
 	Servers      int    `hcl:"servers,optional"`
@@ -83,9 +81,6 @@ type Node struct {
 	UseBuiltinProxy             bool              `hcl:"use_builtin_proxy,optional"`
 	Dead                        bool              `hcl:"dead,optional"`
 	RetainInPrimaryGatewaysList bool              `hcl:"retain_in_primary_gateways_list,optional"`
-
-	// Deprecated: lol
-	DeprecatedUpstreamCluster string `hcl:"upstream_cluster,optional"`
 }
 
 func (c *Node) Meta() map[string]string {

@@ -72,8 +72,6 @@ func (t *Topology) LeaderIP(cluster string, wan bool) string {
 	panic("no such dc")
 }
 
-// Deprecated: Clusters
-func (t *Topology) Datacenters() []Datacenter { return t.Clusters() }
 func (t *Topology) Clusters() []Cluster {
 	out := make([]Cluster, len(t.clusters))
 	for i, c := range t.clusters {
@@ -93,8 +91,6 @@ func (t *Topology) Networks() []*Network {
 	return out
 }
 
-// Deprecated: Cluster
-func (t *Topology) DC(name string) *Datacenter { return t.Cluster(name) }
 func (t *Topology) Cluster(name string) *Cluster {
 	for _, c := range t.clusters {
 		if c.Name == name {
@@ -153,8 +149,6 @@ func (t *Topology) Nodes() []*Node {
 	return out
 }
 
-// Deprecated: ClusterNodes
-func (t *Topology) DatacenterNodes(dc string) []*Node { return t.ClusterNodes(dc) }
 func (t *Topology) ClusterNodes(cluster string) []*Node {
 	out := make([]*Node, 0, len(t.nm))
 	t.WalkSilent(func(n *Node) {
@@ -204,8 +198,6 @@ func (t *Topology) AddAdditionalPrimaryGateway(addr string) {
 	t.additionalPrimaryGateways = append(t.additionalPrimaryGateways, addr)
 }
 
-// Deprecated: Cluster
-type Datacenter = Cluster
 type Cluster struct {
 	Name    string
 	Primary bool

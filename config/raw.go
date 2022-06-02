@@ -100,11 +100,9 @@ type rawTopology struct {
 	Cluster      []*Cluster `hcl:"cluster,block"`
 	Nodes        []*Node    `hcl:"node,block"`
 
-	DeprecatedDatacenter []*Datacenter `hcl:"datacenter,block"`
+	DeprecatedDatacenter []*Cluster `hcl:"datacenter,block"`
 }
 
-// Deprecated: GetCluster
-func (t *rawTopology) GetDatacenter(name string) (*Datacenter, bool) { return t.GetCluster(name) }
 func (t *rawTopology) GetCluster(name string) (*Cluster, bool) {
 	for _, c := range t.Cluster {
 		if c.Name == name {
