@@ -47,16 +47,16 @@ config "simple-peering" {
     }
 
     node "dc1-client1" {
-      upstream_cluster = "peer-dc2"
+      upstream_peer = "peer-dc2"
     }
     node "dc1-client2" {
-      upstream_cluster = "peer-dc2"
+      upstream_peer = "peer-dc2"
     }
     node "dc2-client1" {
-      upstream_cluster = "peer-dc1"
+      upstream_peer = "peer-dc1"
     }
     node "dc2-client2" {
-      upstream_cluster = "peer-dc1"
+      upstream_peer = "peer-dc1"
     }
   }
 

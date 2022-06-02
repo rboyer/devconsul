@@ -203,8 +203,11 @@ func CompileTopology(cfg *config.Config) (*Topology, error) {
 				if nodeConfig.UpstreamName != "" {
 					svc.UpstreamID.Name = nodeConfig.UpstreamName
 				}
-				if nodeConfig.UpstreamCluster != "" {
-					svc.UpstreamCluster = nodeConfig.UpstreamCluster
+				if nodeConfig.UpstreamPeer != "" {
+					svc.UpstreamPeer = nodeConfig.UpstreamPeer
+				}
+				if nodeConfig.UpstreamDatacenter != "" {
+					svc.UpstreamDatacenter = nodeConfig.UpstreamDatacenter
 				}
 
 				node.Service = &svc

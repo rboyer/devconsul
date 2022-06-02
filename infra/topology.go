@@ -286,10 +286,11 @@ type Service struct {
 	// Name               string
 	// Namespace          string // will not be empty
 	// Partition          string // will be not empty
-	Port              int
-	UpstreamID        util.Identifier
-	UpstreamCluster   string
-	UpstreamLocalPort int
-	UpstreamExtraHCL  string
-	Meta              map[string]string
+	Port               int
+	UpstreamID         util.Identifier
+	UpstreamPeer       string
+	UpstreamDatacenter string
+	UpstreamLocalPort  int
+	UpstreamExtraHCL   string
+	Meta               map[string]string
 }
