@@ -60,39 +60,49 @@ config "simple-peering" {
     }
   }
 
-  config_entries = [
-    <<EOF
+  cluster_config "dc1" {
+    config_entries = [
+      <<EOF
 {
   "Kind": "exported-services",
   "Name": "default",
   "Services": [
     {
       "Name": "ping",
-      "Consumers": [
-        {
-          "PeerName": "peer-dc1"
-        },
-        {
-          "PeerName": "peer-dc2"
-        }
-      ]
+      "Consumers": [ { "PeerName": "peer-dc2" } ]
     },
     {
       "Name": "pong",
-      "Consumers": [
-        {
-          "PeerName": "peer-dc1"
-        },
-        {
-          "PeerName": "peer-dc2"
-        }
-      ]
+      "Consumers": [ { "PeerName": "peer-dc2" } ]
     }
   ]
 }
   EOF
-    ,
+      ,
+    ]
+  }
+
+  cluster_config "dc2" {
+    config_entries = [
+      <<EOF
+{
+  "Kind": "exported-services",
+  "Name": "default",
+  "Services": [
+    {
+      "Name": "ping",
+      "Consumers": [ { "PeerName": "peer-dc1" } ]
+    },
+    {
+      "Name": "pong",
+      "Consumers": [ { "PeerName": "peer-dc1" } ]
+    }
   ]
+}
+  EOF
+      ,
+    ]
+  }
 }
 
 config "simple-no-acls" {

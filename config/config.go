@@ -20,7 +20,7 @@ type Config struct {
 	EnvoyLogLevel               string
 	PrometheusEnabled           bool
 	InitialMasterToken          string
-	ConfigEntries               []api.ConfigEntry
+	ConfigEntries               map[string][]api.ConfigEntry
 	GossipKey                   string
 	AgentMasterToken            string
 	EnterpriseEnabled           bool

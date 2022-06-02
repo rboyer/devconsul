@@ -21,6 +21,7 @@ func TestParseConfig_EmptyInferDefaults(t *testing.T) {
 		TopologyClusters: []*Cluster{
 			{Name: "dc1", Servers: 1, Clients: 2},
 		},
+		ConfigEntries: map[string][]api.ConfigEntry{},
 	}, fc)
 }
 
@@ -41,6 +42,7 @@ func TestParseConfig_BothFormats(t *testing.T) {
 			TopologyClusters: []*Cluster{
 				{Name: "dc1", Servers: 1, Clients: 2},
 			},
+			ConfigEntries: map[string][]api.ConfigEntry{},
 		}, fc)
 	})
 	t.Run("new 1", func(t *testing.T) {
@@ -65,6 +67,7 @@ func TestParseConfig_BothFormats(t *testing.T) {
 			TopologyClusters: []*Cluster{
 				{Name: "dc1", Servers: 1, Clients: 2},
 			},
+			ConfigEntries: map[string][]api.ConfigEntry{},
 		}, fc)
 	})
 	t.Run("new 2", func(t *testing.T) {
@@ -89,6 +92,7 @@ func TestParseConfig_BothFormats(t *testing.T) {
 			TopologyClusters: []*Cluster{
 				{Name: "dc1", Servers: 1, Clients: 2},
 			},
+			ConfigEntries: map[string][]api.ConfigEntry{},
 		}, fc)
 	})
 }
@@ -246,22 +250,24 @@ EOF
 				RetainInPrimaryGatewaysList: true,
 			},
 		},
-		ConfigEntries: []api.ConfigEntry{
-			&api.ProxyConfigEntry{
-				Kind: api.ProxyDefaults,
-				Name: api.ProxyConfigGlobal,
-				Config: map[string]interface{}{
-					"protocol": "http",
+		ConfigEntries: map[string][]api.ConfigEntry{
+			"dc1": {
+				&api.ProxyConfigEntry{
+					Kind: api.ProxyDefaults,
+					Name: api.ProxyConfigGlobal,
+					Config: map[string]interface{}{
+						"protocol": "http",
+					},
+					MeshGateway: api.MeshGatewayConfig{
+						Mode: api.MeshGatewayModeLocal,
+					},
 				},
-				MeshGateway: api.MeshGatewayConfig{
-					Mode: api.MeshGatewayModeLocal,
-				},
-			},
-			&api.ServiceResolverConfigEntry{
-				Kind: api.ServiceResolver,
-				Name: "pong",
-				Redirect: &api.ServiceResolverRedirect{
-					Datacenter: "dc2",
+				&api.ServiceResolverConfigEntry{
+					Kind: api.ServiceResolver,
+					Name: "pong",
+					Redirect: &api.ServiceResolverRedirect{
+						Datacenter: "dc2",
+					},
 				},
 			},
 		},

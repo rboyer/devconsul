@@ -27,8 +27,6 @@ test:
 lint:
 	golangci-lint run
 
-LINK_MODE := $(shell $(PROGRAM_NAME) config | jq -r '.linkMode')
-
 .PHONY: checkmesh
 checkmesh: install
 	@for name in $$($(PROGRAM_NAME) config | jq -r '.localAddrs | keys | .[]'); do \

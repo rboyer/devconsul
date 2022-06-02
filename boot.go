@@ -914,7 +914,7 @@ func (c *Core) writeCentralConfigs(cluster string) error {
 	}
 
 	var stockEntries []api.ConfigEntry
-	if c.config.PrometheusEnabled {
+	if c.config.PrometheusEnabled && cluster == config.PrimaryCluster {
 		stockEntries = append(stockEntries, &api.ProxyConfigEntry{
 			Kind:      api.ProxyDefaults,
 			Name:      api.ProxyConfigGlobal,
@@ -944,7 +944,7 @@ func (c *Core) writeCentralConfigs(cluster string) error {
 		stockEntries = append(stockEntries, entry)
 	}
 
-	entries := c.config.ConfigEntries
+	entries := c.config.ConfigEntries[cluster]
 	for _, stockEntry := range stockEntries {
 		found := false
 		for i, entry := range entries {

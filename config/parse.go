@@ -61,6 +61,17 @@ func parseConfig(pathname string, contents []byte) (*Config, error) {
 		uc.Topology.DeprecatedDatacenter = nil
 	}
 
+	if len(uc.DeprecatedRawConfigEntries) > 0 {
+		if len(uc.Clusters) > 0 {
+			return nil, fmt.Errorf("both config_entries and cluster are configured")
+		}
+		uc.Clusters = []*rawClusterConfig{{
+			Name:             PrimaryCluster,
+			RawConfigEntries: uc.DeprecatedRawConfigEntries,
+		}}
+		uc.DeprecatedRawConfigEntries = nil
+	}
+
 	for _, node := range uc.Topology.Nodes {
 		if node.UpstreamDatacenter != "" && node.UpstreamPeer != "" {
 			return nil, fmt.Errorf("both upstream_datacenter and upstream_peer configured")
@@ -98,14 +109,19 @@ func parseConfig(pathname string, contents []byte) (*Config, error) {
 		TopologyLinkMode:            uc.Topology.LinkMode,
 		TopologyClusters:            uc.Topology.Cluster,
 		TopologyNodes:               uc.Topology.Nodes,
+		ConfigEntries:               make(map[string][]api.ConfigEntry),
 	}
 
-	for i, raw := range uc.RawConfigEntries {
-		entry, err := api.DecodeConfigEntryFromJSON([]byte(raw))
-		if err != nil {
-			return nil, fmt.Errorf("invalid config entry [%d]: %v", i, err)
+	for _, cluster := range uc.Clusters {
+		var configEntries []api.ConfigEntry
+		for i, raw := range cluster.RawConfigEntries {
+			entry, err := api.DecodeConfigEntryFromJSON([]byte(raw))
+			if err != nil {
+				return nil, fmt.Errorf("invalid config entry [%d]: %v", i, err)
+			}
+			configEntries = append(configEntries, entry)
 		}
-		cfg.ConfigEntries = append(cfg.ConfigEntries, entry)
+		cfg.ConfigEntries[cluster.Name] = configEntries
 	}
 
 	return cfg, nil
