@@ -1,8 +1,13 @@
 package main
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
+	"net/http"
 	"strings"
+	"time"
 
 	"github.com/hashicorp/consul/api"
 	"github.com/hashicorp/go-cleanhttp"
@@ -10,6 +15,7 @@ import (
 
 	"github.com/rboyer/devconsul/config"
 	"github.com/rboyer/devconsul/consulfunc"
+	"github.com/rboyer/devconsul/infra"
 )
 
 var knownConfigEntryKinds = []string{
@@ -83,6 +89,104 @@ func (c *Core) RunDebugSaveGrafana() error {
 	c.logger.Info("Updated 'connect_service_dashboard.json' locally, you'll still have to commit it")
 
 	return nil
+}
+
+func (c *Core) RunCheckMesh() error {
+	client := cleanhttp.DefaultClient()
+
+	now := time.Now()
+
+	c.topology.WalkSilent(func(n *infra.Node) {
+		if n.Server || n.MeshGateway {
+			return
+		}
+		addr := n.LocalAddress()
+
+		logger := c.logger.Named(n.Name)
+		logger = logger.With("addr", addr)
+
+		logger.Info("Checking pingpong mesh instance")
+
+		ppr, err := fetchPingPongPage(client, addr)
+		if err != nil {
+			logger.Error("fetching endpoint failed", "error", err)
+			return
+		}
+		if ppr.Name != "" {
+			logger = logger.Named("app__" + ppr.Name)
+		}
+
+		logger.Info("found application", "app", ppr.Name)
+		if len(ppr.Pings) > 0 {
+			evt := ppr.Pings[0]
+
+			if evt.Err != "" {
+				logger.Error("last ping", "error", evt.Err)
+			} else {
+				logger.Info("last ping",
+					"started", prettyTime(now, evt.Start),
+					"ended", prettyTime(now, evt.End))
+			}
+		}
+		if len(ppr.Pongs) > 0 {
+			evt := ppr.Pongs[0]
+
+			if evt.Err != "" {
+				logger.Error("last pong", "error", evt.Err)
+			} else {
+				logger.Info("last pong", "received",
+					prettyTime(now, evt.Recv))
+			}
+		}
+	})
+
+	return nil
+}
+
+func prettyTime(now time.Time, t *time.Time) string {
+	if t == nil {
+		return "NO_DATA"
+	}
+	dur := now.Sub(*t)
+	dur = dur.Round(time.Millisecond)
+	return dur.String()
+}
+
+type PingPongResponse struct {
+	Name  string `json:"name"`
+	Pings []Ping `json:"pings"`
+	Pongs []Ping `json:"pongs"`
+}
+
+type Ping struct {
+	Err   string     `json:",omitempty"`
+	Recv  *time.Time `json:",omitempty"`
+	Start *time.Time `json:",omitempty"`
+	End   *time.Time `json:",omitempty"`
+	// DurSec int        `json:",omitempty"`
+}
+
+func fetchPingPongPage(client *http.Client, addr string) (*PingPongResponse, error) {
+	resp, err := client.Get("http://" + addr + ":8080")
+	if err != nil {
+		return nil, err
+	}
+	if resp.Body == nil {
+		return nil, errors.New("no response body")
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	var ppr PingPongResponse
+	if err := json.Unmarshal(body, &ppr); err != nil {
+		return nil, err
+	}
+
+	return &ppr, nil
 }
 
 func (c *Core) RunGRPCCheck() error {

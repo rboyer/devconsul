@@ -49,6 +49,7 @@ var allCommands = []command{
 	{"save-grafana", (*Core).RunDebugSaveGrafana, nil},
 	{"config-entries", (*Core).RunDebugListConfigs, nil},
 	{"grpc-check", (*Core).RunGRPCCheck, nil},
+	{"check-mesh", (*Core).RunCheckMesh, nil},
 }
 
 func main() {
