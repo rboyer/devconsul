@@ -27,6 +27,11 @@ test:
 lint:
 	golangci-lint run
 
+.PHONY: siege
+siege: install
+	$(info This is an example of using the siege tool to traverse an upstream boundary)
+	siege -d 0.5s -c 5 -t 30s 'http://10.0.1.21:8080/?proxy=1'
+
 .PHONY: help
 help:
 	$(info available make targets)
