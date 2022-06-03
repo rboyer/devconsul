@@ -541,6 +541,7 @@ func (c *Core) generatePingPongContainers(podName string, node *infra.Node) ([]s
 }
 
 // TODO: make chaos opt-in
+// "-pong-chaos",
 var tfPingPongAppT = template.Must(template.New("tf-pingpong-app").Parse(`
 resource "docker_container" "{{.NodeName}}-{{.PingPong}}" {
 	name = "{{.NodeName}}-{{.PingPong}}"
@@ -562,7 +563,6 @@ resource "docker_container" "{{.NodeName}}-{{.PingPong}}" {
       "0.0.0.0:8080",
       "-dial",
       "127.0.0.1:9090",
-      "-pong-chaos",
       "-dialfreq",
       "250ms",
       "-name",
