@@ -114,6 +114,32 @@ func (c *Core) peerClusters() error {
 			continue // skip
 		}
 
+		// Check to see if both sides are already peered.
+		var hasPrimaryPeering bool
+		{
+			found, _, err := pc.Read(context.Background(), "peer-"+cluster.Name, nil)
+			if err != nil {
+				return fmt.Errorf("error checking for peering in %q: %w", config.PrimaryCluster, err)
+			}
+			hasPrimaryPeering = found != nil
+		}
+
+		targetClient := c.clientForCluster(cluster.Name)
+		tpc := targetClient.Peerings()
+
+		var hasReversePeering bool
+		{
+			found, _, err := tpc.Read(context.Background(), "peer-"+config.PrimaryCluster, nil)
+			if err != nil {
+				return fmt.Errorf("error checking for peering in %q: %w", cluster.Name, err)
+			}
+			hasReversePeering = found != nil
+		}
+
+		if hasPrimaryPeering && hasReversePeering {
+			continue
+		}
+
 		resp, _, err := pc.GenerateToken(context.Background(), api.PeeringGenerateTokenRequest{
 			PeerName: "peer-" + cluster.Name,
 		}, nil)
@@ -123,10 +149,6 @@ func (c *Core) peerClusters() error {
 		}
 
 		token := resp.PeeringToken
-
-		targetClient := c.clientForCluster(cluster.Name)
-
-		tpc := targetClient.Peerings()
 
 		_, _, err = tpc.Initiate(context.Background(), api.PeeringInitiateRequest{
 			PeerName:     "peer-" + config.PrimaryCluster,
