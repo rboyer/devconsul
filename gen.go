@@ -359,6 +359,13 @@ func (c *Core) generateMeshGatewayContainer(podName string, node *infra.Node) (s
 		mgi.LANAddress = `{{ GetInterfaceIP \"eth0\" }}:8443`
 		mgi.WANAddress = `{{ GetInterfaceIP \"eth1\" }}:8443`
 	case NetworkShapeFlat:
+		mgi.EnableWAN = true
+		mgi.LANAddress = `{{ GetInterfaceIP \"eth0\" }}:8443`
+		if node.MeshGatewayUseDNSWANAddress {
+			mgi.WANAddress = node.Name + "-pod:8443"
+		} else {
+			mgi.WANAddress = `{{ GetInterfaceIP \"eth0\" }}:8443`
+		}
 	default:
 		panic("unknown shape: " + c.topology.NetworkShape)
 	}

@@ -231,6 +231,8 @@ type Node struct {
 	UseBuiltinProxy bool
 	Index           int
 	Canary          bool
+	// mesh-gateway only
+	MeshGatewayUseDNSWANAddress bool
 }
 
 func (n *Node) AddLabels(m map[string]string) {

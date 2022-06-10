@@ -68,19 +68,22 @@ type Cluster struct {
 }
 
 type Node struct {
-	NodeName                    string            `hcl:"name,label"`
-	Partition                   string            `hcl:"partition,optional"`
-	UpstreamName                string            `hcl:"upstream_name,optional"`
-	UpstreamNamespace           string            `hcl:"upstream_namespace,optional"`
-	UpstreamPartition           string            `hcl:"upstream_partition,optional"`
-	UpstreamPeer                string            `hcl:"upstream_peer,optional"`
-	UpstreamDatacenter          string            `hcl:"upstream_datacenter,optional"`
-	UpstreamExtraHCL            string            `hcl:"upstream_extra_hcl,optional"`
-	ServiceMeta                 map[string]string `hcl:"service_meta,optional"` // key -> val
-	ServiceNamespace            string            `hcl:"service_namespace,optional"`
-	UseBuiltinProxy             bool              `hcl:"use_builtin_proxy,optional"`
-	Dead                        bool              `hcl:"dead,optional"`
-	RetainInPrimaryGatewaysList bool              `hcl:"retain_in_primary_gateways_list,optional"`
+	NodeName           string            `hcl:"name,label"`
+	Partition          string            `hcl:"partition,optional"`
+	UpstreamName       string            `hcl:"upstream_name,optional"`
+	UpstreamNamespace  string            `hcl:"upstream_namespace,optional"`
+	UpstreamPartition  string            `hcl:"upstream_partition,optional"`
+	UpstreamPeer       string            `hcl:"upstream_peer,optional"`
+	UpstreamDatacenter string            `hcl:"upstream_datacenter,optional"`
+	UpstreamExtraHCL   string            `hcl:"upstream_extra_hcl,optional"`
+	ServiceMeta        map[string]string `hcl:"service_meta,optional"` // key -> val
+	ServiceNamespace   string            `hcl:"service_namespace,optional"`
+	UseBuiltinProxy    bool              `hcl:"use_builtin_proxy,optional"`
+	Dead               bool              `hcl:"dead,optional"`
+
+	// mesh-gateway settings
+	RetainInPrimaryGatewaysList bool `hcl:"retain_in_primary_gateways_list,optional"`
+	UseDNSWANAddress            bool `hcl:"use_dns_wan_address,optional"`
 }
 
 func (c *Node) Meta() map[string]string {

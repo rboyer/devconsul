@@ -172,6 +172,13 @@ func CompileTopology(cfg *config.Config) (*Topology, error) {
 					return fmt.Errorf("mesh gateways can only be deployed in the default partition")
 				}
 
+				if nodeConfig.UseDNSWANAddress {
+					if topology.NetworkShape != NetworkShapeFlat {
+						return fmt.Errorf("use_dns_wan_address only applies to flat networking models")
+					}
+					node.MeshGatewayUseDNSWANAddress = nodeConfig.UseDNSWANAddress
+				}
+
 				switch topology.NetworkShape {
 				case NetworkShapeIslands, NetworkShapeDual:
 					node.Addresses = append(node.Addresses, Address{
@@ -183,6 +190,9 @@ func CompileTopology(cfg *config.Config) (*Topology, error) {
 					return fmt.Errorf("unknown shape: %s", topology.NetworkShape)
 				}
 			} else {
+				if nodeConfig.UseDNSWANAddress {
+					return fmt.Errorf("use_dns_wan_address only applies to mesh gateways")
+				}
 				if nodeConfig.UseBuiltinProxy {
 					node.UseBuiltinProxy = true
 				}
