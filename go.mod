@@ -3,7 +3,7 @@ module github.com/rboyer/devconsul
 go 1.18
 
 require (
-	github.com/hashicorp/consul/api v1.10.1-0.20220602165122-dc72659296a1
+	github.com/hashicorp/consul/api v1.10.1-0.20220610161046-7001e1151cbe
 	github.com/hashicorp/go-cleanhttp v0.5.1
 	github.com/hashicorp/go-hclog v0.12.0
 	github.com/hashicorp/go-multierror v1.1.0

@@ -150,12 +150,12 @@ func (c *Core) peerClusters() error {
 
 		token := resp.PeeringToken
 
-		_, _, err = tpc.Initiate(context.Background(), api.PeeringInitiateRequest{
+		_, _, err = tpc.Establish(context.Background(), api.PeeringEstablishRequest{
 			PeerName:     "peer-" + config.PrimaryCluster,
 			PeeringToken: token,
 		}, nil)
 		if err != nil {
-			return fmt.Errorf("error initiating peering with token in %q to %q: %w",
+			return fmt.Errorf("error establishing peering with token in %q to %q: %w",
 				cluster.Name, config.PrimaryCluster, err)
 		}
 	}
