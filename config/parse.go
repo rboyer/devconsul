@@ -41,7 +41,7 @@ func parseConfig(pathname string, contents []byte) (*Config, error) {
 		uc.ConsulImage = "consul-dev:latest"
 	}
 	if uc.EnvoyVersion == "" {
-		uc.EnvoyVersion = "v1.20.2"
+		uc.EnvoyVersion = DefaultEnvoyVersion
 	}
 	if uc.Envoy.LogLevel == "" {
 		uc.Envoy.LogLevel = "info"
