@@ -98,8 +98,14 @@ if [[ "${mode}" != "insecure" ]]; then
     done
 fi
 
-echo "Registering service..."
-consul services register "${api_args[@]}" "${service_register_file}"
+while : ; do
+    echo "Registering service..."
+    if consul services register "${api_args[@]}" "${service_register_file}"; then
+        break
+    fi
+    echo "waiting for registration to work..."
+    sleep 0.1
+done
 
 echo "Launching proxy..."
 case "${proxy_type}" in
