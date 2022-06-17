@@ -14,11 +14,16 @@ type ConfigKindName struct {
 }
 
 var kinds = []string{
-	api.ServiceDefaults,
-	api.ProxyDefaults,
+	api.MeshConfig,
+	api.ServiceIntentions,
+	api.IngressGateway,
+	api.TerminatingGateway,
 	api.ServiceRouter,
 	api.ServiceSplitter,
 	api.ServiceResolver,
+	api.ServiceDefaults,
+	api.ProxyDefaults,
+	api.ExportedServices,
 }
 
 func ListAllConfigEntries(client *api.Client, enterprise, partitionsDisabled bool) (map[ConfigKindName]api.ConfigEntry, error) {

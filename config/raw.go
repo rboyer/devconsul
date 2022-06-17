@@ -77,9 +77,10 @@ type rawConfigK8S struct {
 }
 
 type rawConfigSecurity struct {
-	DisableACLs        bool                 `hcl:"disable_acls,optional"`
-	Encryption         *rawConfigEncryption `hcl:"encryption,block"`
-	InitialMasterToken string               `hcl:"initial_master_token,optional"`
+	DisableACLs              bool                 `hcl:"disable_acls,optional"`
+	Encryption               *rawConfigEncryption `hcl:"encryption,block"`
+	InitialMasterToken       string               `hcl:"initial_master_token,optional"`
+	DisableDefaultIntentions bool                 `hcl:"disable_default_intentions,optional"`
 }
 
 type rawConfigEncryption struct {

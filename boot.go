@@ -899,7 +899,6 @@ func (c *Core) writeCentralConfigs(cluster string) error {
 		client = c.clientForCluster(cluster)
 		logger = c.logger.With("cluster", cluster)
 	)
-	// TODO: peering (give each peer separate config entries)
 
 	currentEntries, err := consulfunc.ListAllConfigEntries(client,
 		c.config.EnterpriseEnabled,
@@ -948,22 +947,24 @@ func (c *Core) writeCentralConfigs(cluster string) error {
 		})
 	}
 
-	for dst, sm := range dm {
-		entry := &api.ServiceIntentionsConfigEntry{
-			Kind:      api.ServiceIntentions,
-			Name:      dst.Name,
-			Namespace: dst.Namespace,
-			Partition: dst.Partition,
+	if !c.config.SecurityDisableDefaultIntentions {
+		for dst, sm := range dm {
+			entry := &api.ServiceIntentionsConfigEntry{
+				Kind:      api.ServiceIntentions,
+				Name:      dst.Name,
+				Namespace: dst.Namespace,
+				Partition: dst.Partition,
+			}
+			for src := range sm {
+				entry.Sources = append(entry.Sources, &api.SourceIntention{
+					Name:      src.Name,
+					Namespace: src.Namespace,
+					Partition: src.Partition,
+					Action:    api.IntentionActionAllow,
+				})
+			}
+			stockEntries = append(stockEntries, entry)
 		}
-		for src := range sm {
-			entry.Sources = append(entry.Sources, &api.SourceIntention{
-				Name:      src.Name,
-				Namespace: src.Namespace,
-				Partition: src.Partition,
-				Action:    api.IntentionActionAllow,
-			})
-		}
-		stockEntries = append(stockEntries, entry)
 	}
 
 	entries := c.config.ConfigEntries[cluster]
