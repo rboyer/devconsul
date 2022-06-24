@@ -336,7 +336,7 @@ func (c *Core) generateMeshGatewayContainer(podName string, node *infra.Node) (s
 	} else {
 		mgi.SidecarBootEnvVars = append(mgi.SidecarBootEnvVars,
 			"SBOOT_MODE=direct",
-			"SBOOT_TOKEN_FILE=/secrets/mesh-gateway.val",
+			"SBOOT_TOKEN_FILE=/secrets/mesh-gateway--"+node.Cluster+".val",
 		)
 	}
 

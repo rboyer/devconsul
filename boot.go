@@ -57,15 +57,28 @@ func (c *Core) runBoot(primaryOnly bool) error {
 		}
 		c.masterToken = ""
 	} else {
-		if err := c.bootstrap(c.primaryClient()); err != nil {
-			return fmt.Errorf("bootstrap: %v", err)
+		switch c.topology.LinkMode {
+		case infra.ClusterLinkModeFederate:
+			if err := c.bootstrap(c.primaryClient()); err != nil {
+				return fmt.Errorf("bootstrap: %v", err)
+			}
+			// now we have master token set we can do anything
+			c.clients[config.PrimaryCluster], err = consulfunc.GetClient(c.topology.LeaderIP(config.PrimaryCluster, false), c.masterToken)
+			if err != nil {
+				return fmt.Errorf("error creating final client for cluster=%s: %v", config.PrimaryCluster, err)
+			}
+		case infra.ClusterLinkModePeer:
+			for _, cluster := range c.topology.Clusters() {
+				if err := c.bootstrap(c.clientForCluster(cluster.Name)); err != nil {
+					return fmt.Errorf("bootstrap[%q]: %w", cluster.Name, err)
+				}
+				// now we have master token set we can do anything
+				c.clients[cluster.Name], err = consulfunc.GetClient(c.topology.LeaderIP(cluster.Name, false), c.masterToken)
+				if err != nil {
+					return fmt.Errorf("error creating final client for cluster=%s: %v", cluster.Name, err)
+				}
+			}
 		}
-	}
-
-	// now we have master token set we can do anything
-	c.clients[config.PrimaryCluster], err = consulfunc.GetClient(c.topology.LeaderIP(config.PrimaryCluster, false), c.masterToken)
-	if err != nil {
-		return fmt.Errorf("error creating final client for cluster=%s: %v", config.PrimaryCluster, err)
 	}
 
 	switch c.topology.LinkMode {
@@ -201,31 +214,29 @@ func (c *Core) initPrimaryCluster(cluster string) error {
 	}
 
 	if !c.config.SecurityDisableACLs {
-		// TODO: peering
-		err = c.createReplicationToken()
+		err = c.createReplicationToken(cluster)
 		if err != nil {
 			return fmt.Errorf("createReplicationToken[%s]: %w", cluster, err)
 		}
 
-		err = c.createMeshGatewayToken()
+		err = c.createMeshGatewayToken(cluster)
 		if err != nil {
 			return fmt.Errorf("createMeshGatewayToken[%s]: %w", cluster, err)
 		}
 
-		err = c.createAgentTokens()
+		err = c.createAgentTokens(cluster)
 		if err != nil {
 			return fmt.Errorf("createAgentTokens[%s]: %w", cluster, err)
 		}
 	}
 
-	err = c.injectAgentTokensAndWaitForNodeUpdates(cluster)
+	err = c.injectAgentTokensAndWaitForNodeUpdates(cluster, true)
 	if err != nil {
 		return fmt.Errorf("injectAgentTokensAndWaitForNodeUpdates[%s]: %w", cluster, err)
 	}
 
 	if !c.config.SecurityDisableACLs {
-		// TODO: peering
-		err = c.createAnonymousToken()
+		err = c.createAnonymousToken(cluster)
 		if err != nil {
 			return fmt.Errorf("createAnonymousPolicy[%s]: %w", cluster, err)
 		}
@@ -237,14 +248,16 @@ func (c *Core) initPrimaryCluster(cluster string) error {
 	}
 
 	if !c.config.SecurityDisableACLs {
-		// TODO: peering
 		if c.config.KubernetesEnabled {
-			err = c.initializeKubernetes()
+			if c.topology.LinkWithPeering() {
+				return fmt.Errorf("currently the k8s ACL mode is incompatible with peering in this tool")
+			}
+			err = c.initializeKubernetes(cluster)
 			if err != nil {
 				return fmt.Errorf("initializeKubernetes[%s]: %w", cluster, err)
 			}
 		} else {
-			err = c.createServiceTokens()
+			err = c.createServiceTokens(cluster)
 			if err != nil {
 				return fmt.Errorf("createServiceTokens[%s]: %w", cluster, err)
 			}
@@ -255,6 +268,10 @@ func (c *Core) initPrimaryCluster(cluster string) error {
 }
 
 func (c *Core) initSecondaryDCs() error {
+	if c.topology.LinkMode != infra.ClusterLinkModeFederate {
+		return fmt.Errorf("unsupported link_mode=%q here", c.topology.LinkMode)
+	}
+
 	if !c.config.SecurityDisableACLs {
 		err := c.injectReplicationToken()
 		if err != nil {
@@ -272,7 +289,7 @@ func (c *Core) initSecondaryDCs() error {
 			return fmt.Errorf("error creating final client for cluster=%s: %v", cluster.Name, err)
 		}
 
-		err = c.injectAgentTokensAndWaitForNodeUpdates(cluster.Name)
+		err = c.injectAgentTokensAndWaitForNodeUpdates(cluster.Name, false)
 		if err != nil {
 			return fmt.Errorf("injectAgentTokensAndWaitForNodeUpdates[%s]: %v", cluster.Name, err)
 		}
@@ -487,7 +504,12 @@ func (c *Core) createNamespacesForPartition(cluster string, ap *config.Partition
 	return nil
 }
 
-func (c *Core) createReplicationToken() error {
+func (c *Core) createReplicationToken(cluster string) error {
+	var (
+		client = c.clientForCluster(cluster)
+		logger = c.logger.With("cluster", cluster)
+	)
+
 	const replicationName = "acl-replication"
 
 	// NOTE: this is not partition aware
@@ -519,7 +541,7 @@ func (c *Core) createReplicationToken() error {
 				intentions = "read"
 			}`
 	}
-	p, err := consulfunc.CreateOrUpdatePolicy(c.primaryClient(), p, nil)
+	p, err := consulfunc.CreateOrUpdatePolicy(client, p, nil)
 	if err != nil {
 		return err
 	}
@@ -532,18 +554,23 @@ func (c *Core) createReplicationToken() error {
 		Policies:    []*api.ACLTokenPolicyLink{{ID: p.ID}},
 	}
 
-	token, err = consulfunc.CreateOrUpdateToken(c.primaryClient(), token, nil)
+	token, err = consulfunc.CreateOrUpdateToken(client, token, nil)
 	if err != nil {
 		return err
 	}
 	c.setToken("replication", "", token.SecretID)
 
-	c.logger.Info("replication token", "secretID", token.SecretID)
+	logger.Info("replication token", "secretID", token.SecretID)
 
 	return nil
 }
 
-func (c *Core) createMeshGatewayToken() error {
+func (c *Core) createMeshGatewayToken(cluster string) error {
+	var (
+		client = c.clientForCluster(cluster)
+		logger = c.logger.With("cluster", cluster)
+	)
+
 	const meshGatewayName = "mesh-gateway"
 
 	p := &api.ACLPolicy{
@@ -588,7 +615,7 @@ func (c *Core) createMeshGatewayToken() error {
 			}
 			`
 	}
-	p, err := consulfunc.CreateOrUpdatePolicy(c.primaryClient(), p, nil)
+	p, err := consulfunc.CreateOrUpdatePolicy(client, p, nil)
 	if err != nil {
 		return err
 	}
@@ -599,23 +626,26 @@ func (c *Core) createMeshGatewayToken() error {
 		Policies:    []*api.ACLTokenPolicyLink{{ID: p.ID}},
 	}
 
-	token, err = consulfunc.CreateOrUpdateToken(c.primaryClient(), token, nil)
+	token, err = consulfunc.CreateOrUpdateToken(client, token, nil)
 	if err != nil {
 		return err
 	}
 
-	if err := c.cache.SaveValue("mesh-gateway", token.SecretID); err != nil {
+	if err := c.cache.SaveValue("mesh-gateway--"+cluster, token.SecretID); err != nil {
 		return err
 	}
 
 	// c.setToken("mesh-gateway", "", token.SecretID)
 
-	c.logger.Info("mesh-gateway token", "secretID", token.SecretID)
+	logger.Info("mesh-gateway token", "secretID", token.SecretID)
 
 	return nil
 }
 
 func (c *Core) injectReplicationToken() error {
+	if c.topology.LinkMode != infra.ClusterLinkModeFederate {
+		return fmt.Errorf("unsupported link_mode=%q here", c.topology.LinkMode)
+	}
 	token := c.mustGetToken("replication", "")
 
 	agentMasterToken := c.config.AgentMasterToken
@@ -648,8 +678,17 @@ func (c *Core) injectReplicationToken() error {
 }
 
 // each agent will get a minimal policy configured
-func (c *Core) createAgentTokens() error {
+func (c *Core) createAgentTokens(cluster string) error {
+	var (
+		client = c.clientForCluster(cluster)
+		logger = c.logger.With("cluster", cluster)
+	)
+
 	return c.topology.Walk(func(node *infra.Node) error {
+		if c.topology.LinkWithPeering() && node.Cluster != cluster {
+			return nil // skip
+		}
+
 		policyName := "agent--" + node.Name
 
 		p := &api.ACLPolicy{
@@ -672,7 +711,7 @@ func (c *Core) createAgentTokens() error {
 			`
 		}
 
-		_, err := consulfunc.CreateOrUpdatePolicy(c.primaryClient(), p, nil)
+		_, err := consulfunc.CreateOrUpdatePolicy(client, p, nil)
 		if err != nil {
 			return err
 		}
@@ -684,12 +723,12 @@ func (c *Core) createAgentTokens() error {
 			Policies:    []*api.ACLTokenPolicyLink{{Name: policyName}},
 		}
 
-		token, err = consulfunc.CreateOrUpdateToken(c.primaryClient(), token, nil)
+		token, err = consulfunc.CreateOrUpdateToken(client, token, nil)
 		if err != nil {
 			return err
 		}
 
-		c.logger.Info("agent token",
+		logger.Info("agent token",
 			"node", node.Name,
 			"partition", node.Partition,
 			"secretID", token.SecretID)
@@ -741,8 +780,13 @@ func (c *Core) waitForLeader(cluster string) {
 
 const anonymousTokenAccessorID = "00000000-0000-0000-0000-000000000002"
 
-func (c *Core) createAnonymousToken() error {
-	if err := c.createAnonymousPolicy(); err != nil {
+func (c *Core) createAnonymousToken(cluster string) error {
+	var (
+		client = c.clientForCluster(cluster)
+		logger = c.logger.With("cluster", cluster)
+	)
+
+	if err := c.createAnonymousPolicy(cluster); err != nil {
 		return err
 	}
 
@@ -760,17 +804,22 @@ func (c *Core) createAnonymousToken() error {
 		},
 	}
 
-	_, err := consulfunc.CreateOrUpdateToken(c.primaryClient(), tok, nil)
+	_, err := consulfunc.CreateOrUpdateToken(client, tok, nil)
 	if err != nil {
 		return err
 	}
 
-	c.logger.Info("anonymous token updated")
+	logger.Info("anonymous token updated")
 
 	return nil
 }
 
-func (c *Core) createAnonymousPolicy() error {
+func (c *Core) createAnonymousPolicy(cluster string) error {
+	var (
+		client = c.clientForCluster(cluster)
+		logger = c.logger.With("cluster", cluster)
+	)
+
 	p := &api.ACLPolicy{
 		Name:        "anonymous",
 		Description: "anonymous",
@@ -792,12 +841,12 @@ func (c *Core) createAnonymousPolicy() error {
 			`
 	}
 
-	op, err := consulfunc.CreateOrUpdatePolicy(c.primaryClient(), p, nil)
+	op, err := consulfunc.CreateOrUpdatePolicy(client, p, nil)
 	if err != nil {
 		return err
 	}
 
-	c.logger.Info("anonymous policy", "name", p.Name, "id", op.ID)
+	logger.Info("anonymous policy", "name", p.Name, "id", op.ID)
 
 	return nil
 }
@@ -843,7 +892,12 @@ func apiOptionsFromConfigPartition(pc *config.Partition, ns string) *consulfunc.
 	}
 }
 
-func (c *Core) createServiceTokens() error {
+func (c *Core) createServiceTokens(cluster string) error {
+	var (
+		client = c.clientForCluster(cluster)
+		logger = c.logger.With("cluster", cluster)
+	)
+
 	done := make(map[util.Identifier]struct{})
 
 	return c.topology.Walk(func(n *infra.Node) error {
@@ -852,6 +906,9 @@ func (c *Core) createServiceTokens() error {
 		}
 		if _, ok := done[n.Service.ID]; ok {
 			return nil
+		}
+		if c.topology.LinkWithPeering() && n.Cluster != cluster {
+			return nil // skip
 		}
 
 		token := &api.ACLToken{
@@ -871,12 +928,12 @@ func (c *Core) createServiceTokens() error {
 			token.Partition = ""
 		}
 
-		token, err := consulfunc.CreateOrUpdateToken(c.primaryClient(), token, nil)
+		token, err := consulfunc.CreateOrUpdateToken(client, token, nil)
 		if err != nil {
 			return err
 		}
 
-		c.logger.Info("service token created",
+		logger.Info("service token created",
 			"service", n.Service.ID.Name,
 			"namespace", n.Service.ID.Namespace,
 			"partition", n.Service.ID.Partition,
@@ -1134,11 +1191,11 @@ func (c *Core) writeServiceRegistrationFiles() error {
 	})
 }
 
-func (c *Core) initializeKubernetes() error {
-	if err := c.createAuthMethodForK8S(); err != nil {
+func (c *Core) initializeKubernetes(cluster string) error {
+	if err := c.createAuthMethodForK8S(cluster); err != nil {
 		return err
 	}
-	if err := c.createBindingRulesForK8s(); err != nil {
+	if err := c.createBindingRulesForK8s(cluster); err != nil {
 		return err
 	}
 
@@ -1147,7 +1204,12 @@ func (c *Core) initializeKubernetes() error {
 
 const bindingRuleDescription = "devconsul--default"
 
-func (c *Core) createBindingRulesForK8s() error {
+func (c *Core) createBindingRulesForK8s(cluster string) error {
+	var (
+		client = c.clientForCluster(cluster)
+		logger = c.logger.With("cluster", cluster)
+	)
+
 	rule := &api.ACLBindingRule{
 		AuthMethod:  "minikube",
 		Description: bindingRuleDescription,
@@ -1157,17 +1219,22 @@ func (c *Core) createBindingRulesForK8s() error {
 	}
 
 	// TODO: conditionally sometimes put these in partitions
-	orule, err := consulfunc.CreateOrUpdateBindingRule(c.primaryClient(), rule, nil)
+	orule, err := consulfunc.CreateOrUpdateBindingRule(client, rule, nil)
 	if err != nil {
 		return err
 	}
 
-	c.logger.Info("binding rule created", "authMethod", rule.AuthMethod, "ID", orule.ID)
+	logger.Info("binding rule created", "authMethod", rule.AuthMethod, "ID", orule.ID)
 
 	return nil
 }
 
-func (c *Core) createAuthMethodForK8S() error {
+func (c *Core) createAuthMethodForK8S(cluster string) error {
+	var (
+		client = c.clientForCluster(cluster)
+		logger = c.logger.With("cluster", cluster)
+	)
+
 	k8sHost, err := c.cache.LoadStringFile("k8s/config_host")
 	if err != nil {
 		return err
@@ -1194,12 +1261,12 @@ func (c *Core) createAuthMethodForK8S() error {
 		Config: kconfig.RenderToConfig(),
 	}
 
-	am, err = consulfunc.CreateOrUpdateAuthMethod(c.primaryClient(), am, nil)
+	am, err = consulfunc.CreateOrUpdateAuthMethod(client, am, nil)
 	if err != nil {
 		return err
 	}
 
-	c.logger.Info("created auth method", "type", am.Type, "name", am.Name)
+	logger.Info("created auth method", "type", am.Type, "name", am.Name)
 
 	return nil
 }
@@ -1213,7 +1280,7 @@ func GetServiceRegistrationHCL(s infra.Service) (string, error) {
 	return buf.String(), nil
 }
 
-func (c *Core) injectAgentTokensAndWaitForNodeUpdates(cluster string) error {
+func (c *Core) injectAgentTokensAndWaitForNodeUpdates(cluster string, isPrimaryCluster bool) error {
 	var (
 		client = c.clientForCluster(cluster)
 		logger = c.logger.With("cluster", cluster)
@@ -1238,8 +1305,8 @@ func (c *Core) injectAgentTokensAndWaitForNodeUpdates(cluster string) error {
 			allNodes []*api.Node
 			err      error
 		)
-		if c.config.EnterpriseEnabled && cluster == config.PrimaryCluster {
-			allNodes, err = consulfunc.ListAllNodes(client, config.PrimaryCluster,
+		if c.config.EnterpriseEnabled && isPrimaryCluster {
+			allNodes, err = consulfunc.ListAllNodes(client, cluster,
 				c.config.EnterpriseEnabled,
 				c.config.EnterpriseDisablePartitions)
 			if err != nil {

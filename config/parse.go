@@ -53,6 +53,12 @@ func parseConfig(pathname string, contents []byte) (*Config, error) {
 		uc.Topology.LinkMode = "federate"
 	}
 
+	if !uc.Security.DisableACLs {
+		if uc.Topology.LinkMode == "peer" && uc.Security.InitialMasterToken == "" {
+			return nil, fmt.Errorf("with link_mode=peer you need to provide the initial master token if acls are enabled")
+		}
+	}
+
 	if len(uc.Topology.DeprecatedDatacenter) > 0 {
 		if len(uc.Topology.Cluster) > 0 {
 			return nil, fmt.Errorf("both datacenter and cluster configured")
