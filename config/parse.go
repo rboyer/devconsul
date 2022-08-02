@@ -109,6 +109,7 @@ func parseConfig(pathname string, contents []byte) (*Config, error) {
 		PrometheusEnabled:                uc.Monitor.Prometheus,
 		InitialMasterToken:               uc.Security.InitialMasterToken,
 		EnterpriseEnabled:                uc.Enterprise.Enabled,
+		EnterpriseSegments:               make(map[string]int),
 		EnterprisePartitions:             uc.Enterprise.Partitions,
 		EnterpriseDisablePartitions:      uc.Enterprise.DisablePartitions,
 		EnterpriseLicensePath:            uc.Enterprise.LicensePath,
@@ -117,6 +118,10 @@ func parseConfig(pathname string, contents []byte) (*Config, error) {
 		TopologyClusters:                 uc.Topology.Cluster,
 		TopologyNodes:                    uc.Topology.Nodes,
 		ConfigEntries:                    make(map[string][]api.ConfigEntry),
+	}
+
+	for i, segName := range uc.Enterprise.Segments {
+		cfg.EnterpriseSegments[segName] = 8303 + i
 	}
 
 	for _, cluster := range uc.Clusters {
@@ -196,12 +201,25 @@ func validateConfig(cfg *Config) error {
 		return fmt.Errorf("enterprise.license_path is required when enterprise.enabled=true")
 	}
 
+	if !cfg.EnterpriseEnabled && len(cfg.EnterpriseSegments) > 0 {
+		return fmt.Errorf("enterprise.segments cannot be configured when enterprise.enabled=false")
+	}
+
 	if !cfg.EnterpriseEnabled && len(cfg.EnterprisePartitions) > 0 {
 		return fmt.Errorf("enterprise.partitions cannot be configured when enterprise.enabled=false")
 	}
 
-	if !cfg.EnterpriseEnabled {
-		for _, node := range cfg.TopologyNodes {
+	for _, node := range cfg.TopologyNodes {
+		if cfg.EnterpriseEnabled {
+			if node.Segment != "" {
+				if _, ok := cfg.EnterpriseSegments[node.Segment]; !ok {
+					return fmt.Errorf("node assigned to non existent segment %q", node.Segment)
+				}
+			}
+		} else {
+			if node.Segment != "" {
+				return fmt.Errorf("nodes cannot be assigned network segments when enterprise.enabled=false")
+			}
 			if node.Partition != "" {
 				return fmt.Errorf("nodes cannot be assigned partitions when enterprise.enabled=false")
 			}

@@ -1,0 +1,49 @@
+# my global config
+global:
+  scrape_interval:     5s
+  evaluation_interval: 5s
+
+# Alertmanager configuration
+alerting:
+  alertmanagers:
+  - static_configs:
+    - targets:
+      # - alertmanager:9093
+
+# Load rules once and periodically evaluate them according to the global 'evaluation_interval'.
+rule_files:
+  # - "first_rules.yml"
+  # - "second_rules.yml"
+
+# A scrape configuration containing exactly one endpoint to scrape:
+# Here it's Prometheus itself.
+scrape_configs:
+  - job_name: 'prometheus'
+
+    # metrics_path defaults to '/metrics'
+    # scheme defaults to 'http'.
+
+    static_configs:
+    - targets: ['localhost:9090']
+
+{{- range .Jobs }}
+
+  - job_name: {{.Name}}
+    metrics_path: "{{.MetricsPath}}"
+    params:
+{{- range $k, $vl := .Params }}
+      {{ $k }}:
+{{- range $vl }}
+      - {{ . }}
+{{- end}}
+{{- end}}
+    static_configs:
+    - targets:
+{{- range .Targets }}
+      - "{{ . }}"
+{{- end }}
+      labels:
+{{- range .Labels }}
+        {{ .Key }}: "{{ .Val }}"
+{{- end }}
+{{- end }}

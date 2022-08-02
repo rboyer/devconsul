@@ -223,6 +223,7 @@ func (n *Network) DockerName() string {
 type Node struct {
 	Cluster         string
 	Name            string
+	Segment         string // may be empty
 	Partition       string // will be not empty
 	Server          bool
 	Addresses       []Address

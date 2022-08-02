@@ -25,6 +25,7 @@ type Config struct {
 	GossipKey                        string
 	AgentMasterToken                 string
 	EnterpriseEnabled                bool
+	EnterpriseSegments               map[string]int
 	EnterprisePartitions             []*Partition
 	EnterpriseDisablePartitions      bool
 	EnterpriseLicensePath            string
@@ -70,6 +71,7 @@ type Cluster struct {
 
 type Node struct {
 	NodeName           string            `hcl:"name,label"`
+	Segment            string            `hcl:"segment,optional"`
 	Partition          string            `hcl:"partition,optional"`
 	UpstreamName       string            `hcl:"upstream_name,optional"`
 	UpstreamNamespace  string            `hcl:"upstream_namespace,optional"`

@@ -1,0 +1,29 @@
+resource "docker_container" "{{.PodName}}" {
+  name     = "{{.PodName}}"
+  image = docker_image.pause.latest
+  hostname = "{{.PodName}}"
+  restart  = "always"
+  dns      = ["8.8.8.8"]
+
+  labels {
+    label = "devconsul"
+    value = "1"
+  }
+  labels {
+    label = "devconsul.type"
+    value = "pod"
+  }
+{{- range $k, $v := .Labels }}
+  labels {
+    label = "{{ $k }}"
+    value = "{{ $v }}"
+  }
+{{- end }}
+
+{{- range .Node.Addresses }}
+networks_advanced {
+  name         = docker_network.devconsul-{{.Network}}.name
+  ipv4_address = "{{.IPAddress}}"
+}
+{{- end }}
+}

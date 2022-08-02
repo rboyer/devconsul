@@ -1,0 +1,62 @@
+resource "docker_container" "{{.NodeName}}-mesh-gateway" {
+	name = "{{.NodeName}}-mesh-gateway"
+    network_mode = "container:${docker_container.{{.PodName}}.id}"
+	image        = docker_image.consul-envoy.latest
+    restart  = "on-failure"
+
+  labels {
+    label = "devconsul"
+    value = "1"
+  }
+  labels {
+    label = "devconsul.type"
+    value = "gateway"
+  }
+{{- range $k, $v := .Labels }}
+  labels {
+    label = "{{ $k }}"
+    value = "{{ $v }}"
+  }
+{{- end }}
+
+  volumes {
+    host_path      = abspath("cache")
+    container_path = "/secrets"
+    read_only      = true
+  }
+  volumes {
+    host_path      = abspath("mesh-gateway-sidecar-boot.sh")
+    container_path = "/bin/mesh-gateway-sidecar-boot.sh"
+    read_only      = true
+  }
+  volumes {
+    host_path      = abspath("cache/tls")
+    container_path = "/tls"
+    read_only      = true
+  }
+
+  env = [
+{{- range .SidecarBootEnvVars }}
+      "{{.}}",
+{{- end}}
+  ]
+
+  command = [
+      "/bin/mesh-gateway-sidecar-boot.sh",
+{{- if .ExposeServers }}
+      "-expose-servers",
+{{- end }}
+{{- if .EnableWAN }}
+      "-address",
+      "{{ .LANAddress }}",
+      "-wan-address",
+      "{{ .WANAddress }}",
+{{- end }}
+      "-admin-bind",
+      // for demo purposes
+      "0.0.0.0:19000",
+      "--",
+      "-l",
+      "{{ .EnvoyLogLevel }}",
+  ]
+}

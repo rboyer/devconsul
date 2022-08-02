@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"embed"
 	"errors"
 	"fmt"
 	"io/ioutil"
@@ -20,6 +21,17 @@ import (
 	"github.com/rboyer/devconsul/config"
 	"github.com/rboyer/devconsul/infra"
 )
+
+//go:embed templates/container-pause.tf.tmpl
+//go:embed templates/container-consul.tf.tmpl
+//go:embed templates/container-mgw.tf.tmpl
+//go:embed templates/container-app.tf.tmpl
+//go:embed templates/container-app-sidecar.tf.tmpl
+//go:embed templates/consul-agent-config.hcl.tmpl
+//go:embed templates/prometheus-config.yml.tmpl
+//go:embed templates/container-prometheus.tf
+//go:embed templates/container-grafana.tf
+var content embed.FS
 
 func (c *Core) runGenerate(primaryOnly bool) error {
 	if err := checkHasRunOnce("init"); err != nil {
@@ -170,8 +182,18 @@ resource "docker_image" %[1]q {
 	if c.config.PrometheusEnabled {
 		addImage("prometheus", "prom/prometheus:latest")
 		addImage("grafana", "grafana/grafana:latest")
-		containers = append(containers, tfPrometheusContainer)
-		containers = append(containers, tfGrafanaContainer)
+
+		promBytes, err := content.ReadFile("templates/container-prometheus.tf")
+		if err != nil {
+			return err
+		}
+		grafanaBytes, err := content.ReadFile("templates/container-grafana.tf")
+		if err != nil {
+			return err
+		}
+
+		containers = append(containers, string(promBytes))
+		containers = append(containers, string(grafanaBytes))
 	}
 
 	var res []string
@@ -213,89 +235,8 @@ resource "docker_network" %[1]q {
 	return res, nil
 }
 
-var tfPauseT = template.Must(template.New("tf-pause").Parse(`
-resource "docker_container" "{{.PodName}}" {
-  name     = "{{.PodName}}"
-  image = docker_image.pause.latest
-  hostname = "{{.PodName}}"
-  restart  = "always"
-  dns      = ["8.8.8.8"]
-
-  labels {
-    label = "devconsul"
-    value = "1"
-  }
-  labels {
-    label = "devconsul.type"
-    value = "pod"
-  }
-{{- range $k, $v := .Labels }}
-  labels {
-    label = "{{ $k }}"
-    value = "{{ $v }}"
-  }
-{{- end }}
-
-{{- range .Node.Addresses }}
-networks_advanced {
-  name         = docker_network.devconsul-{{.Network}}.name
-  ipv4_address = "{{.IPAddress}}"
-}
-{{- end }}
-}
-`))
-
-var tfConsulT = template.Must(template.New("tf-consul").Parse(`
-resource "docker_container" "{{.Node.Name}}" {
-  name         = "{{.Node.Name}}"
-  network_mode = "container:${docker_container.{{.PodName}}.id}"
-  image        = docker_image.consul.latest
-  restart      = "always"
-
-  env = [ "CONSUL_UID=0", "CONSUL_GID=0" ]
-
-  labels {
-    label = "devconsul"
-    value = "1"
-  }
-  labels {
-    label = "devconsul.type"
-    value = "consul"
-  }
-{{- range $k, $v := .Labels }}
-  labels {
-    label = "{{ $k }}"
-    value = "{{ $v }}"
-  }
-{{- end }}
-
-  command = [
-    "agent",
-    "-hcl",
-	<<-EOT
-{{ .HCL }}
-EOT
-  ]
-
-  volumes {
-    volume_name    = "{{.Node.Name}}"
-    container_path = "/consul/data"
-  }
-  volumes {
-    host_path      = abspath("cache/tls")
-    container_path = "/tls"
-    read_only      = true
-  }
-
-{{- if .EnterpriseLicensePath }}
-  volumes {
-    host_path      = "{{ .EnterpriseLicensePath }}"
-    container_path = "/license.hclic"
-    read_only      = true
-  }
-{{- end }}
-}
-`))
+var tfPauseT = template.Must(template.ParseFS(content, "templates/container-pause.tf.tmpl"))
+var tfConsulT = template.Must(template.ParseFS(content, "templates/container-consul.tf.tmpl"))
 
 func (c *Core) generateMeshGatewayContainer(podName string, node *infra.Node) (string, error) {
 	if !node.MeshGateway {
@@ -373,70 +314,7 @@ func (c *Core) generateMeshGatewayContainer(podName string, node *infra.Node) (s
 	return stringTemplate(tfMeshGatewayT, &mgi)
 }
 
-var tfMeshGatewayT = template.Must(template.New("tf-mesh-gateway").Parse(`
-resource "docker_container" "{{.NodeName}}-mesh-gateway" {
-	name = "{{.NodeName}}-mesh-gateway"
-    network_mode = "container:${docker_container.{{.PodName}}.id}"
-	image        = docker_image.consul-envoy.latest
-    restart  = "on-failure"
-
-  labels {
-    label = "devconsul"
-    value = "1"
-  }
-  labels {
-    label = "devconsul.type"
-    value = "gateway"
-  }
-{{- range $k, $v := .Labels }}
-  labels {
-    label = "{{ $k }}"
-    value = "{{ $v }}"
-  }
-{{- end }}
-
-  volumes {
-    host_path      = abspath("cache")
-    container_path = "/secrets"
-    read_only      = true
-  }
-  volumes {
-    host_path      = abspath("mesh-gateway-sidecar-boot.sh")
-    container_path = "/bin/mesh-gateway-sidecar-boot.sh"
-    read_only      = true
-  }
-  volumes {
-    host_path      = abspath("cache/tls")
-    container_path = "/tls"
-    read_only      = true
-  }
-
-  env = [
-{{- range .SidecarBootEnvVars }}
-      "{{.}}",
-{{- end}}
-  ]
-
-  command = [
-      "/bin/mesh-gateway-sidecar-boot.sh",
-{{- if .ExposeServers }}
-      "-expose-servers",
-{{- end }}
-{{- if .EnableWAN }}
-      "-address",
-      "{{ .LANAddress }}",
-      "-wan-address",
-      "{{ .WANAddress }}",
-{{- end }}
-      "-admin-bind",
-      // for demo purposes
-      "0.0.0.0:19000",
-      "--",
-      "-l",
-      "{{ .EnvoyLogLevel }}",
-  ]
-}
-`))
+var tfMeshGatewayT = template.Must(template.ParseFS(content, "templates/container-mgw.tf.tmpl"))
 
 func (c *Core) generatePingPongContainers(podName string, node *infra.Node) ([]string, error) {
 	if node.Service == nil {
@@ -549,157 +427,15 @@ func (c *Core) generatePingPongContainers(podName string, node *infra.Node) ([]s
 
 // TODO: make chaos opt-in
 // "-pong-chaos",
-var tfPingPongAppT = template.Must(template.New("tf-pingpong-app").Parse(`
-resource "docker_container" "{{.NodeName}}-{{.PingPong}}" {
-	name = "{{.NodeName}}-{{.PingPong}}"
-    network_mode = "container:${docker_container.{{.PodName}}.id}"
-	image        = docker_image.pingpong.latest
-    restart  = "on-failure"
-
-  labels {
-    label = "devconsul"
-    value = "1"
-  }
-  labels {
-    label = "devconsul.type"
-    value = "app"
-  }
-
-  command = [
-      "-bind",
-      "0.0.0.0:8080",
-      "-dial",
-      "127.0.0.1:9090",
-      "-dialfreq",
-      "250ms",
-      "-name",
-      "{{.PingPong}}{{.MetaString}}",
-  ]
-}`))
-
-var tfPingPongSidecarT = template.Must(template.New("tf-pingpong-sidecar").Parse(`
-resource "docker_container" "{{.NodeName}}-{{.PingPong}}-sidecar" {
-	name = "{{.NodeName}}-{{.PingPong}}-sidecar"
-    network_mode = "container:${docker_container.{{.PodName}}.id}"
-	image        = {{ .EnvoyImageResource }}
-    restart  = "on-failure"
-
-  labels {
-    label = "devconsul"
-    value = "1"
-  }
-  labels {
-    label = "devconsul.type"
-    value = "sidecar"
-  }
-
-  volumes {
-    host_path      = abspath("cache")
-    container_path = "/secrets"
-    read_only      = true
-  }
-  volumes {
-    host_path      = abspath("sidecar-boot.sh")
-    container_path = "/bin/sidecar-boot.sh"
-    read_only      = true
-  }
-  volumes {
-    host_path      = abspath("cache/tls")
-    container_path = "/tls"
-    read_only      = true
-  }
-
-  env = [
-{{- range .SidecarBootEnvVars }}
-      "{{.}}",
-{{- end}}
-  ]
-
-  command = [
-      "/bin/sidecar-boot.sh",
-      "-sidecar-for",
-      "{{.PingPong}}",
-{{- if not .UseBuiltinProxy }}
-      "-admin-bind",
-      # for demo purposes
-      "0.0.0.0:19000",
-      "--",
-      "-l",
-      "{{ .EnvoyLogLevel }}",
-{{- end }}
-  ]
-}
-`))
-
-const tfPrometheusContainer = `
-resource "docker_container" "prometheus" {
-  name  = "prometheus"
-  image = docker_image.prometheus.latest
-  labels {
-    label = "devconsul"
-    value = "1"
-  }
-  labels {
-    label = "devconsul.type"
-    value = "infra"
-  }
-  restart = "always"
-  dns     = ["8.8.8.8"]
-  volumes {
-    volume_name    = "prometheus-data"
-    container_path = "/prometheus-data"
-  }
-  volumes {
-    host_path      = abspath("cache/prometheus.yml")
-    container_path = "/etc/prometheus/prometheus.yml"
-    read_only      = true
-   }
-  networks_advanced {
-    name         = docker_network.devconsul-lan.name
-    ipv4_address = "10.0.100.100"
-   }
-
-  ports {
-    internal = 9090
-    external = 9090
-   }
-  ports {
-    internal = 3000
-    external = 3000
-  }
-} `
-
-const tfGrafanaContainer = `
-resource "docker_container" "grafana" {
-  name  = "grafana"
-  image = docker_image.grafana.latest
-  labels {
-    label = "devconsul"
-    value = "1"
-  }
-  labels {
-    label = "devconsul.type"
-    value = "infra"
-  }
-  restart = "always"
-  network_mode = "container:${docker_container.prometheus.id}"
-  volumes {
-    volume_name    = "grafana-data"
-    container_path = "/var/lib/grafana"
-  }
-  volumes {
-    host_path      = abspath("cache/grafana-prometheus.yml")
-    container_path = "/etc/grafana/provisioning/datasources/prometheus.yml"
-    read_only      = true
-  }
-  volumes {
-    host_path      = abspath("cache/grafana.ini")
-    container_path = "/etc/grafana/grafana.ini"
-    read_only      = true
-  }
-} `
+var tfPingPongAppT = template.Must(template.ParseFS(content, "templates/container-app.tf.tmpl"))
+var tfPingPongSidecarT = template.Must(template.ParseFS(content, "templates/container-app-sidecar.tf.tmpl"))
 
 func (c *Core) generateAgentHCL(node *infra.Node) (string, error) {
+	type networkSegment struct {
+		Name string
+		Port int
+	}
+
 	type consulAgentConfigInfo struct {
 		AdvertiseAddr     string
 		AdvertiseAddrWAN  string
@@ -722,6 +458,9 @@ func (c *Core) generateAgentHCL(node *infra.Node) (string, error) {
 		FederateViaGateway          bool
 		PrimaryGateways             string
 		EnterpriseLicensePath       string
+		EnterpriseSegment           string
+		EnterpriseSegmentPort       int
+		EnterpriseSegments          []networkSegment
 		EnterprisePartition         string
 		EnterpriseDisablePartitions bool
 	}
@@ -737,6 +476,8 @@ func (c *Core) generateAgentHCL(node *infra.Node) (string, error) {
 		EnableACLs:                  !c.config.SecurityDisableACLs,
 		Prometheus:                  c.config.PrometheusEnabled,
 		EnterpriseLicensePath:       c.config.EnterpriseLicensePath,
+		EnterpriseSegment:           node.Segment,
+		EnterpriseSegmentPort:       c.config.EnterpriseSegments[node.Segment],
 		EnterpriseDisablePartitions: c.config.EnterpriseDisablePartitions,
 		EnterprisePartition:         node.Partition,
 	}
@@ -761,7 +502,18 @@ func (c *Core) generateAgentHCL(node *infra.Node) (string, error) {
 			configInfo.MasterToken = c.config.InitialMasterToken
 		}
 
-		configInfo.EnterprisePartition = "" // we dont' configure this setting on servers
+		configInfo.EnterpriseSegment = ""    // we dont' configure this setting on servers
+		configInfo.EnterpriseSegmentPort = 0 // we dont' configure this setting on servers
+		configInfo.EnterprisePartition = ""  // we dont' configure this setting on servers
+
+		for name, port := range c.config.EnterpriseSegments {
+			configInfo.EnterpriseSegments = append(configInfo.EnterpriseSegments, networkSegment{Name: name, Port: port})
+		}
+		sort.Slice(configInfo.EnterpriseSegments, func(i, j int) bool {
+			a := configInfo.EnterpriseSegments[i]
+			b := configInfo.EnterpriseSegments[j]
+			return a.Port < b.Port
+		})
 
 		wanIP := false
 		wanfed := false
@@ -815,145 +567,7 @@ func (c *Core) generateAgentHCL(node *infra.Node) (string, error) {
 	return string(out), nil
 }
 
-var consulAgentConfigT = template.Must(template.New("consul-agent-config").Parse(`
-{{ if .Server -}}
-bootstrap_expect       = {{.BootstrapExpect}}
-{{- end}}
-client_addr            = "0.0.0.0"
-advertise_addr         = "{{.AdvertiseAddr }}"
-{{ if .AdvertiseAddrWAN -}}
-advertise_addr_wan     = "{{.AdvertiseAddrWAN }}"
-{{- end}}
-translate_wan_addrs    = true
-client_addr            = "0.0.0.0"
-datacenter             = "{{.Cluster}}"
-disable_update_check   = true
-log_level              = "trace"
-
-enable_debug                  = true
-
-# gossip_lan {
-#   retransmit_mult = 0
-# }
-
-use_streaming_backend = true
-
-{{ if .Server }}
-rpc {
-  enable_streaming = true
-}
-{{ end }}
-
-{{ if .PrimaryDatacenter -}}
-primary_datacenter     = "{{ .PrimaryDatacenter }}"
-{{- end }}
-retry_join             = [ {{.RetryJoin}} ]
-{{ if .FederateViaGateway -}}
-{{ if .SecondaryServer -}}
-primary_gateways          = [ {{ .PrimaryGateways }} ]
-primary_gateways_interval = "5s"
-{{- end}}
-{{ else -}}
-{{ if .Server -}}
-retry_join_wan         = [ {{.RetryJoinWAN}} ]
-{{- end}}
-{{- end}}
-server                 = {{.Server}}
-
-ui_config {
-  enabled          = true
-{{ if .Prometheus }}
-  metrics_provider = "prometheus"
-  metrics_proxy {
-	base_url = "http://prometheus:9090"
-  }
-{{ end }}
-}
-
-telemetry {
-  disable_hostname          = true
-  prometheus_retention_time = "168h"
-}
-
-{{ if .EnterprisePartition }}
-{{ if not .EnterpriseDisablePartitions }}
-partition = "{{ .EnterprisePartition }}"
-{{- end }}
-{{- end }}
-
-{{ if .EnterpriseLicensePath }}
-license_path = "/license.hclic"
-{{- end }}
-
-{{ if .GossipKey }}
-encrypt                = "{{.GossipKey}}"
-{{- end }}
-
-{{ if .TLS }}
-ca_file                = "/tls/consul-agent-ca.pem"
-cert_file              = "/tls/{{.TLSFilePrefix}}.pem"
-key_file               = "/tls/{{.TLSFilePrefix}}-key.pem"
-{{ if .Server }}
-verify_incoming        = true
-verify_server_hostname = true
-{{- end }}
-verify_outgoing        = true
-{{ end }}
-
-{{ if not .SecondaryServer }}
-# Exercise config entry bootstrap
-config_entries {
-  bootstrap {
-    kind     = "service-defaults"
-    name     = "placeholder"
-    protocol = "grpc"
-  }
-
-  bootstrap {
-    kind = "service-intentions"
-    name = "placeholder"
-    sources {
-      name   = "placeholder-client"
-      action = "allow"
-    }
-  }
-}
-{{ end}}
-
-connect {
-  enabled = true
-  {{ if .FederateViaGateway -}}
-  enable_mesh_gateway_wan_federation = true
-  {{- end}}
-}
-
-ports {
-{{ if not .Server }}
-  grpc = 8502
-{{ end }}
-{{ if .TLSAPI }}
-  https = 8501
-{{ end }}
-}
-
-{{ if .EnableACLs -}}
-acl {
-  enabled                  = true
-  default_policy           = "deny"
-  down_policy              = "extend-cache"
-  enable_token_persistence = true
-  {{ if .SecondaryServer -}}
-  enable_token_replication = true
-  {{- end}}
-  tokens {
-    {{ if and .MasterToken .Server (not .SecondaryServer) -}}
-    master       = "{{.MasterToken}}"
-    {{- end }}
-    agent_master = "{{.AgentMasterToken}}"
-  }
-}
-{{- end }}
-`))
+var consulAgentConfigT = template.Must(template.ParseFS(content, "templates/consul-agent-config.hcl.tmpl"))
 
 func indent(s string, n int) string {
 	prefix := strings.Repeat(" ", n)
@@ -1101,57 +715,7 @@ func (c *Core) generatePrometheusConfigFile() error {
 	return err
 }
 
-var prometheusConfigT = template.Must(template.New("prometheus").Parse(`
-# my global config
-global:
-  scrape_interval:     5s
-  evaluation_interval: 5s
-
-# Alertmanager configuration
-alerting:
-  alertmanagers:
-  - static_configs:
-    - targets:
-      # - alertmanager:9093
-
-# Load rules once and periodically evaluate them according to the global 'evaluation_interval'.
-rule_files:
-  # - "first_rules.yml"
-  # - "second_rules.yml"
-
-# A scrape configuration containing exactly one endpoint to scrape:
-# Here it's Prometheus itself.
-scrape_configs:
-  - job_name: 'prometheus'
-
-    # metrics_path defaults to '/metrics'
-    # scheme defaults to 'http'.
-
-    static_configs:
-    - targets: ['localhost:9090']
-
-{{- range .Jobs }}
-
-  - job_name: {{.Name}}
-    metrics_path: "{{.MetricsPath}}"
-    params:
-{{- range $k, $vl := .Params }}
-      {{ $k }}:
-{{- range $vl }}
-      - {{ . }}
-{{- end}}
-{{- end}}
-    static_configs:
-    - targets:
-{{- range .Targets }}
-      - "{{ . }}"
-{{- end }}
-      labels:
-{{- range .Labels }}
-        {{ .Key }}: "{{ .Val }}"
-{{- end }}
-{{- end }}
-`))
+var prometheusConfigT = template.Must(template.ParseFS(content, "templates/prometheus-config.yml.tmpl"))
 
 func (c *Core) generateGrafanaConfigFiles() error {
 	files := map[string]string{

@@ -165,6 +165,8 @@ func CompileTopology(cfg *config.Config) (*Topology, error) {
 				}
 			}
 
+			node.Segment = nodeConfig.Segment
+
 			if isGatewayClient {
 				node.MeshGateway = true
 

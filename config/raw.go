@@ -98,6 +98,7 @@ type rawConfigCanaryProxies struct {
 type rawConfigEnterprise struct {
 	Enabled           bool         `hcl:"enabled,optional"`
 	Partitions        []*Partition `hcl:"partition,block"`
+	Segments          []string     `hcl:"segments,optional"`
 	LicensePath       string       `hcl:"license_path,optional"`
 	DisablePartitions bool         `hcl:"disable_partitions,optional"`
 }

@@ -1,0 +1,155 @@
+{{ if .Server -}}
+bootstrap_expect       = {{.BootstrapExpect}}
+{{- end}}
+client_addr            = "0.0.0.0"
+advertise_addr         = "{{.AdvertiseAddr }}"
+{{ if .AdvertiseAddrWAN -}}
+advertise_addr_wan     = "{{.AdvertiseAddrWAN }}"
+{{- end}}
+translate_wan_addrs    = true
+client_addr            = "0.0.0.0"
+datacenter             = "{{.Cluster}}"
+disable_update_check   = true
+log_level              = "trace"
+
+enable_debug                  = true
+
+# gossip_lan {
+#   retransmit_mult = 0
+# }
+
+use_streaming_backend = true
+
+{{ if .Server }}
+rpc {
+  enable_streaming = true
+}
+{{ end }}
+
+{{ if .PrimaryDatacenter -}}
+primary_datacenter     = "{{ .PrimaryDatacenter }}"
+{{- end }}
+retry_join             = [ {{.RetryJoin}} ]
+{{ if .FederateViaGateway -}}
+{{ if .SecondaryServer -}}
+primary_gateways          = [ {{ .PrimaryGateways }} ]
+primary_gateways_interval = "5s"
+{{- end}}
+{{ else -}}
+{{ if .Server -}}
+retry_join_wan         = [ {{.RetryJoinWAN}} ]
+{{- end}}
+{{- end}}
+server                 = {{.Server}}
+
+ui_config {
+  enabled          = true
+{{ if .Prometheus }}
+  metrics_provider = "prometheus"
+  metrics_proxy {
+	base_url = "http://prometheus:9090"
+  }
+{{ end }}
+}
+
+telemetry {
+  disable_hostname          = true
+  prometheus_retention_time = "168h"
+}
+
+{{ if .EnterpriseSegments }}
+segments = [
+{{- range .EnterpriseSegments }}
+  {
+    name = "{{ .Name }}"
+    port = {{ .Port }}
+  },
+{{- end }}
+]
+{{- end }}
+
+{{ if .EnterpriseSegment }}
+segment = "{{ .EnterpriseSegment }}"
+{{- end }}
+
+{{ if .EnterprisePartition }}
+{{ if not .EnterpriseDisablePartitions }}
+partition = "{{ .EnterprisePartition }}"
+{{- end }}
+{{- end }}
+
+{{ if .EnterpriseLicensePath }}
+license_path = "/license.hclic"
+{{- end }}
+
+{{ if .GossipKey }}
+encrypt                = "{{.GossipKey}}"
+{{- end }}
+
+{{ if .TLS }}
+ca_file                = "/tls/consul-agent-ca.pem"
+cert_file              = "/tls/{{.TLSFilePrefix}}.pem"
+key_file               = "/tls/{{.TLSFilePrefix}}-key.pem"
+{{ if .Server }}
+verify_incoming        = true
+verify_server_hostname = true
+{{- end }}
+verify_outgoing        = true
+{{ end }}
+
+{{ if not .SecondaryServer }}
+# Exercise config entry bootstrap
+config_entries {
+  bootstrap {
+    kind     = "service-defaults"
+    name     = "placeholder"
+    protocol = "grpc"
+  }
+
+  bootstrap {
+    kind = "service-intentions"
+    name = "placeholder"
+    sources {
+      name   = "placeholder-client"
+      action = "allow"
+    }
+  }
+}
+{{ end}}
+
+connect {
+  enabled = true
+  {{ if .FederateViaGateway -}}
+  enable_mesh_gateway_wan_federation = true
+  {{- end}}
+}
+
+ports {
+{{ if not .Server }}
+  grpc = 8502
+{{ end }}
+{{ if .TLSAPI }}
+  https = 8501
+{{ end }}
+{{ if .EnterpriseSegment }}
+  serf_lan = {{ .EnterpriseSegmentPort }}
+{{- end }}
+}
+
+{{ if .EnableACLs -}}
+acl {
+  enabled                  = true
+  default_policy           = "deny"
+  down_policy              = "extend-cache"
+  enable_token_persistence = true
+  {{ if .SecondaryServer -}}
+  enable_token_replication = true
+  {{- end}}
+  tokens {
+    {{ if and .MasterToken .Server (not .SecondaryServer) -}}
+    master       = "{{.MasterToken}}"
+    {{- end }}
+    agent_master = "{{.AgentMasterToken}}"
+  }
+}
+{{- end }}

@@ -1,0 +1,49 @@
+resource "docker_container" "{{.Node.Name}}" {
+  name         = "{{.Node.Name}}"
+  network_mode = "container:${docker_container.{{.PodName}}.id}"
+  image        = docker_image.consul.latest
+  restart      = "always"
+
+  env = [ "CONSUL_UID=0", "CONSUL_GID=0" ]
+
+  labels {
+    label = "devconsul"
+    value = "1"
+  }
+  labels {
+    label = "devconsul.type"
+    value = "consul"
+  }
+{{- range $k, $v := .Labels }}
+  labels {
+    label = "{{ $k }}"
+    value = "{{ $v }}"
+  }
+{{- end }}
+
+  command = [
+    "agent",
+    "-hcl",
+	<<-EOT
+{{ .HCL }}
+EOT
+  ]
+
+  volumes {
+    volume_name    = "{{.Node.Name}}"
+    container_path = "/consul/data"
+  }
+  volumes {
+    host_path      = abspath("cache/tls")
+    container_path = "/tls"
+    read_only      = true
+  }
+
+{{- if .EnterpriseLicensePath }}
+  volumes {
+    host_path      = "{{ .EnterpriseLicensePath }}"
+    container_path = "/license.hclic"
+    read_only      = true
+  }
+{{- end }}
+}

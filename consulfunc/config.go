@@ -2,6 +2,7 @@ package consulfunc
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/hashicorp/consul/api"
 )
@@ -39,6 +40,9 @@ func ListAllConfigEntries(client *api.Client, enterprise, partitionsDisabled boo
 		for _, queryOpts := range queryOptionList {
 			entries, _, err := ce.List(kind, queryOpts)
 			if err != nil {
+				if strings.Contains(err.Error(), "invalid config entry kind") {
+					continue // version skew
+				}
 				return nil, err
 			}
 

@@ -1,0 +1,51 @@
+resource "docker_container" "{{.NodeName}}-{{.PingPong}}-sidecar" {
+	name = "{{.NodeName}}-{{.PingPong}}-sidecar"
+    network_mode = "container:${docker_container.{{.PodName}}.id}"
+	image        = {{ .EnvoyImageResource }}
+    restart  = "on-failure"
+
+  labels {
+    label = "devconsul"
+    value = "1"
+  }
+  labels {
+    label = "devconsul.type"
+    value = "sidecar"
+  }
+
+  volumes {
+    host_path      = abspath("cache")
+    container_path = "/secrets"
+    read_only      = true
+  }
+  volumes {
+    host_path      = abspath("sidecar-boot.sh")
+    container_path = "/bin/sidecar-boot.sh"
+    read_only      = true
+  }
+  volumes {
+    host_path      = abspath("cache/tls")
+    container_path = "/tls"
+    read_only      = true
+  }
+
+  env = [
+{{- range .SidecarBootEnvVars }}
+      "{{.}}",
+{{- end}}
+  ]
+
+  command = [
+      "/bin/sidecar-boot.sh",
+      "-sidecar-for",
+      "{{.PingPong}}",
+{{- if not .UseBuiltinProxy }}
+      "-admin-bind",
+      # for demo purposes
+      "0.0.0.0:19000",
+      "--",
+      "-l",
+      "{{ .EnvoyLogLevel }}",
+{{- end }}
+  ]
+}
