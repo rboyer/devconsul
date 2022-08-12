@@ -634,7 +634,7 @@ func (c *Core) generatePrometheusConfigFile() error {
 				Labels: []kv{
 					{"cluster", node.Cluster},
 					{"partition", "default"},
-					// {"node", node.Name},
+					{"node", node.Name},
 					{"role", "consul-server"},
 				},
 			})
@@ -652,7 +652,8 @@ func (c *Core) generatePrometheusConfigFile() error {
 				Labels: []kv{
 					{"cluster", node.Cluster},
 					{"partition", node.Partition},
-					// {"node", node.Name},
+					{"segment", node.Segment},
+					{"node", node.Name},
 					{"role", "consul-client"},
 				},
 			})
@@ -667,8 +668,9 @@ func (c *Core) generatePrometheusConfigFile() error {
 					Labels: []kv{
 						{"cluster", node.Cluster},
 						{"namespace", "default"},
-						{"partition", "default"},
-						// {"node", node.Name},
+						{"partition", node.Partition},
+						{"segment", node.Segment},
+						{"node", node.Name},
 						{"role", "mesh-gateway"},
 					},
 				})
