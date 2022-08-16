@@ -68,7 +68,20 @@ func (c *Core) debugPrimaryClient() (*api.Client, error) {
 }
 
 func (c *Core) RunDebugSaveGrafana() error {
-	grafanaURL := "http://localhost:3000/api/dashboards/db/devconsul-dashboard | jq .dashboard"
+	boards := map[string]string{
+		"devconsul-dashboard":  "connect_service_dashboard.json",
+		"consul-serf-examples": "serf_dashboard.json",
+	}
+	for board, fileName := range boards {
+		if err := c.runDebugSaveGrafana(board, fileName); err != nil {
+			return fmt.Errorf("error saving board %q: %w", board, err)
+		}
+	}
+	return nil
+}
+
+func (c *Core) runDebugSaveGrafana(boardName, fileName string) error {
+	grafanaURL := "http://localhost:3000/api/dashboards/db/" + boardName + ".json"
 
 	client := cleanhttp.DefaultClient()
 
@@ -81,12 +94,12 @@ func (c *Core) RunDebugSaveGrafana() error {
 	}
 	defer resp.Body.Close()
 
-	_, err = safeio.WriteToFile(resp.Body, "connect_service_dashboard.json", 0644)
+	_, err = safeio.WriteToFile(resp.Body, fileName, 0644)
 	if err != nil {
 		return err
 	}
 
-	c.logger.Info("Updated 'connect_service_dashboard.json' locally, you'll still have to commit it")
+	c.logger.Info("Updated '" + fileName + "' locally, you'll still have to commit it")
 
 	return nil
 }

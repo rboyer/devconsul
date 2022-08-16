@@ -9,7 +9,6 @@ import (
 	"io/ioutil"
 	"net"
 	"os"
-	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -31,6 +30,8 @@ import (
 //go:embed templates/prometheus-config.yml.tmpl
 //go:embed templates/container-prometheus.tf
 //go:embed templates/container-grafana.tf
+//go:embed templates/grafana-prometheus.yml
+//go:embed templates/grafana.ini
 var content embed.FS
 
 func (c *Core) runGenerate(primaryOnly bool) error {
@@ -181,7 +182,7 @@ resource "docker_image" %[1]q {
 
 	if c.config.PrometheusEnabled {
 		addImage("prometheus", "prom/prometheus:latest")
-		addImage("grafana", "grafana/grafana:latest")
+		addImage("grafana", "grafana/grafana-oss:latest")
 
 		promBytes, err := content.ReadFile("templates/container-prometheus.tf")
 		if err != nil {
@@ -605,24 +606,21 @@ func (c *Core) generatePrometheusConfigFile() error {
 
 	jobs := make(map[string]*job)
 	add := func(j *job) {
-		prev, ok := jobs[j.Name]
-		if ok {
-			// only retain targets
-			prev.Targets = append(prev.Targets, j.Targets...)
-			j = prev
-		} else {
-			sort.Slice(j.Labels, func(a, b int) bool {
-				return j.Labels[a].Key < j.Labels[b].Key
-			})
-			jobs[j.Name] = j
+		if _, ok := jobs[j.Name]; ok {
+			panic(fmt.Errorf("duplicate detected: %q", j.Name))
 		}
+
+		sort.Slice(j.Labels, func(a, b int) bool {
+			return j.Labels[a].Key < j.Labels[b].Key
+		})
 		sort.Strings(j.Targets)
+		jobs[j.Name] = j
 	}
 
 	err := c.topology.Walk(func(node *infra.Node) error {
 		if node.Server {
 			add(&job{
-				Name:        "consul-servers-" + node.Cluster,
+				Name:        "consul-server--" + node.Name,
 				MetricsPath: "/v1/agent/metrics",
 				Params: map[string][]string{
 					"format": {"prometheus"},
@@ -640,7 +638,7 @@ func (c *Core) generatePrometheusConfigFile() error {
 			})
 		} else {
 			add(&job{
-				Name:        "consul-clients-" + node.Cluster,
+				Name:        "consul-client--" + node.Name,
 				MetricsPath: "/v1/agent/metrics",
 				Params: map[string][]string{
 					"format": {"prometheus"},
@@ -660,7 +658,7 @@ func (c *Core) generatePrometheusConfigFile() error {
 
 			if node.MeshGateway {
 				add(&job{
-					Name:        "mesh-gateways-" + node.Cluster,
+					Name:        "mesh-gateway--" + node.Name,
 					MetricsPath: "/metrics",
 					Targets: []string{
 						net.JoinHostPort(node.LocalAddress(), "9102"),
@@ -676,7 +674,7 @@ func (c *Core) generatePrometheusConfigFile() error {
 				})
 			} else if node.Service != nil {
 				add(&job{
-					Name:        node.Service.ID.Name + "-proxy",
+					Name:        node.Service.ID.Name + "-proxy--" + node.Name,
 					MetricsPath: "/metrics",
 					Targets: []string{
 						net.JoinHostPort(node.LocalAddress(), "9102"),
@@ -720,36 +718,21 @@ func (c *Core) generatePrometheusConfigFile() error {
 var prometheusConfigT = template.Must(template.ParseFS(content, "templates/prometheus-config.yml.tmpl"))
 
 func (c *Core) generateGrafanaConfigFiles() error {
-	files := map[string]string{
-		"grafana-prometheus.yml": `
-apiVersion: 1
-
-datasources:
-- name: Prometheus
-  type: prometheus
-  access: proxy
-  url: http://localhost:9090
-  isDefault: true
-  version: 1
-  editable: false
-`,
-		"grafana.ini": `
-[auth.anonymous]
-enabled = true
-
-# Organization name that should be used for unauthenticated users
-org_name = Main Org.
-
-# Role for unauthenticated users, other valid values are 'Editor' and 'Admin'
-org_role = Admin
-`,
+	configBytes, err := content.ReadFile("templates/grafana-prometheus.yml")
+	if err != nil {
+		return err
+	}
+	iniBytes, err := content.ReadFile("templates/grafana.ini")
+	if err != nil {
+		return err
+	}
+	if _, err := c.updateFileIfDifferent(configBytes, "cache/grafana-prometheus.yml", 0644); err != nil {
+		return err
+	}
+	if _, err := c.updateFileIfDifferent(iniBytes, "cache/grafana.ini", 0644); err != nil {
+		return err
 	}
 
-	for name, body := range files {
-		if _, err := c.updateFileIfDifferent([]byte(body), filepath.Join("cache", name), 0644); err != nil {
-			return err
-		}
-	}
 	return nil
 }
 
