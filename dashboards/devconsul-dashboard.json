@@ -15,7 +15,7 @@
   "editable": true,
   "gnetId": null,
   "graphTooltip": 1,
-  "id": 4,
+  "id": 2,
   "iteration": 1605902514139,
   "links": [],
   "panels": [
@@ -1515,5 +1515,5 @@
   "timezone": "",
   "title": "devconsul Dashboard",
   "uid": "consul-service",
-  "version": 21
+  "version": 1
 }
