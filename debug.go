@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -67,21 +68,20 @@ func (c *Core) debugPrimaryClient() (*api.Client, error) {
 	return consulfunc.GetClient(c.topology.LeaderIP(config.PrimaryCluster, false), masterToken)
 }
 
-func (c *Core) RunDebugSaveGrafana() error {
-	boards := map[string]string{
-		"devconsul-dashboard":  "connect_service_dashboard.json",
-		"consul-serf-examples": "serf_dashboard.json",
-	}
-	for board, fileName := range boards {
-		if err := c.runDebugSaveGrafana(board, fileName); err != nil {
-			return fmt.Errorf("error saving board %q: %w", board, err)
-		}
-	}
-	return nil
+type grafanaDashboardListItem struct {
+	ID        int      `json:"id"`
+	UID       string   `json:"uid"`
+	Title     string   `json:"title"`
+	URI       string   `json:"uri"`
+	URL       string   `json:"url"`
+	Slug      string   `json:"slug"`
+	Type      string   `json:"type"`
+	Tags      []string `json:"tags"`
+	IsStarred bool     `json:"isStarred"`
 }
 
-func (c *Core) runDebugSaveGrafana(boardName, fileName string) error {
-	grafanaURL := "http://localhost:3000/api/dashboards/db/" + boardName + ".json"
+func (c *Core) RunDebugSaveGrafana() error {
+	grafanaURL := "http://localhost:3000/api/search?query=%"
 
 	client := cleanhttp.DefaultClient()
 
@@ -94,8 +94,69 @@ func (c *Core) runDebugSaveGrafana(boardName, fileName string) error {
 	}
 	defer resp.Body.Close()
 
-	_, err = safeio.WriteToFile(resp.Body, fileName, 0644)
+	dec := json.NewDecoder(resp.Body)
+
+	var list []grafanaDashboardListItem
+	if err := dec.Decode(&list); err != nil {
+		return err
+	}
+
+	for _, item := range list {
+		if item.Type != "dash-db" {
+			continue
+		}
+
+		name := strings.TrimPrefix(item.URI, "db/")
+		if name == item.URI {
+			c.logger.Warn("skipping grafana board with strange URI", "uid", item.UID, "title", item.Title, "uri", item.URI)
+			continue
+		}
+
+		fileName := filepath.Join("dashboards", name+".json")
+
+		if err := c.runDebugSaveGrafana(client, item.UID, fileName); err != nil {
+			return fmt.Errorf("error saving board %q: %w", item.Title, err)
+		}
+	}
+
+	return nil
+}
+
+func (c *Core) runDebugSaveGrafana(client *http.Client, uid, fileName string) error {
+	dashURI := "http://localhost:3000/api/dashboards/uid/" + uid
+
+	resp, err := client.Get(dashURI)
 	if err != nil {
+		return err
+	}
+	if resp.Body == nil {
+		return fmt.Errorf("body not populated")
+	}
+	defer resp.Body.Close()
+
+	dec := json.NewDecoder(resp.Body)
+
+	var raw struct {
+		Dashboard map[string]any `json:"dashboard"`
+	}
+	if err := dec.Decode(&raw); err != nil {
+		return err
+	}
+
+	f, err := safeio.OpenFile(fileName, 0644)
+	if err != nil {
+		return err
+	}
+
+	enc := json.NewEncoder(f)
+	enc.SetEscapeHTML(false)
+	enc.SetIndent("", "  ")
+
+	if err := enc.Encode(raw.Dashboard); err != nil {
+		return err
+	}
+
+	if err := f.Commit(); err != nil {
 		return err
 	}
 
