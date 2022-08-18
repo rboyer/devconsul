@@ -112,6 +112,12 @@ func (c *Core) runBoot(primaryOnly bool) error {
 		}
 	}
 
+	if c.config.PrometheusEnabled {
+		if err := c.restoreGrafana(); err != nil {
+			return fmt.Errorf("restoreGrafana: %w", err)
+		}
+	}
+
 	if err := c.cache.SaveValue("ready", "1"); err != nil {
 		return err
 	}

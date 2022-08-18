@@ -1,6 +1,7 @@
 package grafana
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -76,19 +77,52 @@ func (c *Client) ListDashboards() ([]*DashboardStub, error) {
 	return out, nil
 }
 
-func (c *Client) GetRawDashboard(uid string) (map[string]any, error) {
+func (c *Client) UpsertRawDashboard(raw map[string]any) error {
+	url := baseURL + "/api/dashboards/db"
+
+	wrap := map[string]any{
+		"dashboard": raw,
+	}
+
+	var buf bytes.Buffer
+
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	enc.SetIndent("", "  ")
+
+	c.logger.Info("URL", "url", url)
+
+	if err := enc.Encode(&wrap); err != nil {
+		return fmt.Errorf("error json encoding: %w", err)
+	}
+
+	resp, err := c.client.Post(url, "application/json", &buf)
+	if err != nil {
+		return fmt.Errorf("error sending POST to update dashboard: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+	}
+
+	return nil
+}
+
+func (c *Client) GetRawDashboard(uid string) (bool, map[string]any, error) {
 	dashURI := baseURL + "/api/dashboards/uid/" + uid
 
 	resp, err := c.client.Get(dashURI)
 	if err != nil {
-		return nil, err
+		return false, nil, err
 	}
 	if resp.Body == nil {
-		return nil, fmt.Errorf("body not populated")
+		return false, nil, fmt.Errorf("body not populated")
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+	if resp.StatusCode == 404 {
+		return false, nil, nil
+	} else if resp.StatusCode != 200 {
+		return false, nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
 
 	dec := json.NewDecoder(resp.Body)
@@ -97,8 +131,8 @@ func (c *Client) GetRawDashboard(uid string) (map[string]any, error) {
 		Dashboard map[string]any `json:"dashboard"`
 	}
 	if err := dec.Decode(&raw); err != nil {
-		return nil, err
+		return false, nil, err
 	}
 
-	return raw.Dashboard, nil
+	return true, raw.Dashboard, nil
 }

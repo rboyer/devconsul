@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -104,10 +105,56 @@ func (c *Core) RunDebugSaveGrafana() error {
 	return nil
 }
 
-func (c *Core) runDebugSaveGrafana(client *grafana.Client, uid, fileName string) error {
-	rawBoard, err := client.GetRawDashboard(uid)
+func (c *Core) restoreGrafana() error {
+	names, err := os.ReadDir("dashboards")
 	if err != nil {
 		return err
+	}
+
+	client, err := grafana.NewClient(c.logger.Named("grafana"))
+	if err != nil {
+		return err
+	}
+
+	for _, fi := range names {
+		if !strings.HasSuffix(fi.Name(), ".json") {
+			continue
+		}
+		full := filepath.Join("dashboards", fi.Name())
+		c.logger.Info("found file", "name", full)
+
+		b, err := os.ReadFile(full)
+		if err != nil {
+			return fmt.Errorf("error reading dashboard file %q: %w", full, err)
+		}
+
+		var raw map[string]any
+		if err := json.Unmarshal(b, &raw); err != nil {
+			return err
+		}
+
+		exists, _, err := client.GetRawDashboard(raw["uid"].(string))
+		if err != nil {
+			return err
+		}
+
+		if !exists {
+			c.logger.Info("restoring dashboard to grafana", "file", full)
+			if err := client.UpsertRawDashboard(raw); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+func (c *Core) runDebugSaveGrafana(client *grafana.Client, uid, fileName string) error {
+	exists, rawBoard, err := client.GetRawDashboard(uid)
+	if err != nil {
+		return err
+	} else if !exists {
+		return errors.New("does not exist")
 	}
 
 	f, err := safeio.OpenFile(fileName, 0644)
