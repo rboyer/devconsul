@@ -16,6 +16,7 @@ import (
 
 	"github.com/rboyer/devconsul/config"
 	"github.com/rboyer/devconsul/consulfunc"
+	"github.com/rboyer/devconsul/grafana"
 	"github.com/rboyer/devconsul/infra"
 )
 
@@ -81,37 +82,18 @@ type grafanaDashboardListItem struct {
 }
 
 func (c *Core) RunDebugSaveGrafana() error {
-	grafanaURL := "http://localhost:3000/api/search?query=%"
-
-	client := cleanhttp.DefaultClient()
-
-	resp, err := client.Get(grafanaURL)
+	client, err := grafana.NewClient(c.logger.Named("grafana"))
 	if err != nil {
 		return err
 	}
-	if resp.Body == nil {
-		return fmt.Errorf("body not populated")
-	}
-	defer resp.Body.Close()
 
-	dec := json.NewDecoder(resp.Body)
-
-	var list []grafanaDashboardListItem
-	if err := dec.Decode(&list); err != nil {
+	list, err := client.ListDashboards()
+	if err != nil {
 		return err
 	}
 
 	for _, item := range list {
-		if item.Type != "dash-db" {
-			continue
-		}
-
 		name := strings.TrimPrefix(item.URI, "db/")
-		if name == item.URI {
-			c.logger.Warn("skipping grafana board with strange URI", "uid", item.UID, "title", item.Title, "uri", item.URI)
-			continue
-		}
-
 		fileName := filepath.Join("dashboards", name+".json")
 
 		if err := c.runDebugSaveGrafana(client, item.UID, fileName); err != nil {
@@ -122,24 +104,9 @@ func (c *Core) RunDebugSaveGrafana() error {
 	return nil
 }
 
-func (c *Core) runDebugSaveGrafana(client *http.Client, uid, fileName string) error {
-	dashURI := "http://localhost:3000/api/dashboards/uid/" + uid
-
-	resp, err := client.Get(dashURI)
+func (c *Core) runDebugSaveGrafana(client *grafana.Client, uid, fileName string) error {
+	rawBoard, err := client.GetRawDashboard(uid)
 	if err != nil {
-		return err
-	}
-	if resp.Body == nil {
-		return fmt.Errorf("body not populated")
-	}
-	defer resp.Body.Close()
-
-	dec := json.NewDecoder(resp.Body)
-
-	var raw struct {
-		Dashboard map[string]any `json:"dashboard"`
-	}
-	if err := dec.Decode(&raw); err != nil {
 		return err
 	}
 
@@ -152,7 +119,7 @@ func (c *Core) runDebugSaveGrafana(client *http.Client, uid, fileName string) er
 	enc.SetEscapeHTML(false)
 	enc.SetIndent("", "  ")
 
-	if err := enc.Encode(raw.Dashboard); err != nil {
+	if err := enc.Encode(rawBoard); err != nil {
 		return err
 	}
 
