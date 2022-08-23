@@ -22,8 +22,8 @@ jobs:
 
       - name: "Download golang-lint"
         run: |
-          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b /usr/local/bin
-          golangci-lint --version
+          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b /usr/local/bin v1.46.2
+          golangci-lint version
       - name: "lint"
         run: |
           golangci-lint run -v
