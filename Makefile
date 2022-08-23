@@ -37,6 +37,10 @@ update-envoy:
 	@docker rm -f consul-envoy-check &>/dev/null || true
 	@printf "package config\n\nconst DefaultEnvoyVersion = \"v$(file <cache/default_envoy.val)\"\n" > config/default_envoy.go
 
+.PHONY: test-configs
+test-configs:
+	@./test-configs/test.sh
+
 .PHONY: siege
 siege: install
 	$(info This is an example of using the siege tool to traverse an upstream boundary)

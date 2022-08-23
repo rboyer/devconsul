@@ -3,8 +3,6 @@ name: Checks
 on:
   pull_request:
   push:
-    branches:
-      - 'main'
 
 env:
   GO_VERSION: 1.18
@@ -16,20 +14,27 @@ env:
 permissions:
   contents: read
 
+    # Annotations
+# 2 warnings
+# build
+# Unexpected input(s) 'cache', valid inputs are ['go-version', 'check-latest', 'stable', 'token']
 jobs:
   lint:
     name: "lint"
     runs-on: ubuntu-22.04
     steps:
       - name: "Fetch source code"
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       - name: Install Go toolchain
-        uses: actions/setup-go@v2
+        uses: actions/setup-go@v3
         with:
           go-version: ${{env.GO_VERSION}}
+          check-latest: true
+          cache: true
 
       - name: "go fmt check"
+        shell: bash
         run: |
           files=$(go fmt ./...)
           if [ -n "$files" ]; then
@@ -39,10 +44,12 @@ jobs:
           fi
 
       - name: "go vet"
+        shell: bash
         run: |
           go vet ./...
 
       - name: "go.mod and go.sum consistency check"
+        shell: bash
         run: |
           go mod tidy
           if [[ -n "$(git status --porcelain)" ]]; then
@@ -51,11 +58,13 @@ jobs:
           fi
 
       - name: "Download golang-lint"
+        shell: bash
         run: |
           curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b /usr/local/bin ${{ env.GOLANGCI_LINT_VERSION }}
           golangci-lint version
 
       - name: "lint"
+        shell: bash
         run: |
           golangci-lint run -v
 
@@ -64,35 +73,130 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: "Fetch source code"
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       - name: Install Go toolchain
-        uses: actions/setup-go@v2
+        uses: actions/setup-go@v3
         with:
           go-version: ${{env.GO_VERSION}}
+          check-latest: true
+          cache: true
 
       - name: "Unit tests"
+        shell: bash
         run: |
           go test ./...
 
-  configuration_tests:
-    name: "Config File Tests"
+  build-test-config-matrix:
     runs-on: ubuntu-22.04
     steps:
       - name: "Fetch source code"
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
+
+      - id: set-matrix
+        shell: bash
+        run: |
+          cd test-configs
+          v=""
+          for f in config.*.hcl; do
+              if [[ -n "$v" ]]; then
+                  v="${v}, \"${f}\""
+              else
+                  v="\"${f}\""
+              fi
+          done
+
+          echo "$v"
+
+          echo "::set-output name=config_file_matrix::[$v]"
+    outputs:
+      config_file_matrix: ${{ steps.set-matrix.outputs.config_file_matrix }}
+
+
+  build:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: "Fetch source code"
+        uses: actions/checkout@v3
 
       - name: Install Go toolchain
-        uses: actions/setup-go@v2
+        uses: actions/setup-go@v3
         with:
           go-version: ${{env.GO_VERSION}}
+          check-latest: true
+          cache: true
 
       - name: compile binary
+        shell: bash
         run: |
           make
+          mv $(which devconsul) /usr/local/bin
+          devconsul help
+
+      - name: upload binary
+        uses: actions/upload-artifact@v3
+        with:
+          name: devconsul
+          path: /usr/local/bin/devconsul
+          if-no-files-found: error
+
+  get-consul-binary:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: fetch consul
+        shell: bash
+        run: |
+          docker pull consul:latest
+          docker tag consul:latest consul-dev:latest
+          docker rm -f consul-extract || true
+          docker create --name consul-extract consul:latest
+          docker cp consul-extract:/bin/consul "/usr/local/bin/consul"
+          docker rm -f consul-extract || true
+
+      - name: upload binary
+        uses: actions/upload-artifact@v3
+        with:
+          name: consul
+          path: /usr/local/bin/consul
+          if-no-files-found: error
+
+  configuration-tests:
+    name: "Config File Tests"
+    runs-on: ubuntu-22.04
+    needs: [ build, get-consul-binary, build-test-config-matrix ]
+    strategy:
+      fail-fast: false
+      matrix:
+        config_file: ${{ fromJson(needs.build-test-config-matrix.outputs.config_file_matrix) }}
+    steps:
+      - name: "Fetch source code"
+        uses: actions/checkout@v3
+
+      - name: download devconsul binary
+        uses: actions/download-artifact@v3
+        with:
+          name: devconsul
+          path: /usr/local/bin/
+
+      - name: download consul binary
+        uses: actions/download-artifact@v3
+        with:
+          name: consul
+          path: /usr/local/bin/
+
+      - name: fix permissions
+        shell: bash
+        run: |
+          chmod 755 /usr/local/bin/devconsul /usr/local/bin/consul
+          consul version
           devconsul help
 
       - name: test container
+        timeout-minutes: 10
+        shell: bash
         run: |
-          docker pull alpine:latest
-          docker run --rm -it alpine:latest env
+          docker pull consul:latest
+          docker tag consul:latest consul-dev:latest
+          ./test-configs/test.sh "${{matrix.config_file}}"

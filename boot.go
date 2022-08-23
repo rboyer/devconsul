@@ -83,12 +83,12 @@ func (c *Core) runBoot(primaryOnly bool) error {
 
 	switch c.topology.LinkMode {
 	case infra.ClusterLinkModeFederate:
-		if err := c.initPrimaryCluster(config.PrimaryCluster); err != nil {
+		if err := c.initPrimaryCluster(config.PrimaryCluster, false); err != nil {
 			return err
 		}
 	case infra.ClusterLinkModePeer:
 		for _, cluster := range c.topology.Clusters() {
-			if err := c.initPrimaryCluster(cluster.Name); err != nil {
+			if err := c.initPrimaryCluster(cluster.Name, true); err != nil {
 				return fmt.Errorf("initPrimaryCluster[%q]: %w", cluster.Name, err)
 			}
 		}
@@ -206,7 +206,7 @@ func (c *Core) waitForCrossDatacenterKV(fromCluster, toCluster string) {
 	}
 }
 
-func (c *Core) initPrimaryCluster(cluster string) error {
+func (c *Core) initPrimaryCluster(cluster string, peered bool) error {
 	var err error
 
 	err = c.createPartitions(cluster)
@@ -225,7 +225,7 @@ func (c *Core) initPrimaryCluster(cluster string) error {
 			return fmt.Errorf("createReplicationToken[%s]: %w", cluster, err)
 		}
 
-		err = c.createMeshGatewayToken(cluster)
+		err = c.createMeshGatewayToken(cluster, peered)
 		if err != nil {
 			return fmt.Errorf("createMeshGatewayToken[%s]: %w", cluster, err)
 		}
@@ -571,7 +571,7 @@ func (c *Core) createReplicationToken(cluster string) error {
 	return nil
 }
 
-func (c *Core) createMeshGatewayToken(cluster string) error {
+func (c *Core) createMeshGatewayToken(cluster string, peered bool) error {
 	var (
 		client = c.clientForCluster(cluster)
 		logger = c.logger.With("cluster", cluster)
@@ -639,6 +639,16 @@ func (c *Core) createMeshGatewayToken(cluster string) error {
 
 	if err := c.cache.SaveValue("mesh-gateway--"+cluster, token.SecretID); err != nil {
 		return err
+	}
+	if !peered {
+		for _, altCluster := range c.topology.Clusters() {
+			if altCluster.Name == cluster {
+				continue // skip
+			}
+			if err := c.cache.SaveValue("mesh-gateway--"+altCluster.Name, token.SecretID); err != nil {
+				return err
+			}
+		}
 	}
 
 	// c.setToken("mesh-gateway", "", token.SecretID)

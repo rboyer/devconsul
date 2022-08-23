@@ -42,6 +42,12 @@ retry_join_wan         = [ {{.RetryJoinWAN}} ]
 {{- end}}
 server                 = {{.Server}}
 
+{{ if .EnablePeering }}
+peering {
+  enabled = true
+}
+{{- end}}
+
 ui_config {
   enabled          = true
 {{ if .Prometheus }}
@@ -87,14 +93,36 @@ encrypt                = "{{.GossipKey}}"
 {{- end }}
 
 {{ if .TLS }}
-ca_file                = "/tls/consul-agent-ca.pem"
-cert_file              = "/tls/{{.TLSFilePrefix}}.pem"
-key_file               = "/tls/{{.TLSFilePrefix}}-key.pem"
-{{ if .Server }}
-verify_incoming        = true
-verify_server_hostname = true
-{{- end }}
-verify_outgoing        = true
+tls {
+  internal_rpc {
+    ca_file                = "/tls/consul-agent-ca.pem"
+    cert_file              = "/tls/{{.TLSFilePrefix}}.pem"
+    key_file               = "/tls/{{.TLSFilePrefix}}-key.pem"
+    {{ if .Server }}
+    verify_incoming        = true
+    verify_server_hostname = true
+    {{- end }}
+    verify_outgoing        = true
+  }
+  {{ if .TLSAPI }}
+  https {
+    ca_file                = "/tls/consul-agent-ca.pem"
+    cert_file              = "/tls/{{.TLSFilePrefix}}.pem"
+    key_file               = "/tls/{{.TLSFilePrefix}}-key.pem"
+    {{ if .Server }}
+    verify_incoming        = true
+    {{- end }}
+  }
+  grpc {
+    ca_file                = "/tls/consul-agent-ca.pem"
+    cert_file              = "/tls/{{.TLSFilePrefix}}.pem"
+    key_file               = "/tls/{{.TLSFilePrefix}}-key.pem"
+    {{ if .Server }}
+    verify_incoming        = true
+    {{- end }}
+  }
+  {{- end }}
+}
 {{ end }}
 
 {{ if not .SecondaryServer }}
@@ -125,9 +153,7 @@ connect {
 }
 
 ports {
-{{ if not .Server }}
   grpc = 8502
-{{ end }}
 {{ if .TLSAPI }}
   https = 8501
 {{ end }}

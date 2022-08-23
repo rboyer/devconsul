@@ -108,6 +108,9 @@ func (c *Core) RunDebugSaveGrafana() error {
 func (c *Core) restoreGrafana() error {
 	names, err := os.ReadDir("dashboards")
 	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
 		return err
 	}
 

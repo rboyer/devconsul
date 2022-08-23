@@ -455,6 +455,7 @@ func (c *Core) generateAgentHCL(node *infra.Node) (string, error) {
 		TLSFilePrefix     string
 		EnableACLs        bool
 		Prometheus        bool
+		EnablePeering     bool
 
 		FederateViaGateway          bool
 		PrimaryGateways             string
@@ -492,6 +493,9 @@ func (c *Core) generateAgentHCL(node *infra.Node) (string, error) {
 		configInfo.PrimaryDatacenter = config.PrimaryCluster
 	case infra.ClusterLinkModePeer:
 		configInfo.PrimaryDatacenter = node.Cluster
+		if node.Server {
+			configInfo.EnablePeering = true
+		}
 	}
 
 	if c.config.EnterpriseDisablePartitions || !c.config.EnterpriseEnabled {
