@@ -109,7 +109,6 @@ func parseConfig(pathname string, contents []byte) (*Config, error) {
 		PrometheusEnabled:                uc.Monitor.Prometheus,
 		InitialMasterToken:               uc.Security.InitialMasterToken,
 		EnterpriseEnabled:                uc.Enterprise.Enabled,
-		EnterpriseSegments:               make(map[string]int),
 		EnterprisePartitions:             uc.Enterprise.Partitions,
 		EnterpriseDisablePartitions:      uc.Enterprise.DisablePartitions,
 		EnterpriseLicensePath:            uc.Enterprise.LicensePath,
@@ -120,6 +119,9 @@ func parseConfig(pathname string, contents []byte) (*Config, error) {
 		ConfigEntries:                    make(map[string][]api.ConfigEntry),
 	}
 
+	if len(uc.Enterprise.Segments) > 0 {
+		cfg.EnterpriseSegments = make(map[string]int)
+	}
 	for i, segName := range uc.Enterprise.Segments {
 		cfg.EnterpriseSegments[segName] = 8303 + i
 	}

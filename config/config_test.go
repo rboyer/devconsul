@@ -144,6 +144,7 @@ func testParseConfig_AllFields(t *testing.T, peerInsteadOfDatacenter bool) {
 			partition "beta" {
 				namespaces = ["foo", "bar"]
 			}
+			segments = ["seg1", "seg2"]
 		}
 		topology {
 			network_shape = "islands"
@@ -228,6 +229,7 @@ EOF
 				Namespaces: []string{"foo", "bar"},
 			},
 		},
+		EnterpriseSegments:   map[string]int{"seg1": 8303, "seg2": 8304},
 		TopologyNetworkShape: "islands",
 		TopologyLinkMode:     "peer",
 		TopologyClusters: []*Cluster{
