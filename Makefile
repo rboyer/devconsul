@@ -27,6 +27,12 @@ test:
 lint:
 	golangci-lint run -v
 
+.PHONY: format
+format:
+	@for f in $$(find . -name '*.go' -print); do \
+		gofmt -s -w $$f ; \
+	done
+
 .PHONY: update-envoy
 update-envoy:
 	@docker rm -f consul-envoy-check &>/dev/null || true

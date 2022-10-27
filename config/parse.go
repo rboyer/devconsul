@@ -2,7 +2,7 @@ package config
 
 import (
 	"fmt"
-	"io/ioutil"
+	"os"
 
 	"github.com/hashicorp/consul/api"
 	"github.com/hashicorp/hcl/v2/hclsimple"
@@ -11,7 +11,7 @@ import (
 // LoadConfig loads up the default config file (config.hcl), parses it, and
 // does some light validation.
 func LoadConfig(pathname string) (*Config, error) {
-	contents, err := ioutil.ReadFile(pathname)
+	contents, err := os.ReadFile(pathname)
 	if err != nil {
 		return nil, err
 	}

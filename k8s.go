@@ -3,7 +3,7 @@ package main
 import (
 	"bytes"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"os"
 
 	"github.com/rboyer/safeio"
@@ -40,7 +40,7 @@ func (c *Core) runK8SInit() error {
 
 	var priorHash string
 	{
-		b, err := ioutil.ReadFile("cache/k8s.hash")
+		b, err := os.ReadFile("cache/k8s.hash")
 		if os.IsNotExist(err) {
 			priorHash = ""
 		} else if err != nil {
@@ -70,7 +70,7 @@ func (c *Core) runK8SInit() error {
 func (c *Core) realRunK8SInit() error {
 	var err error
 
-	if err := cmdExec("minikube", c.minikubeBin, []string{"status"}, ioutil.Discard); err != nil {
+	if err := cmdExec("minikube", c.minikubeBin, []string{"status"}, io.Discard); err != nil {
 		return fmt.Errorf("minikube is not running; please run it as something like 'minikube start --memory=4096': %v", err)
 	}
 
@@ -84,7 +84,7 @@ func (c *Core) realRunK8SInit() error {
 	c.logger.Info(">>> switching to minikube kubectl context")
 	if err := cmdExec("kubectl", c.kubectlBin, []string{
 		"config", "use-context", "minikube",
-	}, ioutil.Discard); err != nil {
+	}, io.Discard); err != nil {
 		return err
 	}
 
@@ -201,7 +201,7 @@ func (c *Core) writeK8SConfigCACert() error {
 		return fmt.Errorf("no minikube ca file found")
 	}
 
-	caCert, err := ioutil.ReadFile(caFile)
+	caCert, err := os.ReadFile(caFile)
 	if err != nil {
 		return err
 	}

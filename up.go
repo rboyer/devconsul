@@ -49,7 +49,7 @@ func (c *Core) runInit() error {
 
 func (c *Core) RunRestart() error {
 	// This only makes sense to run after you've configured it once.
-	if err := checkHasRunOnce("init"); err != nil {
+	if err := checkHasInitRunOnce(); err != nil {
 		return err
 	}
 
@@ -62,7 +62,7 @@ func (c *Core) RunRestart() error {
 
 func (c *Core) RunRestartDC2() error {
 	// This only makes sense to run after you've configured it once.
-	if err := checkHasRunOnce("init"); err != nil {
+	if err := checkHasInitRunOnce(); err != nil {
 		return err
 	}
 

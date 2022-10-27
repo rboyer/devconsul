@@ -6,7 +6,6 @@ import (
 	"embed"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"net"
 	"os"
 	"sort"
@@ -35,7 +34,7 @@ import (
 var content embed.FS
 
 func (c *Core) runGenerate(primaryOnly bool) error {
-	if err := checkHasRunOnce("init"); err != nil {
+	if err := checkHasInitRunOnce(); err != nil {
 		return err
 	}
 
@@ -762,7 +761,7 @@ const (
 )
 
 func (c *Core) updateFileIfDifferent(body []byte, path string, perm os.FileMode) (UpdateResult, error) {
-	prev, err := ioutil.ReadFile(path)
+	prev, err := os.ReadFile(path)
 
 	result := UpdateResultNone
 	if err != nil {

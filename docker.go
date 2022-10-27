@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"strings"
 
@@ -52,7 +51,7 @@ func (c *Core) buildDockerImages(force bool) error {
 
 	var priorHash string
 	{
-		b, err := ioutil.ReadFile("cache/docker.hash")
+		b, err := os.ReadFile("cache/docker.hash")
 		if os.IsNotExist(err) {
 			priorHash = ""
 		} else if err != nil {
@@ -179,7 +178,7 @@ func (c *Core) stopAllContainers() error {
 	args := []string{"stop"}
 	args = append(args, cids...)
 
-	if err := c.dockerExec(args, ioutil.Discard); err != nil {
+	if err := c.dockerExec(args, io.Discard); err != nil {
 		return err
 	}
 

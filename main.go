@@ -9,7 +9,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"os"
 	"os/exec"
@@ -53,7 +52,7 @@ var allCommands = []command{
 }
 
 func main() {
-	log.SetOutput(ioutil.Discard)
+	log.SetOutput(io.Discard)
 
 	// Create logger
 	logger := hclog.New(&hclog.LoggerOptions{
@@ -460,7 +459,7 @@ func runOnce(name string, fn func() error) error {
 }
 
 func hasRunOnce(name string) (bool, error) {
-	b, err := ioutil.ReadFile("cache/" + name + ".done")
+	b, err := os.ReadFile("cache/" + name + ".done")
 	if err != nil {
 		if os.IsNotExist(err) {
 			return false, nil
@@ -468,6 +467,10 @@ func hasRunOnce(name string) (bool, error) {
 		return false, err
 	}
 	return name == string(b), nil
+}
+
+func checkHasInitRunOnce() error {
+	return checkHasRunOnce("init")
 }
 
 func checkHasRunOnce(name string) error {

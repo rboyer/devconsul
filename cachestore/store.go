@@ -1,7 +1,6 @@
 package cachestore
 
 import (
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -46,7 +45,7 @@ func (s *Store) LoadOrSaveValue(name string, fetchFn func() (string, error)) (st
 
 func (s *Store) LoadValue(name string) (string, error) {
 	fn := filepath.Join(s.cacheDir, name+".val")
-	b, err := ioutil.ReadFile(fn)
+	b, err := os.ReadFile(fn)
 	if os.IsNotExist(err) {
 		return "", nil
 	} else if err != nil {
@@ -72,7 +71,7 @@ func (s *Store) DelValue(name string) error {
 
 func (s *Store) LoadStringFile(filename string) (string, error) {
 	fn := filepath.Join(s.cacheDir, filename)
-	b, err := ioutil.ReadFile(fn)
+	b, err := os.ReadFile(fn)
 	if os.IsNotExist(err) {
 		return "", nil
 	} else if err != nil {

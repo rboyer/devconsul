@@ -26,7 +26,7 @@ type BootInfo struct {
 }
 
 func (c *Core) runBoot(primaryOnly bool) error {
-	if err := checkHasRunOnce("init"); err != nil {
+	if err := checkHasInitRunOnce(); err != nil {
 		return err
 	}
 
