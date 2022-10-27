@@ -108,7 +108,7 @@ jobs:
 
           echo "$v"
 
-          echo "::set-output name=config_file_matrix::[$v]"
+          echo "config_file_matrix=[$v]" >> $GITHUB_OUTPUT
     outputs:
       config_file_matrix: ${{ steps.set-matrix.outputs.config_file_matrix }}
 
