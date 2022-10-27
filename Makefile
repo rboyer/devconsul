@@ -41,7 +41,7 @@ update-envoy:
 	@mkdir -p cache
 	@docker exec -it consul-envoy-check sh -c 'wget -q localhost:8500/v1/agent/self -O -' | jq -r '.xDS.SupportedProxies.envoy[0]' > cache/default_envoy.val
 	@docker rm -f consul-envoy-check &>/dev/null || true
-	@printf "package config\n\nconst DefaultEnvoyVersion = \"v$(file <cache/default_envoy.val)\"\n" > config/default_envoy.go
+	@printf "package config\n\nconst DefaultEnvoyVersion = \"v$$(cat cache/default_envoy.val)\"\n" > config/default_envoy.go
 
 .PHONY: test-configs
 test-configs:
