@@ -1,14 +1,10 @@
 SHELL := /bin/bash
 
-PROGRAM_NAME := devconsul
-
 .PHONY: all
 all: install
 
 .PHONY: install
-install: $(GOPATH)/bin/$(PROGRAM_NAME)
-$(GOPATH)/bin/$(PROGRAM_NAME): *.go cachestore/*.go consulfunc/*.go config/*.go infra/*.go util/*.go go.mod go.sum templates/* grafana/*.go
-	$(info rebuilding binary...)
+install:
 	@go install
 
 .PHONY: tidy

@@ -284,5 +284,9 @@ func validateConfig(cfg *Config) error {
 		return fmt.Errorf("canary_proxies.envoy_image must be set if canary_proxies.consul_image is set")
 	}
 
+	if cfg.PrometheusEnabled && cfg.SecurityDisableACLs {
+		return fmt.Errorf("prometheus setup is incompatible with insecure consul")
+	}
+
 	return nil
 }

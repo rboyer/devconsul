@@ -1,4 +1,4 @@
-package main
+package app
 
 import "os"
 
@@ -10,18 +10,18 @@ func (c *Core) terraformApply() error {
 
 		// On the fly init
 		c.logger.Info("Running 'terraform init'...")
-		if err := cmdExec("terraform", c.tfBin, []string{"init"}, nil); err != nil {
+		if err := c.runner.TerraformExec([]string{"init"}, nil); err != nil {
 			return err
 		}
 	}
 
 	c.logger.Info("Running 'terraform apply'...")
-	return cmdExec("terraform", c.tfBin, []string{"apply", "-auto-approve"}, nil)
+	return c.runner.TerraformExec([]string{"apply", "-auto-approve"}, nil)
 }
 
 func (c *Core) terraformDestroy() error {
 	c.logger.Info("Running 'terraform destroy'...")
-	return cmdExec("terraform", c.tfBin, []string{
+	return c.runner.TerraformExec([]string{
 		"destroy", "-auto-approve", "-refresh=false",
 	}, nil)
 }

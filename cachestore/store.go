@@ -9,17 +9,7 @@ import (
 )
 
 type Store struct {
-	cacheDir string
-}
-
-func New(cacheDir string) (*Store, error) {
-	if err := os.MkdirAll(cacheDir, 0755); err != nil {
-		return nil, err
-	}
-
-	s := &Store{cacheDir: cacheDir}
-
-	return s, nil
+	Dir string
 }
 
 func (s *Store) LoadOrSaveValue(name string, fetchFn func() (string, error)) (string, error) {
@@ -44,7 +34,7 @@ func (s *Store) LoadOrSaveValue(name string, fetchFn func() (string, error)) (st
 }
 
 func (s *Store) LoadValue(name string) (string, error) {
-	fn := filepath.Join(s.cacheDir, name+".val")
+	fn := filepath.Join(s.Dir, name+".val")
 	b, err := os.ReadFile(fn)
 	if os.IsNotExist(err) {
 		return "", nil
@@ -55,13 +45,16 @@ func (s *Store) LoadValue(name string) (string, error) {
 }
 
 func (s *Store) SaveValue(name, value string) error {
-	fn := filepath.Join(s.cacheDir, name+".val")
+	if err := os.MkdirAll(s.Dir, 0755); err != nil {
+		return err
+	}
+	fn := filepath.Join(s.Dir, name+".val")
 	_, err := safeio.WriteToFile(strings.NewReader(value), fn, 0644)
 	return err
 }
 
 func (s *Store) DelValue(name string) error {
-	fn := filepath.Join(s.cacheDir, name+".val")
+	fn := filepath.Join(s.Dir, name+".val")
 	err := os.Remove(fn)
 	if os.IsNotExist(err) {
 		return nil
@@ -70,7 +63,7 @@ func (s *Store) DelValue(name string) error {
 }
 
 func (s *Store) LoadStringFile(filename string) (string, error) {
-	fn := filepath.Join(s.cacheDir, filename)
+	fn := filepath.Join(s.Dir, filename)
 	b, err := os.ReadFile(fn)
 	if os.IsNotExist(err) {
 		return "", nil
@@ -81,7 +74,7 @@ func (s *Store) LoadStringFile(filename string) (string, error) {
 }
 
 func (s *Store) WriteStringFile(filename, contents string) error {
-	fn := filepath.Join(s.cacheDir, filename)
+	fn := filepath.Join(s.Dir, filename)
 	_, err := safeio.WriteToFile(strings.NewReader(contents), fn, 0644)
 	return err
 }

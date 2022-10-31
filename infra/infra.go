@@ -1,6 +1,7 @@
 package infra
 
 import (
+	"errors"
 	"fmt"
 	"regexp"
 	"sort"
@@ -205,11 +206,11 @@ func CompileTopology(cfg *config.Config) (*Topology, error) {
 					Meta:              nodeConfig.Meta(),
 				}
 				if idx%2 == 1 {
-					svc.ID = util.NewIdentifier("ping", nodeConfig.ServiceNamespace, node.Partition)
-					svc.UpstreamID = util.NewIdentifier("pong", nodeConfig.UpstreamNamespace, nodeConfig.UpstreamPartition)
+					svc.ID = util.NewIdentifier(config.ServicePing, nodeConfig.ServiceNamespace, node.Partition)
+					svc.UpstreamID = util.NewIdentifier(config.ServicePong, nodeConfig.UpstreamNamespace, nodeConfig.UpstreamPartition)
 				} else {
-					svc.ID = util.NewIdentifier("pong", nodeConfig.ServiceNamespace, node.Partition)
-					svc.UpstreamID = util.NewIdentifier("ping", nodeConfig.UpstreamNamespace, nodeConfig.UpstreamPartition)
+					svc.ID = util.NewIdentifier(config.ServicePong, nodeConfig.ServiceNamespace, node.Partition)
+					svc.UpstreamID = util.NewIdentifier(config.ServicePing, nodeConfig.UpstreamNamespace, nodeConfig.UpstreamPartition)
 				}
 
 				if nodeConfig.UpstreamName != "" {
@@ -305,5 +306,25 @@ func CompileTopology(cfg *config.Config) (*Topology, error) {
 		}
 	}
 
+	if err := checkForErrors(topology); err != nil {
+		return nil, err
+	}
+
 	return topology, nil
+}
+
+func checkForErrors(topology *Topology) error {
+	return topology.Walk(func(node *Node) error {
+		if node.Service == nil {
+			return nil
+		}
+		svc := node.Service
+
+		switch svc.ID.Name {
+		case config.ServicePing, config.ServicePong:
+			return nil
+		default:
+			return errors.New("unexpected service: " + svc.ID.Name)
+		}
+	})
 }

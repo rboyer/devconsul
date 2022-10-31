@@ -1,4 +1,4 @@
-package main
+package app
 
 import (
 	"bytes"
@@ -8,6 +8,8 @@ import (
 
 	"github.com/rboyer/safeio"
 	"golang.org/x/crypto/blake2b"
+
+	"github.com/rboyer/devconsul/config"
 )
 
 func (c *Core) runK8SInit() error {
@@ -28,10 +30,10 @@ func (c *Core) runK8SInit() error {
 			return err
 		}
 
-		if err := addFileToHash(c.devconsulBin, hash); err != nil {
+		if err := addFileToHash(c.runner.GetPathToSelf(), hash); err != nil {
 			return err
 		}
-		if err := addFileToHash(defaultConfigFile, hash); err != nil {
+		if err := addFileToHash(DefaultConfigFile, hash); err != nil {
 			return err
 		}
 
@@ -70,7 +72,7 @@ func (c *Core) runK8SInit() error {
 func (c *Core) realRunK8SInit() error {
 	var err error
 
-	if err := cmdExec("minikube", c.minikubeBin, []string{"status"}, io.Discard); err != nil {
+	if err := c.runner.MinikubeExec([]string{"status"}, io.Discard); err != nil {
 		return fmt.Errorf("minikube is not running; please run it as something like 'minikube start --memory=4096': %v", err)
 	}
 
@@ -82,7 +84,7 @@ func (c *Core) realRunK8SInit() error {
 	}
 
 	c.logger.Info(">>> switching to minikube kubectl context")
-	if err := cmdExec("kubectl", c.kubectlBin, []string{
+	if err := c.runner.KubectlExec([]string{
 		"config", "use-context", "minikube",
 	}, io.Discard); err != nil {
 		return err
@@ -99,7 +101,7 @@ func (c *Core) realRunK8SInit() error {
 	if err != nil {
 		return err
 	}
-	if err := cmdExec("kubectl", c.kubectlBin, []string{
+	if err := c.runner.KubectlExec([]string{
 		"apply", "-f", "cache/k8s/k8s-rbac-boot.yml",
 	}, nil); err != nil {
 		return err
@@ -114,10 +116,10 @@ func (c *Core) realRunK8SInit() error {
 	}
 
 	// also get secrets for service accounts in pods
-	if err := c.writeServiceAccountSecret("ping", "cache/k8s/service_jwt_token.ping"); err != nil {
+	if err := c.writeServiceAccountSecret(config.ServicePing, "cache/k8s/service_jwt_token.ping"); err != nil {
 		return err
 	}
-	if err := c.writeServiceAccountSecret("pong", "cache/k8s/service_jwt_token.pong"); err != nil {
+	if err := c.writeServiceAccountSecret(config.ServicePong, "cache/k8s/service_jwt_token.pong"); err != nil {
 		return err
 	}
 
@@ -141,7 +143,7 @@ func (c *Core) writeK8SSecretFile(secretName, filename string) error {
 	}
 	defer w.Close()
 
-	if err := cmdExec("kubectl", c.kubectlBin, []string{
+	if err := c.runner.KubectlExec([]string{
 		"get", "secret", secretName, "-o", "go-template={{ .data.token | base64decode }}",
 	}, w); err != nil {
 		return err
@@ -154,7 +156,7 @@ func (c *Core) getServiceAccountSecretName(saName string) (string, error) {
 	// secret_name="$(kubectl get sa "${sa_name}" -o jsonpath='{.secrets[0].name}')"
 
 	var out bytes.Buffer
-	if err := cmdExec("kubectl", c.kubectlBin, []string{
+	if err := c.runner.KubectlExec([]string{
 		"get", "sa", saName, "-o", "jsonpath={.secrets[0].name}",
 	}, &out); err != nil {
 		return "", err
@@ -172,7 +174,7 @@ func (c *Core) writeK8SConfigHost() error {
 	}
 	defer w.Close()
 
-	if err := cmdExec("kubectl", c.kubectlBin, []string{
+	if err := c.runner.KubectlExec([]string{
 		"config",
 		"view",
 		"-o",
@@ -188,7 +190,7 @@ func (c *Core) writeK8SConfigCACert() error {
 	// ca_file="$(kubectl config view -o jsonpath='{.clusters[?(@.name == "minikube")].cluster.certificate-authority}')"
 
 	var out bytes.Buffer
-	if err := cmdExec("kubectl", c.kubectlBin, []string{
+	if err := c.runner.KubectlExec([]string{
 		"config",
 		"view",
 		"-o",

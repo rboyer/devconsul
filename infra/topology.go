@@ -55,6 +55,8 @@ type Topology struct {
 	additionalPrimaryGateways []string
 }
 
+func (t *Topology) FederateWithGateways() bool { return t.NetworkShape == NetworkShapeIslands }
+
 func (t *Topology) LinkWithFederation() bool { return t.LinkMode == ClusterLinkModeFederate }
 func (t *Topology) LinkWithPeering() bool    { return t.LinkMode == ClusterLinkModePeer }
 

@@ -1,4 +1,4 @@
-package main
+package app
 
 import (
 	"bufio"
@@ -14,15 +14,11 @@ import (
 	"github.com/rboyer/devconsul/infra"
 )
 
-func (c *Core) RunForceDocker() error {
-	return c.buildDockerImages(true)
+func (a *App) RunForceDocker() error {
+	return a.buildDockerImages(true)
 }
 
-func (c *Core) runDocker() error {
-	return c.buildDockerImages(false)
-}
-
-func (c *Core) buildDockerImages(force bool) error {
+func (a *App) buildDockerImages(force bool) error {
 	// Check to see if we have any work to do.
 	var currentHash string
 	{
@@ -31,20 +27,20 @@ func (c *Core) buildDockerImages(force bool) error {
 			return err
 		}
 
-		if err := addFileToHash(c.devconsulBin, hash); err != nil {
+		if err := addFileToHash(a.runner.GetPathToSelf(), hash); err != nil {
 			return err
 		}
-		if err := addFileToHash(defaultConfigFile, hash); err != nil {
+		if err := addFileToHash(DefaultConfigFile, hash); err != nil {
 			return err
 		}
 		if err := addFileToHash("Dockerfile-envoy", hash); err != nil {
 			return err
 		}
 
-		hash.Write([]byte(c.config.EnvoyVersion))
-		hash.Write([]byte(c.config.ConsulImage))
-		hash.Write([]byte(c.config.CanaryEnvoyVersion))
-		hash.Write([]byte(c.config.CanaryConsulImage))
+		hash.Write([]byte(a.config.EnvoyVersion))
+		hash.Write([]byte(a.config.ConsulImage))
+		hash.Write([]byte(a.config.CanaryEnvoyVersion))
+		hash.Write([]byte(a.config.CanaryConsulImage))
 
 		currentHash = fmt.Sprintf("%x", hash.Sum(nil))
 	}
@@ -62,23 +58,23 @@ func (c *Core) buildDockerImages(force bool) error {
 	}
 
 	if priorHash == currentHash && !force {
-		c.logger.Info("skipping docker image generation")
+		a.logger.Info("skipping docker image generation")
 		return nil
 	}
 
 	// tag base
-	if err := c.dockerExec([]string{
+	if err := a.runner.DockerExec([]string{
 		"tag",
-		c.config.ConsulImage,
+		a.config.ConsulImage,
 		"local/consul-base:latest",
 	}, nil); err != nil {
 		return err
 	}
 
-	if c.config.CanaryConsulImage != "" {
-		if err := c.dockerExec([]string{
+	if a.config.CanaryConsulImage != "" {
+		if err := a.runner.DockerExec([]string{
 			"tag",
-			c.config.CanaryConsulImage,
+			a.config.CanaryConsulImage,
 			"local/consul-base-canary:latest",
 		}, nil); err != nil {
 			return err
@@ -86,12 +82,12 @@ func (c *Core) buildDockerImages(force bool) error {
 	}
 
 	// build
-	if err := c.dockerExec([]string{
+	if err := a.runner.DockerExec([]string{
 		"build",
 		"--build-arg",
 		"CONSUL_IMAGE=local/consul-base:latest",
 		"--build-arg",
-		"ENVOY_VERSION=" + c.config.EnvoyVersion,
+		"ENVOY_VERSION=" + a.config.EnvoyVersion,
 		"-t", "local/consul-envoy",
 		"-f", "Dockerfile-envoy",
 		".",
@@ -99,13 +95,13 @@ func (c *Core) buildDockerImages(force bool) error {
 		return err
 	}
 
-	if c.config.CanaryEnvoyVersion != "" {
-		if err := c.dockerExec([]string{
+	if a.config.CanaryEnvoyVersion != "" {
+		if err := a.runner.DockerExec([]string{
 			"build",
 			"--build-arg",
 			"CONSUL_IMAGE=local/consul-base-canary:latest",
 			"--build-arg",
-			"ENVOY_VERSION=" + c.config.CanaryEnvoyVersion,
+			"ENVOY_VERSION=" + a.config.CanaryEnvoyVersion,
 			"-t", "local/consul-envoy-canary",
 			"-f", "Dockerfile-envoy",
 			".",
@@ -122,17 +118,17 @@ func (c *Core) buildDockerImages(force bool) error {
 	return nil
 }
 
-func (c *Core) RunStopDC2() error {
-	return c.runStopDC2()
+func (a *App) RunStopDC2() error {
+	return a.runStopDC2()
 }
 
-func (c *Core) runStopDC2() error {
+func (a *App) runStopDC2() error {
 	var (
 		pods       = make(map[string][]string)
 		containers = make(map[string][]string)
 	)
 
-	c.topology.WalkSilent(func(n *infra.Node) {
+	a.topology.WalkSilent(func(n *infra.Node) {
 		pods[n.Cluster] = append(pods[n.Cluster], n.Name+"-pod")
 		containers[n.Cluster] = append(containers[n.Cluster], n.Name)
 		if n.MeshGateway {
@@ -143,20 +139,16 @@ func (c *Core) runStopDC2() error {
 	args := []string{"stop"}
 	args = append(args, containers["dc2"]...)
 
-	if err := c.dockerExec(args, nil); err != nil {
-		c.logger.Error("error stopping containers", "error", err)
+	if err := a.runner.DockerExec(args, nil); err != nil {
+		a.logger.Error("error stopping containers", "error", err)
 	}
 
 	// docker stop $$($(PROGRAM_NAME) config | jq -r '.containers.dc2[]')
 	return nil
 }
 
-func (c *Core) dockerExec(args []string, stdout io.Writer) error {
-	return cmdExec("docker", c.dockerBin, args, stdout)
-}
-
-func (c *Core) stopAllContainers() error {
-	cids, err := c.listRunningContainers()
+func (a *App) stopAllContainers() error {
+	cids, err := a.listRunningContainers()
 	if err != nil {
 		return err
 	}
@@ -165,29 +157,29 @@ func (c *Core) stopAllContainers() error {
 		return nil
 	}
 
-	namesForCID, err := c.namesForContainerIDs(cids)
+	namesForCID, err := a.namesForContainerIDs(cids)
 	if err != nil {
 		return err
 	}
 
 	for _, cid := range cids {
 		name := namesForCID[cid]
-		c.logger.Info("stopping container", "name", name)
+		a.logger.Info("stopping container", "name", name)
 	}
 
 	args := []string{"stop"}
 	args = append(args, cids...)
 
-	if err := c.dockerExec(args, io.Discard); err != nil {
+	if err := a.runner.DockerExec(args, io.Discard); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func (c *Core) listRunningContainers() ([]string, error) {
+func (a *App) listRunningContainers() ([]string, error) {
 	var rawCIDs bytes.Buffer
-	if err := c.dockerExec([]string{"ps", "-q", "--filter", "label=devconsul=1"}, &rawCIDs); err != nil {
+	if err := a.runner.DockerExec([]string{"ps", "-q", "--filter", "label=devconsul=1"}, &rawCIDs); err != nil {
 		return nil, err
 	}
 
@@ -205,7 +197,7 @@ func (c *Core) listRunningContainers() ([]string, error) {
 	return cids, nil
 }
 
-func (c *Core) namesForContainerIDs(cids []string) (map[string]string, error) { // id->name
+func (a *App) namesForContainerIDs(cids []string) (map[string]string, error) { // id->name
 	ret := make(map[string]string)
 	for _, cid := range cids {
 		ret[cid] = cid // default to itself
@@ -220,7 +212,7 @@ func (c *Core) namesForContainerIDs(cids []string) (map[string]string, error) { 
 	args = append(args, "-f", "{{.ID}},{{.Name}}")
 
 	var out bytes.Buffer
-	if err := c.dockerExec(args, &out); err != nil {
+	if err := a.runner.DockerExec(args, &out); err != nil {
 		return nil, err
 	}
 
