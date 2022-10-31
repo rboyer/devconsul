@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"crypto/rand"
 	"encoding/base64"
@@ -27,6 +28,11 @@ import (
 const (
 	programName       = "devconsul"
 	defaultConfigFile = "config.hcl"
+)
+
+const (
+	ConsulFlavorOSS        = "oss"
+	ConsulFlavorEnterprise = "ent"
 )
 
 type command struct {
@@ -135,6 +141,8 @@ type Core struct {
 	minikubeBin string // optional
 	kubectlBin  string // optional
 
+	consulBinFlavor string // oss/ent
+
 	cache  *cachestore.Store
 	config *config.Config
 
@@ -183,6 +191,10 @@ func NewCore(logger hclog.Logger, configOnly, destroying bool) (*Core, error) {
 
 	if destroying {
 		return c, nil
+	}
+
+	if c.config.EnterpriseEnabled && c.consulBinFlavor != ConsulFlavorEnterprise {
+		return nil, errors.New("config requests enterprise but the binary is OSS")
 	}
 
 	cacheDir := filepath.Join(c.rootDir, "cache")
@@ -267,7 +279,38 @@ func (c *Core) lookupBinaries() error {
 	}
 	c.logger.Debug("using binaries", "paths", bins)
 
+	isEnterprise, err := c.checkIfConsulIsEnterprise()
+	if err != nil {
+		return err
+	}
+
+	if isEnterprise {
+		c.consulBinFlavor = ConsulFlavorEnterprise
+	} else {
+		c.consulBinFlavor = ConsulFlavorOSS
+	}
+
 	return nil
+}
+
+func (c *Core) checkIfConsulIsEnterprise() (bool, error) {
+	var w bytes.Buffer
+
+	cmd := exec.Command(c.consulBin, "version")
+	cmd.Stdout = &w
+	cmd.Stderr = &w
+	cmd.Stdin = nil
+	if err := cmd.Run(); err != nil {
+		return false, fmt.Errorf("could not invoke 'consul' to check its version: %w", err)
+	}
+
+	scan := bufio.NewScanner(&w)
+	if !scan.Scan() {
+		return false, errors.New("'consul version' output is unexpected")
+	}
+	line := scan.Text()
+
+	return strings.HasSuffix(line, "+ent"), nil
 }
 
 func (c *Core) initTLS() error {
