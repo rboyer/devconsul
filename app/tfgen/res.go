@@ -80,7 +80,10 @@ func (r *evalResource) Render() (string, error) {
 		return "", err
 	}
 
-	return string(hclwrite.Format([]byte(out))), nil
+	if r.hcl {
+		return string(hclwrite.Format([]byte(out))), nil
+	}
+	return out, nil
 }
 
 func StringTemplate(t *template.Template, data any) (string, error) {
