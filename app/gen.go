@@ -28,13 +28,8 @@ func (c *Core) runGenerate(primaryOnly bool) error {
 
 	var extraFiles []*tfgen.FileResource
 	if c.config.PrometheusEnabled {
-		if fr, err := tfgen.GeneratePrometheusConfigFile(c.config, c.topology); err != nil {
-			return err
-		} else {
-			extraFiles = append(extraFiles, fr)
-		}
-
 		extraFiles = append(extraFiles,
+			tfgen.GeneratePrometheusConfigFile(c.config, c.topology),
 			tfgen.GrafanaPrometheus(),
 			tfgen.GrafanaINI(),
 		)

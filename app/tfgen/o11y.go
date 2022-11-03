@@ -28,7 +28,7 @@ func GrafanaContainer() Resource {
 	return Embed("templates/container-grafana.tf")
 }
 
-func GeneratePrometheusConfigFile(cfg *config.Config, topology *infra.Topology) (*FileResource, error) {
+func GeneratePrometheusConfigFile(cfg *config.Config, topology *infra.Topology) *FileResource {
 	type kv struct {
 		Key, Val string
 	}
@@ -53,7 +53,7 @@ func GeneratePrometheusConfigFile(cfg *config.Config, topology *infra.Topology) 
 		jobs[j.Name] = j
 	}
 
-	if err := topology.Walk(func(node *infra.Node) error {
+	topology.WalkSilent(func(node *infra.Node) {
 		if node.Server {
 			add(&job{
 				Name:        "consul-server--" + node.Name,
@@ -125,11 +125,7 @@ func GeneratePrometheusConfigFile(cfg *config.Config, topology *infra.Topology) 
 				})
 			}
 		}
-
-		return nil
-	}); err != nil {
-		return nil, err
-	}
+	})
 
 	info := struct {
 		Jobs []*job
@@ -141,7 +137,7 @@ func GeneratePrometheusConfigFile(cfg *config.Config, topology *infra.Topology) 
 		return info.Jobs[i].Name < info.Jobs[j].Name
 	})
 
-	return File("cache/prometheus.yml", Eval(prometheusConfigT, &info)), nil
+	return File("cache/prometheus.yml", Eval(prometheusConfigT, &info))
 }
 
 var prometheusConfigT = template.Must(template.ParseFS(content, "templates/prometheus-config.yml.tmpl"))
