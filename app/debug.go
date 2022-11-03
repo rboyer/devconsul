@@ -111,7 +111,7 @@ func (c *Core) restoreGrafana() error {
 		if os.IsNotExist(err) {
 			return nil
 		}
-		return err
+		return fmt.Errorf("dashboards directory is missing: %w", err)
 	}
 
 	client, err := grafana.NewClient(c.logger.Named("grafana"))
@@ -135,6 +135,8 @@ func (c *Core) restoreGrafana() error {
 		if err := json.Unmarshal(b, &raw); err != nil {
 			return err
 		}
+
+		delete(raw, "id")
 
 		exists, _, err := client.GetRawDashboard(raw["uid"].(string))
 		if err != nil {

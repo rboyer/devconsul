@@ -82,6 +82,7 @@ func (c *Client) UpsertRawDashboard(raw map[string]any) error {
 
 	wrap := map[string]any{
 		"dashboard": raw,
+		"overwrite": true,
 	}
 
 	var buf bytes.Buffer
@@ -102,7 +103,7 @@ func (c *Client) UpsertRawDashboard(raw map[string]any) error {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
-		return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+		return fmt.Errorf("unexpected status code %d interacting with: %s", resp.StatusCode, url)
 	}
 
 	return nil
