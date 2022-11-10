@@ -59,6 +59,14 @@ func parseConfig(pathname string, contents []byte) (*Config, error) {
 		}
 	}
 
+	if uc.Security.Vault.Enabled {
+		if uc.Security.Vault.Image == "" {
+			uc.Security.Vault.Image = "hashicorp/vault:latest"
+		}
+	} else {
+		uc.Security.Vault.Image = ""
+	}
+
 	if len(uc.Topology.DeprecatedDatacenter) > 0 {
 		if len(uc.Topology.Cluster) > 0 {
 			return nil, fmt.Errorf("both datacenter and cluster configured")
@@ -104,6 +112,8 @@ func parseConfig(pathname string, contents []byte) (*Config, error) {
 		EncryptionGossip:                 uc.Security.Encryption.Gossip,
 		SecurityDisableACLs:              uc.Security.DisableACLs,
 		SecurityDisableDefaultIntentions: uc.Security.DisableDefaultIntentions,
+		VaultEnabled:                     uc.Security.Vault.Enabled,
+		VaultImage:                       uc.Security.Vault.Image,
 		KubernetesEnabled:                uc.Kubernetes.Enabled,
 		EnvoyLogLevel:                    uc.Envoy.LogLevel,
 		PrometheusEnabled:                uc.Monitor.Prometheus,

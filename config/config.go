@@ -17,6 +17,8 @@ type Config struct {
 	EncryptionGossip                 bool
 	SecurityDisableACLs              bool
 	SecurityDisableDefaultIntentions bool
+	VaultEnabled                     bool
+	VaultImage                       string
 	KubernetesEnabled                bool
 	EnvoyLogLevel                    string
 	PrometheusEnabled                bool

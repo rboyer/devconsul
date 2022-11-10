@@ -47,6 +47,9 @@ func (uc *rawConfig) removeNilFields() {
 	if uc.Security.Encryption == nil {
 		uc.Security.Encryption = &rawConfigEncryption{}
 	}
+	if uc.Security.Vault == nil {
+		uc.Security.Vault = &rawConfigVault{}
+	}
 	if uc.Kubernetes == nil {
 		uc.Kubernetes = &rawConfigK8S{}
 	}
@@ -81,6 +84,12 @@ type rawConfigSecurity struct {
 	Encryption               *rawConfigEncryption `hcl:"encryption,block"`
 	InitialMasterToken       string               `hcl:"initial_master_token,optional"`
 	DisableDefaultIntentions bool                 `hcl:"disable_default_intentions,optional"`
+	Vault                    *rawConfigVault      `hcl:"vault,block"`
+}
+
+type rawConfigVault struct {
+	Enabled bool   `hcl:"enabled,optional"`
+	Image   string `hcl:"image,optional"`
 }
 
 type rawConfigEncryption struct {

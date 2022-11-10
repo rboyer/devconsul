@@ -126,6 +126,10 @@ func testParseConfig_AllFields(t *testing.T, peerInsteadOfDatacenter bool) {
 				gossip = true
 			}
 			initial_master_token = "root"
+			vault {
+				enabled = true
+				image = "my-fake-image:3333"
+			}
 		}
 		kubernetes {
 			enabled = true
@@ -214,6 +218,8 @@ EOF
 		EncryptionTLSAPI:      true,
 		EncryptionGossip:      true,
 		SecurityDisableACLs:   true,
+		VaultEnabled:          true,
+		VaultImage:            "my-fake-image:3333",
 		KubernetesEnabled:     true,
 		EnvoyLogLevel:         "debug",
 		PrometheusEnabled:     true,

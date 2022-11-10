@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/hashicorp/consul/api"
+	vaultapi "github.com/hashicorp/vault/api"
 
 	"github.com/rboyer/devconsul/config"
 	"github.com/rboyer/devconsul/consulfunc"
@@ -23,11 +24,20 @@ type BootInfo struct {
 	replicationSecretID string
 
 	tokens map[string]string
+
+	vault          *vaultapi.Client
+	vaultUnsealKey string
+	vaultToken     string
 }
 
 func (c *Core) runBoot(primaryOnly bool) error {
 	if err := checkHasInitRunOnce(); err != nil {
 		return err
+	}
+
+	if err := c.initVault(); err != nil {
+		return fmt.Errorf("error setting up vault: %w", err)
+
 	}
 
 	c.primaryOnly = primaryOnly
