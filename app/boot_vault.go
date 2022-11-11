@@ -25,7 +25,7 @@ func (c *Core) initVault() error {
 
 	cfg := vaultapi.DefaultConfig()
 	cfg.Address = "http://10.0.100.111:8200"
-	cfg.Logger = c.logger.Named("vault")
+	// cfg.Logger = c.logger.Named("vault")
 	cfg.HttpClient = cleanhttp.DefaultPooledClient()
 
 	var err error
