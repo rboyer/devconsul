@@ -251,6 +251,8 @@ func (c *Core) ensureCAUsesConsul(cluster string) error {
 	update := &api.CAConfig{
 		Provider: "consul",
 		Config: map[string]any{
+			"RootCertTTL": "87600h",
+			//
 			"LeafCertTTL":         "72h",
 			"IntermediateCertTTL": "8760h",
 			"RotationPeriod":      "2160h",
@@ -259,7 +261,11 @@ func (c *Core) ensureCAUsesConsul(cluster string) error {
 		},
 	}
 
-	return c.ensureCAProvider(cluster, update, nil)
+	return c.ensureCAProvider(cluster, update, []string{
+		"RotationPeriod",
+		"PrivateKeyType",
+		"PrivateKeyBits",
+	})
 }
 
 func (c *Core) ensureCAUsesVault(cluster string) error {
