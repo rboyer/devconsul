@@ -259,8 +259,7 @@ func (c *Core) ensureCAUsesConsul(cluster string) error {
 		},
 	}
 
-	_, err := c.ensureCAProvider(cluster, update, nil)
-	return err
+	return c.ensureCAProvider(cluster, update, nil)
 }
 
 func (c *Core) ensureCAUsesVault(cluster string) error {
@@ -285,8 +284,7 @@ func (c *Core) ensureCAUsesVault(cluster string) error {
 		},
 	}
 
-	_, err := c.ensureCAProvider(cluster, update, []string{"Token"})
-	return err
+	return c.ensureCAProvider(cluster, update, []string{"Token"})
 }
 
 func copyConfig(c map[string]any) (map[string]any, error) {
@@ -297,7 +295,7 @@ func copyConfig(c map[string]any) (map[string]any, error) {
 	return c2.(map[string]any), nil
 }
 
-func (c *Core) ensureCAProvider(cluster string, update *api.CAConfig, simpleUpdateFields []string) (bool, error) {
+func (c *Core) ensureCAProvider(cluster string, update *api.CAConfig, simpleUpdateFields []string) error {
 	var (
 		client = c.clientForCluster(cluster)
 		logger = c.logger.With("cluster", cluster)
@@ -305,18 +303,18 @@ func (c *Core) ensureCAProvider(cluster string, update *api.CAConfig, simpleUpda
 
 	curr, _, err := client.Connect().CAGetConfig(nil)
 	if err != nil {
-		return false, err
+		return err
 	}
 
 	simpleUpdate := false
 	if curr.Provider == update.Provider {
 		currConfig, err := copyConfig(curr.Config)
 		if err != nil {
-			return false, err
+			return err
 		}
 		updateConfig, err := copyConfig(update.Config)
 		if err != nil {
-			return false, err
+			return err
 		}
 
 		for _, field := range simpleUpdateFields {
@@ -328,20 +326,20 @@ func (c *Core) ensureCAProvider(cluster string, update *api.CAConfig, simpleUpda
 		}
 
 		if diff := cmp.Diff(currConfig, updateConfig); diff != "" {
-			return false, fmt.Errorf("current CA is configured as %q but configuration differs: %s", update.Provider, diff)
+			return fmt.Errorf("current CA is configured as %q but configuration differs: %s", update.Provider, diff)
 		}
 
 		if !simpleUpdate {
-			return false, nil
+			return nil
 		}
 	}
 
 	_, err = client.Connect().CASetConfig(update, nil)
 	if err != nil {
-		return false, err
+		return err
 	}
 
 	logger.Info("changed connect CA", "provider", update.Provider, "simpleUpdate", simpleUpdate)
 
-	return true, err
+	return err
 }
