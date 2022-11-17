@@ -226,7 +226,7 @@ EOF
 		VaultEnabled:        true,
 		VaultImage:          "my-fake-image:3333",
 		VaultAsMeshCA: map[string]struct{}{
-			"dc2": struct{}{},
+			"dc2": {},
 		},
 		KubernetesEnabled:     true,
 		EnvoyLogLevel:         "debug",
