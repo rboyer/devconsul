@@ -194,7 +194,7 @@ jobs:
           devconsul help
 
       - name: test container
-        timeout-minutes: 2
+        timeout-minutes: 3
         shell: bash
         run: |
           docker pull consul:latest
