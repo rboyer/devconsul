@@ -88,8 +88,9 @@ type rawConfigSecurity struct {
 }
 
 type rawConfigVault struct {
-	Enabled bool   `hcl:"enabled,optional"`
-	Image   string `hcl:"image,optional"`
+	Enabled bool     `hcl:"enabled,optional"`
+	Image   string   `hcl:"image,optional"`
+	MeshCA  []string `hcl:"mesh_ca,optional"`
 }
 
 type rawConfigEncryption struct {

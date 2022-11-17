@@ -62,6 +62,27 @@ func (s *Store) DelValue(name string) error {
 	return err
 }
 
+func (s *Store) DelValuePrefix(prefix string) ([]string, error) {
+	glob := filepath.Join(s.Dir, prefix+"*.val")
+	matches, err := filepath.Glob(glob)
+	if err != nil {
+		return nil, err
+	}
+
+	var out []string
+	for _, fn := range matches {
+		err := os.Remove(fn)
+		if os.IsNotExist(err) {
+		} else if err != nil {
+			return out, err
+		} else {
+			out = append(out, fn)
+		}
+	}
+
+	return out, nil
+}
+
 func (s *Store) LoadStringFile(filename string) (string, error) {
 	fn := filepath.Join(s.Dir, filename)
 	b, err := os.ReadFile(fn)

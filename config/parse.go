@@ -114,6 +114,7 @@ func parseConfig(pathname string, contents []byte) (*Config, error) {
 		SecurityDisableDefaultIntentions: uc.Security.DisableDefaultIntentions,
 		VaultEnabled:                     uc.Security.Vault.Enabled,
 		VaultImage:                       uc.Security.Vault.Image,
+		VaultAsMeshCA:                    make(map[string]struct{}),
 		KubernetesEnabled:                uc.Kubernetes.Enabled,
 		EnvoyLogLevel:                    uc.Envoy.LogLevel,
 		PrometheusEnabled:                uc.Monitor.Prometheus,
@@ -127,6 +128,10 @@ func parseConfig(pathname string, contents []byte) (*Config, error) {
 		TopologyClusters:                 uc.Topology.Cluster,
 		TopologyNodes:                    uc.Topology.Nodes,
 		ConfigEntries:                    make(map[string][]api.ConfigEntry),
+	}
+
+	for _, cluster := range uc.Security.Vault.MeshCA {
+		cfg.VaultAsMeshCA[cluster] = struct{}{}
 	}
 
 	if len(uc.Enterprise.Segments) > 0 {

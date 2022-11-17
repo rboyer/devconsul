@@ -19,6 +19,7 @@ type Config struct {
 	SecurityDisableDefaultIntentions bool
 	VaultEnabled                     bool
 	VaultImage                       string
+	VaultAsMeshCA                    map[string]struct{}
 	KubernetesEnabled                bool
 	EnvoyLogLevel                    string
 	PrometheusEnabled                bool
