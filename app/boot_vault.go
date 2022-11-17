@@ -307,6 +307,7 @@ func (c *Core) ensureCAProvider(cluster string, update *api.CAConfig, simpleUpda
 		logger = c.logger.With("cluster", cluster)
 	)
 
+RECONFIG:
 	curr, _, err := client.Connect().CAGetConfig(nil)
 	if err != nil {
 		return err
@@ -342,6 +343,11 @@ func (c *Core) ensureCAProvider(cluster string, update *api.CAConfig, simpleUpda
 
 	_, err = client.Connect().CASetConfig(update, nil)
 	if err != nil {
+		if strings.Contains(err.Error(), `CA is already in state "RECONFIGURING"`) {
+			logger.Warn("error checking reconfiguring CA; sleeping and trying again", "error", err)
+			time.Sleep(250 * time.Millisecond)
+			goto RECONFIG
+		}
 		return err
 	}
 
