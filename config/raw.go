@@ -94,10 +94,11 @@ type rawConfigVault struct {
 }
 
 type rawConfigEncryption struct {
-	TLS     bool `hcl:"tls,optional"`
-	TLSAPI  bool `hcl:"tls_api,optional"`
-	TLSGRPC bool `hcl:"tls_grpc,optional"`
-	Gossip  bool `hcl:"gossip,optional"`
+	TLS           bool `hcl:"tls,optional"`
+	TLSAPI        bool `hcl:"tls_api,optional"`
+	TLSGRPC       bool `hcl:"tls_grpc,optional"`
+	ServerTLSGRPC bool `hcl:"server_tls_grpc,optional"`
+	Gossip        bool `hcl:"gossip,optional"`
 }
 
 type rawConfigCanaryProxies struct {

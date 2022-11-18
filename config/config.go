@@ -15,6 +15,7 @@ type Config struct {
 	EncryptionTLS                    bool
 	EncryptionTLSAPI                 bool
 	EncryptionTLSGRPC                bool
+	EncryptionServerTLSGRPC          bool
 	EncryptionGossip                 bool
 	SecurityDisableACLs              bool
 	SecurityDisableDefaultIntentions bool

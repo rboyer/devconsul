@@ -6,8 +6,9 @@ config "simple-peering" { # TODO finish
 
   security {
     encryption {
-      tls    = false
-      gossip = false
+      tls             = true
+      gossip          = false
+      server_tls_grpc = true
     }
     initial_master_token       = "root"
     disable_default_intentions = true

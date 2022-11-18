@@ -87,7 +87,7 @@ func GenerateAgentHCL(
 					// b.add("verify_incoming", true)
 				})
 			}
-			if cfg.EncryptionTLSGRPC {
+			if cfg.EncryptionTLSGRPC || (node.Server && cfg.EncryptionServerTLSGRPC) {
 				b.addBlock("grpc", func() {
 					b.add("ca_file", "/tls/consul-agent-ca.pem")
 					b.add("cert_file", "/tls/"+prefix+".pem")
@@ -102,7 +102,7 @@ func GenerateAgentHCL(
 		if cfg.EncryptionTLSAPI {
 			b.add("https", 8501)
 		}
-		if cfg.EncryptionTLSGRPC {
+		if cfg.EncryptionTLSGRPC || (node.Server && cfg.EncryptionServerTLSGRPC) {
 			b.add("grpc_tls", 8503)
 			b.add("grpc", -1)
 		} else {

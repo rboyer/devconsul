@@ -110,6 +110,7 @@ func parseConfig(pathname string, contents []byte) (*Config, error) {
 		EncryptionTLS:                    uc.Security.Encryption.TLS,
 		EncryptionTLSAPI:                 uc.Security.Encryption.TLSAPI,
 		EncryptionTLSGRPC:                uc.Security.Encryption.TLSGRPC,
+		EncryptionServerTLSGRPC:          uc.Security.Encryption.ServerTLSGRPC,
 		EncryptionGossip:                 uc.Security.Encryption.Gossip,
 		SecurityDisableACLs:              uc.Security.DisableACLs,
 		SecurityDisableDefaultIntentions: uc.Security.DisableDefaultIntentions,
@@ -259,6 +260,15 @@ func validateConfig(cfg *Config) error {
 			if c.Name != PrimaryCluster {
 				hasSecondaryDatacenter = true
 			}
+		}
+	}
+
+	if cfg.TopologyLinkMode == "peer" {
+		if !cfg.EncryptionTLS {
+			return fmt.Errorf("peering requires servers to do TLS on gRPC: encryption.tls should be enabled")
+		}
+		if !cfg.EncryptionTLSGRPC && !cfg.EncryptionServerTLSGRPC {
+			return fmt.Errorf("peering requires servers to do TLS on gRPC: encryption.tls_grpc or encryption.server_tls_grpc should be enabled")
 		}
 	}
 
