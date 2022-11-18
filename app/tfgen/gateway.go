@@ -39,7 +39,7 @@ func GenerateMeshGatewayContainer(
 			//
 		},
 		SidecarBootEnvVars: []string{
-			"SBOOT_READY_FILE=/secrets/ready.val",
+			//
 		},
 	}
 	node.AddLabels(mgi.Labels)

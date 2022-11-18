@@ -65,7 +65,6 @@ func GeneratePingPongContainers(
 
 	if config.SecurityDisableACLs {
 		ppi.SidecarBootEnvVars = []string{
-			"SBOOT_READY_FILE=/secrets/ready.val",
 			"SBOOT_PROXY_TYPE=" + proxyType,
 			"SBOOT_REGISTER_FILE=/secrets/servicereg__" + node.Name + "__" + svc.ID.Name + ".hcl",
 			//
@@ -73,7 +72,6 @@ func GeneratePingPongContainers(
 		}
 	} else if config.KubernetesEnabled {
 		ppi.SidecarBootEnvVars = []string{
-			"SBOOT_READY_FILE=/secrets/ready.val",
 			"SBOOT_PROXY_TYPE=" + proxyType,
 			"SBOOT_REGISTER_FILE=/secrets/servicereg__" + node.Name + "__" + svc.ID.Name + ".hcl",
 			//
@@ -83,7 +81,6 @@ func GeneratePingPongContainers(
 		}
 	} else {
 		ppi.SidecarBootEnvVars = []string{
-			"SBOOT_READY_FILE=/secrets/ready.val",
 			"SBOOT_PROXY_TYPE=" + proxyType,
 			"SBOOT_REGISTER_FILE=/secrets/servicereg__" + node.Name + "__" + svc.ID.Name + ".hcl",
 			//

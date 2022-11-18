@@ -128,10 +128,6 @@ func (c *Core) runBoot(primaryOnly bool) error {
 		}
 	}
 
-	if err := c.cache.SaveValue("ready", "1"); err != nil {
-		return err
-	}
-
 	return nil
 }
 

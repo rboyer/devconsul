@@ -2,7 +2,6 @@
 
 set -euo pipefail
 
-readonly ready_file="${SBOOT_READY_FILE:-}"
 readonly proxy_type="${SBOOT_PROXY_TYPE:-}"
 readonly mode="${SBOOT_MODE:-}"
 readonly agent_tls="${SBOOT_AGENT_TLS:-}"
@@ -10,15 +9,6 @@ readonly agent_grpc_tls="${SBOOT_AGENT_GRPC_TLS:-}"
 readonly partition="${SBOOT_PARTITION:-}"
 
 echo "launching a '${proxy_type}' sidecar proxy"
-
-# wait until ready
-while : ; do
-    if [[ -f "${ready_file}" ]]; then
-        break
-    fi
-    echo "waiting for system to be ready at ${ready_file}..."
-    sleep 0.1
-done
 
 readonly service_register_file="${SBOOT_REGISTER_FILE:-}"
 if [[ -z "${service_register_file}" ]]; then

@@ -2,20 +2,10 @@
 
 set -euo pipefail
 
-readonly ready_file="${SBOOT_READY_FILE:-}"
 readonly mode="${SBOOT_MODE:-}"
 readonly agent_tls="${SBOOT_AGENT_TLS:-}"
 readonly agent_grpc_tls="${SBOOT_AGENT_GRPC_TLS:-}"
 readonly partition="${SBOOT_PARTITION:-}"
-
-# wait until ready
-while : ; do
-    if [[ -f "${ready_file}" ]]; then
-        break
-    fi
-    echo "waiting for system to be ready at ${ready_file}..."
-    sleep 0.1
-done
 
 api_args=()
 case "${mode}" in
