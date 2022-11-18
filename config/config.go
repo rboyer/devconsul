@@ -14,6 +14,7 @@ type Config struct {
 	CanaryNodes                      []string
 	EncryptionTLS                    bool
 	EncryptionTLSAPI                 bool
+	EncryptionTLSGRPC                bool
 	EncryptionGossip                 bool
 	SecurityDisableACLs              bool
 	SecurityDisableDefaultIntentions bool

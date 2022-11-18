@@ -5,6 +5,7 @@ set -euo pipefail
 readonly ready_file="${SBOOT_READY_FILE:-}"
 readonly mode="${SBOOT_MODE:-}"
 readonly agent_tls="${SBOOT_AGENT_TLS:-}"
+readonly agent_grpc_tls="${SBOOT_AGENT_GRPC_TLS:-}"
 readonly partition="${SBOOT_PARTITION:-}"
 
 # wait until ready
@@ -50,15 +51,19 @@ if [[ -n "${partition}" ]]; then
     api_args+=( -partition "${partition}" )
 fi
 
-grpc_args=()
 if [[ -n "$agent_tls" ]]; then
     api_args+=(
         -ca-file /tls/consul-agent-ca.pem
         -http-addr https://127.0.0.1:8501
     )
-    grpc_args+=( -grpc-addr https://127.0.0.1:8502 )
 else
     api_args+=( -http-addr http://127.0.0.1:8500 )
+fi
+
+grpc_args=()
+if [[ -n "$agent_grpc_tls" ]]; then
+    grpc_args+=( -grpc-addr https://127.0.0.1:8503 )
+else
     grpc_args+=( -grpc-addr http://127.0.0.1:8502 )
 fi
 

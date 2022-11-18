@@ -66,6 +66,10 @@ func GenerateMeshGatewayContainer(
 		mgi.SidecarBootEnvVars = append(mgi.SidecarBootEnvVars,
 			"SBOOT_AGENT_TLS=1")
 	}
+	if config.EncryptionTLSGRPC {
+		mgi.SidecarBootEnvVars = append(mgi.SidecarBootEnvVars,
+			"SBOOT_AGENT_GRPC_TLS=1")
+	}
 
 	switch topology.NetworkShape {
 	case infra.NetworkShapeIslands, infra.NetworkShapeDual:

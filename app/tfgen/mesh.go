@@ -103,6 +103,10 @@ func GeneratePingPongContainers(
 		ppi.SidecarBootEnvVars = append(ppi.SidecarBootEnvVars,
 			"SBOOT_AGENT_TLS=1")
 	}
+	if config.EncryptionTLSGRPC {
+		ppi.SidecarBootEnvVars = append(ppi.SidecarBootEnvVars,
+			"SBOOT_AGENT_GRPC_TLS=1")
+	}
 
 	return []Resource{
 		Eval(tfPingPongAppT, &ppi),

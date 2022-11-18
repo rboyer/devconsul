@@ -109,6 +109,7 @@ func parseConfig(pathname string, contents []byte) (*Config, error) {
 		CanaryNodes:                      uc.CanaryProxies.Nodes,
 		EncryptionTLS:                    uc.Security.Encryption.TLS,
 		EncryptionTLSAPI:                 uc.Security.Encryption.TLSAPI,
+		EncryptionTLSGRPC:                uc.Security.Encryption.TLSGRPC,
 		EncryptionGossip:                 uc.Security.Encryption.Gossip,
 		SecurityDisableACLs:              uc.Security.DisableACLs,
 		SecurityDisableDefaultIntentions: uc.Security.DisableDefaultIntentions,
@@ -290,6 +291,15 @@ func validateConfig(cfg *Config) error {
 
 	if cfg.EncryptionTLSAPI && !cfg.EncryptionTLS {
 		return fmt.Errorf("encryption.tls_api=true requires encryption.tls=true")
+	}
+	if cfg.EncryptionTLSGRPC && !cfg.EncryptionTLS {
+		return fmt.Errorf("encryption.tls_grpc=true requires encryption.tls=true")
+	}
+
+	if cfg.EncryptionTLS {
+		if cfg.EncryptionTLSAPI != cfg.EncryptionTLSGRPC {
+			return fmt.Errorf("encryption.tls_grpc and encryption.tls_api must both be set to the same thing until 1.14.1 is out")
+		}
 	}
 
 	if cfg.CanaryConsulImage == "" && cfg.CanaryEnvoyVersion != "" {

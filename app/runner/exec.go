@@ -76,7 +76,7 @@ func Load(logger hclog.Logger, kubernetesEnabled bool) (*Runner, error) {
 		}
 		bins = append(bins, *i.dest)
 	}
-	r.logger.Debug("using binaries", "paths", bins)
+	r.logger.Trace("using binaries", "paths", bins)
 
 	isEnterprise, err := checkIfConsulIsEnterprise(r.consulBin)
 	if err != nil {
