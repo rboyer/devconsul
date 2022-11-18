@@ -306,12 +306,6 @@ func validateConfig(cfg *Config) error {
 		return fmt.Errorf("encryption.tls_grpc=true requires encryption.tls=true")
 	}
 
-	if cfg.EncryptionTLS {
-		if cfg.EncryptionTLSAPI != cfg.EncryptionTLSGRPC {
-			return fmt.Errorf("encryption.tls_grpc and encryption.tls_api must both be set to the same thing until 1.14.1 is out")
-		}
-	}
-
 	if cfg.CanaryConsulImage == "" && cfg.CanaryEnvoyVersion != "" {
 		return fmt.Errorf("canary_proxies.consul_image must be set if canary_proxies.envoy_verison is set")
 	}
