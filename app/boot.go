@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/hashicorp/consul/api"
+	vaultapi "github.com/hashicorp/vault/api"
 
 	"github.com/rboyer/devconsul/config"
 	"github.com/rboyer/devconsul/consulfunc"
@@ -23,11 +24,20 @@ type BootInfo struct {
 	replicationSecretID string
 
 	tokens map[string]string
+
+	vault          *vaultapi.Client
+	vaultUnsealKey string
+	vaultToken     string
+	vaultCATokens  map[string]string
 }
 
 func (c *Core) runBoot(primaryOnly bool) error {
 	if err := checkHasInitRunOnce(); err != nil {
 		return err
+	}
+
+	if err := c.initVault(); err != nil {
+		return fmt.Errorf("error setting up vault: %w", err)
 	}
 
 	c.primaryOnly = primaryOnly
@@ -116,10 +126,6 @@ func (c *Core) runBoot(primaryOnly bool) error {
 		if err := c.restoreGrafana(); err != nil {
 			return fmt.Errorf("restoreGrafana: %w", err)
 		}
-	}
-
-	if err := c.cache.SaveValue("ready", "1"); err != nil {
-		return err
 	}
 
 	return nil
@@ -253,6 +259,10 @@ func (c *Core) initPrimaryCluster(cluster string, peered bool) error {
 		return fmt.Errorf("writeCentralConfigs[%s]: %w", cluster, err)
 	}
 
+	if err := c.maybeInitVaultForMeshCA(cluster); err != nil {
+		return fmt.Errorf("initVaultForMeshCA[%s]: %w", cluster, err)
+	}
+
 	if !c.config.SecurityDisableACLs {
 		if c.config.KubernetesEnabled {
 			if c.topology.LinkWithPeering() {
@@ -298,6 +308,10 @@ func (c *Core) initSecondaryDCs() error {
 		err = c.injectAgentTokensAndWaitForNodeUpdates(cluster.Name, false)
 		if err != nil {
 			return fmt.Errorf("injectAgentTokensAndWaitForNodeUpdates[%s]: %v", cluster.Name, err)
+		}
+
+		if err := c.maybeInitVaultForMeshCA(cluster.Name); err != nil {
+			return fmt.Errorf("initVaultForMeshCA[%s]: %w", cluster.Name, err)
 		}
 	}
 

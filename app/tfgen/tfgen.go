@@ -14,4 +14,6 @@ import (
 //go:embed templates/container-grafana.tf
 //go:embed templates/grafana-prometheus.yml
 //go:embed templates/grafana.ini
+//go:embed templates/container-vault.tf
+//go:embed templates/vault-config.hcl
 var content embed.FS

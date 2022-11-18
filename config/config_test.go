@@ -22,6 +22,7 @@ func TestParseConfig_EmptyInferDefaults(t *testing.T) {
 			{Name: "dc1", Servers: 1, Clients: 2},
 		},
 		ConfigEntries: map[string][]api.ConfigEntry{},
+		VaultAsMeshCA: make(map[string]struct{}),
 	}, fc)
 }
 
@@ -43,6 +44,7 @@ func TestParseConfig_BothFormats(t *testing.T) {
 				{Name: "dc1", Servers: 1, Clients: 2},
 			},
 			ConfigEntries: map[string][]api.ConfigEntry{},
+			VaultAsMeshCA: make(map[string]struct{}),
 		}, fc)
 	})
 	t.Run("new 1", func(t *testing.T) {
@@ -68,6 +70,7 @@ func TestParseConfig_BothFormats(t *testing.T) {
 				{Name: "dc1", Servers: 1, Clients: 2},
 			},
 			ConfigEntries: map[string][]api.ConfigEntry{},
+			VaultAsMeshCA: make(map[string]struct{}),
 		}, fc)
 	})
 	t.Run("new 2", func(t *testing.T) {
@@ -93,6 +96,7 @@ func TestParseConfig_BothFormats(t *testing.T) {
 				{Name: "dc1", Servers: 1, Clients: 2},
 			},
 			ConfigEntries: map[string][]api.ConfigEntry{},
+			VaultAsMeshCA: make(map[string]struct{}),
 		}, fc)
 	})
 }
@@ -126,6 +130,11 @@ func testParseConfig_AllFields(t *testing.T, peerInsteadOfDatacenter bool) {
 				gossip = true
 			}
 			initial_master_token = "root"
+			vault {
+				enabled = true
+				image   = "my-fake-image:3333"
+				mesh_ca = ["dc2"]
+			}
 		}
 		kubernetes {
 			enabled = true
@@ -204,16 +213,21 @@ EOF
 	require.NoError(t, err)
 
 	expected := &Config{
-		ConfName:              "legacy",
-		ConsulImage:           "my-dev-image:blah",
-		EnvoyVersion:          "v1.18.3",
-		CanaryConsulImage:     "consul:1.9.5",
-		CanaryEnvoyVersion:    "v1.17.2",
-		CanaryNodes:           []string{"abc", "def"},
-		EncryptionTLS:         true,
-		EncryptionTLSAPI:      true,
-		EncryptionGossip:      true,
-		SecurityDisableACLs:   true,
+		ConfName:            "legacy",
+		ConsulImage:         "my-dev-image:blah",
+		EnvoyVersion:        "v1.18.3",
+		CanaryConsulImage:   "consul:1.9.5",
+		CanaryEnvoyVersion:  "v1.17.2",
+		CanaryNodes:         []string{"abc", "def"},
+		EncryptionTLS:       true,
+		EncryptionTLSAPI:    true,
+		EncryptionGossip:    true,
+		SecurityDisableACLs: true,
+		VaultEnabled:        true,
+		VaultImage:          "my-fake-image:3333",
+		VaultAsMeshCA: map[string]struct{}{
+			"dc2": {},
+		},
 		KubernetesEnabled:     true,
 		EnvoyLogLevel:         "debug",
 		PrometheusEnabled:     true,

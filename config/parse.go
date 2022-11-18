@@ -59,6 +59,14 @@ func parseConfig(pathname string, contents []byte) (*Config, error) {
 		}
 	}
 
+	if uc.Security.Vault.Enabled {
+		if uc.Security.Vault.Image == "" {
+			uc.Security.Vault.Image = "hashicorp/vault:latest"
+		}
+	} else {
+		uc.Security.Vault.Image = ""
+	}
+
 	if len(uc.Topology.DeprecatedDatacenter) > 0 {
 		if len(uc.Topology.Cluster) > 0 {
 			return nil, fmt.Errorf("both datacenter and cluster configured")
@@ -101,9 +109,14 @@ func parseConfig(pathname string, contents []byte) (*Config, error) {
 		CanaryNodes:                      uc.CanaryProxies.Nodes,
 		EncryptionTLS:                    uc.Security.Encryption.TLS,
 		EncryptionTLSAPI:                 uc.Security.Encryption.TLSAPI,
+		EncryptionTLSGRPC:                uc.Security.Encryption.TLSGRPC,
+		EncryptionServerTLSGRPC:          uc.Security.Encryption.ServerTLSGRPC,
 		EncryptionGossip:                 uc.Security.Encryption.Gossip,
 		SecurityDisableACLs:              uc.Security.DisableACLs,
 		SecurityDisableDefaultIntentions: uc.Security.DisableDefaultIntentions,
+		VaultEnabled:                     uc.Security.Vault.Enabled,
+		VaultImage:                       uc.Security.Vault.Image,
+		VaultAsMeshCA:                    make(map[string]struct{}),
 		KubernetesEnabled:                uc.Kubernetes.Enabled,
 		EnvoyLogLevel:                    uc.Envoy.LogLevel,
 		PrometheusEnabled:                uc.Monitor.Prometheus,
@@ -117,6 +130,10 @@ func parseConfig(pathname string, contents []byte) (*Config, error) {
 		TopologyClusters:                 uc.Topology.Cluster,
 		TopologyNodes:                    uc.Topology.Nodes,
 		ConfigEntries:                    make(map[string][]api.ConfigEntry),
+	}
+
+	for _, cluster := range uc.Security.Vault.MeshCA {
+		cfg.VaultAsMeshCA[cluster] = struct{}{}
 	}
 
 	if len(uc.Enterprise.Segments) > 0 {
@@ -246,6 +263,15 @@ func validateConfig(cfg *Config) error {
 		}
 	}
 
+	if cfg.TopologyLinkMode == "peer" {
+		if !cfg.EncryptionTLS {
+			return fmt.Errorf("peering requires servers to do TLS on gRPC: encryption.tls should be enabled")
+		}
+		if !cfg.EncryptionTLSGRPC && !cfg.EncryptionServerTLSGRPC {
+			return fmt.Errorf("peering requires servers to do TLS on gRPC: encryption.tls_grpc or encryption.server_tls_grpc should be enabled")
+		}
+	}
+
 	if len(cfg.EnterprisePartitions) > 0 {
 		if hasSecondaryDatacenter {
 			return fmt.Errorf("enterprise.partitions and topology.datacenter are mutually exclusive")
@@ -275,6 +301,9 @@ func validateConfig(cfg *Config) error {
 
 	if cfg.EncryptionTLSAPI && !cfg.EncryptionTLS {
 		return fmt.Errorf("encryption.tls_api=true requires encryption.tls=true")
+	}
+	if cfg.EncryptionTLSGRPC && !cfg.EncryptionTLS {
+		return fmt.Errorf("encryption.tls_grpc=true requires encryption.tls=true")
 	}
 
 	if cfg.CanaryConsulImage == "" && cfg.CanaryEnvoyVersion != "" {

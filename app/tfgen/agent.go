@@ -84,22 +84,30 @@ func GenerateAgentHCL(
 					b.add("ca_file", "/tls/consul-agent-ca.pem")
 					b.add("cert_file", "/tls/"+prefix+".pem")
 					b.add("key_file", "/tls/"+prefix+"-key.pem")
-					b.add("verify_incoming", true)
+					// b.add("verify_incoming", true)
 				})
+			}
+			if cfg.EncryptionTLSGRPC || (node.Server && cfg.EncryptionServerTLSGRPC) {
 				b.addBlock("grpc", func() {
 					b.add("ca_file", "/tls/consul-agent-ca.pem")
 					b.add("cert_file", "/tls/"+prefix+".pem")
 					b.add("key_file", "/tls/"+prefix+"-key.pem")
-					b.add("verify_incoming", true)
+					// b.add("verify_incoming", true)
 				})
 			}
 		})
 	}
 
 	b.addBlock("ports", func() {
-		b.add("grpc", 8502)
 		if cfg.EncryptionTLSAPI {
 			b.add("https", 8501)
+		}
+		if cfg.EncryptionTLSGRPC || (node.Server && cfg.EncryptionServerTLSGRPC) {
+			b.add("grpc_tls", 8503)
+			b.add("grpc", -1)
+		} else {
+			b.add("grpc", 8502)
+			b.add("grpc_tls", -1)
 		}
 
 		if !node.Server && node.Segment != "" {

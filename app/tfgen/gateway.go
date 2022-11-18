@@ -39,7 +39,7 @@ func GenerateMeshGatewayContainer(
 			//
 		},
 		SidecarBootEnvVars: []string{
-			"SBOOT_READY_FILE=/secrets/ready.val",
+			//
 		},
 	}
 	node.AddLabels(mgi.Labels)
@@ -65,6 +65,10 @@ func GenerateMeshGatewayContainer(
 	if config.EncryptionTLSAPI {
 		mgi.SidecarBootEnvVars = append(mgi.SidecarBootEnvVars,
 			"SBOOT_AGENT_TLS=1")
+	}
+	if config.EncryptionTLSGRPC {
+		mgi.SidecarBootEnvVars = append(mgi.SidecarBootEnvVars,
+			"SBOOT_AGENT_GRPC_TLS=1")
 	}
 
 	switch topology.NetworkShape {

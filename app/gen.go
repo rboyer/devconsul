@@ -34,6 +34,11 @@ func (c *Core) runGenerate(primaryOnly bool) error {
 			tfgen.GrafanaINI(),
 		)
 	}
+	if c.config.VaultEnabled {
+		extraFiles = append(extraFiles,
+			tfgen.VaultConfig(),
+		)
+	}
 
 	for _, fr := range extraFiles {
 		if err := fr.Commit(c.logger); err != nil {
@@ -113,6 +118,15 @@ func (c *Core) generateConfigs(primaryOnly bool) error {
 		containers = append(containers,
 			tfgen.PrometheusContainer(),
 			tfgen.GrafanaContainer(),
+		)
+	}
+
+	if c.config.VaultEnabled {
+		addImage("vault", c.config.VaultImage)
+		addVolume("vault-data")
+
+		containers = append(containers,
+			tfgen.VaultContainer(),
 		)
 	}
 

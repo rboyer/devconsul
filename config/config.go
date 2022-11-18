@@ -14,9 +14,14 @@ type Config struct {
 	CanaryNodes                      []string
 	EncryptionTLS                    bool
 	EncryptionTLSAPI                 bool
+	EncryptionTLSGRPC                bool
+	EncryptionServerTLSGRPC          bool
 	EncryptionGossip                 bool
 	SecurityDisableACLs              bool
 	SecurityDisableDefaultIntentions bool
+	VaultEnabled                     bool
+	VaultImage                       string
+	VaultAsMeshCA                    map[string]struct{}
 	KubernetesEnabled                bool
 	EnvoyLogLevel                    string
 	PrometheusEnabled                bool

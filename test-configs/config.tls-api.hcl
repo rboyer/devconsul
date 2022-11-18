@@ -8,9 +8,10 @@ config "tls-api" {
     initial_master_token = "root"
 
     encryption {
-      tls     = true
-      tls_api = true
-      gossip  = true
+      tls      = true
+      tls_api  = true
+      tls_grpc = true
+      gossip   = true
     }
   }
 
