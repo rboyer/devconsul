@@ -191,6 +191,14 @@ path "/sys/mounts/%[2]s/tune" {
   capabilities = [ "update" ]
 }
 
+# renewal
+path "auth/token/renew-self" {
+  capabilities = [ "update" ]
+}
+path "auth/token/lookup-self" {
+  capabilities = [ "read" ]
+}
+
 # TODO(rb): not present in docs; needed for provider swap FROM vault
 # /v1/connect_root__dc1/root/sign-self-issued
 path "%[1]s/root/sign-self-issued" {
