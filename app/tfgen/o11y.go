@@ -119,7 +119,7 @@ func GeneratePrometheusConfigFile(cfg *config.Config, topology *infra.Topology) 
 						{"cluster", node.Cluster},
 						{"namespace", node.Service.ID.Namespace},
 						{"partition", node.Service.ID.Partition},
-						// {"node", node.Name},
+						{"node", node.Name},
 						{"role", node.Service.ID.Name + "-proxy"},
 					},
 				})
