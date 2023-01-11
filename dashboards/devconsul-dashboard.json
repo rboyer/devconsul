@@ -181,7 +181,7 @@
           "refId": "A"
         }
       ],
-      "title": "DISCONNECTED FROM xDS",
+      "title": "NOTES DISCONNECTED FROM xDS (any service)",
       "transformations": [
         {
           "id": "organize",
@@ -216,7 +216,7 @@
           "showLineNumbers": false,
           "showMiniMap": false
         },
-        "content": "<div class=\"text-center dashboard-header\">\n  <h1>INBOUND TRAFFIC</h1>\n</div>",
+        "content": "<div class=\"text-center dashboard-header\">\n  <h1>INBOUND TRAFFIC TO THIS SERVICE</h1>\n</div>",
         "mode": "html"
       },
       "pluginVersion": "9.3.2",
@@ -420,7 +420,7 @@
             "uid": "PBFA97CFB590B2093"
           },
           "editorMode": "code",
-          "expr": "sum(irate(envoy_cluster_upstream_rq_total{consul_destination_service=\"$service\"}[1m])) by (cluster, local_cluster)",
+          "expr": "sum(irate(envoy_cluster_upstream_rq_total{consul_destination_datacenter=\"$cluster\",consul_destination_service=\"$service\"}[1m])) by (cluster, local_cluster)",
           "format": "time_series",
           "interval": "",
           "intervalFactor": 1,
@@ -737,7 +737,7 @@
             "uid": "PBFA97CFB590B2093"
           },
           "editorMode": "code",
-          "expr": "sum(irate(envoy_cluster_upstream_rq_xx{envoy_response_code_class!=\"5\",consul_destination_service=\"$service\"}[1m])) by (consul_destination_service, cluster, local_cluster) / sum(irate(envoy_cluster_upstream_rq_xx{consul_destination_service=\"$service\"}[1m])) by (consul_destination_service, cluster, local_cluster)",
+          "expr": "sum(irate(envoy_cluster_upstream_rq_xx{envoy_response_code_class!=\"5\",consul_destination_datacenter=\"$cluster\",consul_destination_service=\"$service\"}[1m])) by (cluster, local_cluster) / sum(irate(envoy_cluster_upstream_rq_xx{consul_destination_datacenter=\"$cluster\",consul_destination_service=\"$service\"}[1m])) by (cluster, local_cluster)",
           "format": "time_series",
           "interval": "",
           "intervalFactor": 1,
@@ -746,7 +746,7 @@
           "refId": "A"
         }
       ],
-      "title": "SUCCESS RATE [up]",
+      "title": "SUCCESS RATE BY CALLER [up]",
       "type": "timeseries"
     },
     {
@@ -940,7 +940,7 @@
       "fieldConfig": {
         "defaults": {
           "color": {
-            "mode": "palette-classic"
+            "mode": "continuous-BlYlRd"
           },
           "custom": {
             "axisCenteredZero": false,
@@ -1040,7 +1040,7 @@
       "fieldConfig": {
         "defaults": {
           "color": {
-            "mode": "palette-classic"
+            "mode": "continuous-BlYlRd"
           },
           "custom": {
             "axisCenteredZero": false,
@@ -1139,7 +1139,7 @@
       "fieldConfig": {
         "defaults": {
           "color": {
-            "mode": "palette-classic"
+            "mode": "continuous-BlYlRd"
           },
           "custom": {
             "axisCenteredZero": false,
@@ -1538,6 +1538,6 @@
   "timezone": "",
   "title": "devconsul Dashboard",
   "uid": "consul-service",
-  "version": 16,
+  "version": 18,
   "weekStart": ""
 }
