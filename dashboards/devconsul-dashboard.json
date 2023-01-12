@@ -1035,11 +1035,11 @@
             "uid": "PBFA97CFB590B2093"
           },
           "editorMode": "code",
-          "expr": "sum(envoy_cluster_upstream_cx_active{cluster=\"$cluster\",local_cluster=\"$service\",consul_destination_target!=\"\"}) by (consul_destination_datacenter, consul_destination_target)",
+          "expr": "sum(envoy_cluster_upstream_cx_active{cluster=\"$cluster\",local_cluster=\"$service\",consul_destination_target!=\"\"}) by (consul_destination_target)",
           "format": "time_series",
           "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "conn: {{consul_destination_target}} in {{consul_destination_datacenter}}",
+          "legendFormat": "conn: {{consul_destination_target}}",
           "range": true,
           "refId": "A"
         },
@@ -1049,12 +1049,12 @@
             "uid": "PBFA97CFB590B2093"
           },
           "editorMode": "code",
-          "expr": "sum(envoy_cluster_upstream_rq_active{cluster=\"$cluster\",local_cluster=\"$service\",consul_destination_target!=\"\"}) by (consul_destination_datacenter, consul_destination_target)\n",
+          "expr": "sum(envoy_cluster_upstream_rq_active{cluster=\"$cluster\",local_cluster=\"$service\",consul_destination_target!=\"\"}) by (consul_destination_target)\n",
           "format": "time_series",
           "hide": false,
           "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "requests: {{consul_destination_target}} in {{consul_destination_datacenter}}",
+          "legendFormat": "requests: {{consul_destination_target}}",
           "range": true,
           "refId": "B"
         },
@@ -1064,12 +1064,12 @@
             "uid": "PBFA97CFB590B2093"
           },
           "editorMode": "code",
-          "expr": "sum(envoy_cluster_upstream_rq_pending_active{cluster=\"$cluster\",local_cluster=\"$service\",consul_destination_target!=\"\"}) by (consul_destination_datacenter, consul_destination_target)",
+          "expr": "sum(envoy_cluster_upstream_rq_pending_active{cluster=\"$cluster\",local_cluster=\"$service\",consul_destination_target!=\"\"}) by (consul_destination_target)",
           "format": "time_series",
           "hide": true,
           "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "pending: {{consul_destination_target}} in {{consul_destination_datacenter}}",
+          "legendFormat": "pending: {{consul_destination_target}}",
           "range": true,
           "refId": "C"
         }
@@ -1165,11 +1165,11 @@
             "uid": "PBFA97CFB590B2093"
           },
           "editorMode": "code",
-          "expr": "sum(irate(envoy_cluster_upstream_rq_total{cluster=\"$cluster\",local_cluster=\"$service\",consul_destination_target!=\"\"}[1m])) by (consul_destination_datacenter, consul_destination_target)",
+          "expr": "sum(irate(envoy_cluster_upstream_rq_total{cluster=\"$cluster\",local_cluster=\"$service\",consul_destination_target!=\"\"}[1m])) by (consul_destination_target)",
           "format": "time_series",
           "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "RPS: {{consul_destination_target}} in {{consul_destination_datacenter}}",
+          "legendFormat": "RPS: {{consul_destination_target}}",
           "range": true,
           "refId": "A"
         },
@@ -1179,12 +1179,12 @@
             "uid": "PBFA97CFB590B2093"
           },
           "editorMode": "code",
-          "expr": "sum(irate(envoy_cluster_upstream_cx_total{cluster=\"$cluster\",local_cluster=\"$service\",consul_destination_target!=\"\"}[1m])) by (consul_destination_datacenter, consul_destination_target)",
+          "expr": "sum(irate(envoy_cluster_upstream_cx_total{cluster=\"$cluster\",local_cluster=\"$service\",consul_destination_target!=\"\"}[1m])) by (consul_destination_target)",
           "format": "time_series",
           "hide": false,
           "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "CPS: {{consul_destination_target}} in {{consul_destination_datacenter}}",
+          "legendFormat": "CPS: {{consul_destination_target}}",
           "range": true,
           "refId": "B"
         },
@@ -1194,12 +1194,12 @@
             "uid": "PBFA97CFB590B2093"
           },
           "editorMode": "code",
-          "expr": "sum(irate(envoy_cluster_upstream_rq_pending_total{cluster=\"$cluster\",local_cluster=\"$service\",consul_destination_target!=\"\"}[1m])) by (consul_destination_datacenter, consul_destination_target)",
+          "expr": "sum(irate(envoy_cluster_upstream_rq_pending_total{cluster=\"$cluster\",local_cluster=\"$service\",consul_destination_target!=\"\"}[1m])) by (consul_destination_target)",
           "format": "time_series",
           "hide": false,
           "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "pending requests to: {{consul_destination_target}} in {{consul_destination_datacenter}}",
+          "legendFormat": "pending requests to: {{consul_destination_target}}",
           "range": true,
           "refId": "C"
         }
@@ -1553,6 +1553,178 @@
       "title": "http data Tx (sent) [up]",
       "transparent": true,
       "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "gridPos": {
+        "h": 2.2,
+        "w": 24,
+        "x": 0,
+        "y": 44
+      },
+      "id": 104,
+      "links": [],
+      "options": {
+        "code": {
+          "language": "plaintext",
+          "showLineNumbers": false,
+          "showMiniMap": false
+        },
+        "content": "<div class=\"text-center dashboard-header\">\n  <h1>ENVOY CLUSTER HEALTH</h1>\n</div>",
+        "mode": "html"
+      },
+      "pluginVersion": "9.3.2",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "refId": "A"
+        }
+      ],
+      "transparent": true,
+      "type": "text"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "links": [],
+          "mappings": [],
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 8,
+        "y": 46.2
+      },
+      "id": 105,
+      "links": [],
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "9.1.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "sum(envoy_cluster_membership_total{cluster=\"$cluster\",local_cluster=\"$service\",envoy_cluster_name!=\"\"}) by (envoy_cluster_name)",
+          "format": "time_series",
+          "hide": false,
+          "instant": false,
+          "interval": "1",
+          "intervalFactor": 1,
+          "legendFormat": "membership total: {{envoy_cluster_name}}",
+          "range": true,
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "sum(envoy_cluster_outlier_detection_ejections_active{cluster=\"$cluster\",local_cluster=\"$service\",envoy_cluster_name!=\"\"}) by (envoy_cluster_name)",
+          "format": "time_series",
+          "hide": false,
+          "instant": false,
+          "interval": "1",
+          "intervalFactor": 1,
+          "legendFormat": "outlier ejections active: {{envoy_cluster_name}}",
+          "range": true,
+          "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "sum(envoy_cluster_membership_healthy{cluster=\"$cluster\",local_cluster=\"$service\",envoy_cluster_name!=\"\"}) by (envoy_cluster_name)",
+          "format": "time_series",
+          "hide": false,
+          "instant": false,
+          "interval": "1",
+          "intervalFactor": 1,
+          "legendFormat": "healthy members:  {{envoy_cluster_name}}",
+          "range": true,
+          "refId": "D"
+        }
+      ],
+      "title": "CLUSTER MEMBERSHIP",
+      "type": "timeseries"
     }
   ],
   "refresh": "5s",
@@ -1713,6 +1885,6 @@
   "timezone": "",
   "title": "devconsul Dashboard",
   "uid": "consul-service",
-  "version": 22,
+  "version": 23,
   "weekStart": ""
 }
