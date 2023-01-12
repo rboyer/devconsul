@@ -388,7 +388,7 @@
               }
             ]
           },
-          "unit": "reqps"
+          "unit": "cps"
         },
         "overrides": []
       },
@@ -424,9 +424,24 @@
           "format": "time_series",
           "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "downstream: {{local_cluster}} in {{cluster}}",
+          "legendFormat": "RPS: {{local_cluster}} in {{cluster}}",
           "range": true,
           "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "editorMode": "code",
+          "expr": "sum(irate(envoy_cluster_upstream_cx_total{consul_destination_datacenter=\"$cluster\",consul_destination_service=\"$service\"}[1m])) by (cluster, local_cluster)",
+          "format": "time_series",
+          "hide": false,
+          "interval": "",
+          "intervalFactor": 1,
+          "legendFormat": "CPS: {{local_cluster}} in {{cluster}}",
+          "range": true,
+          "refId": "B"
         }
       ],
       "title": "REQUEST RATE BY CALLER [up]",
@@ -819,7 +834,7 @@
           "refId": "A"
         }
       ],
-      "title": "Data Rx (received) [down]",
+      "title": "http data Rx (received) [down]",
       "transparent": true,
       "type": "stat"
     },
@@ -893,7 +908,7 @@
           "refId": "A"
         }
       ],
-      "title": "Data Tx (sent) [down]",
+      "title": "http data Tx (sent) [down]",
       "transparent": true,
       "type": "stat"
     },
@@ -940,7 +955,7 @@
       "fieldConfig": {
         "defaults": {
           "color": {
-            "mode": "continuous-BlYlRd"
+            "mode": "palette-classic"
           },
           "custom": {
             "axisCenteredZero": false,
@@ -988,7 +1003,137 @@
               }
             ]
           },
-          "unit": "rps"
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 0,
+        "y": 30
+      },
+      "id": 103,
+      "links": [],
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "9.1.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "editorMode": "code",
+          "expr": "sum(envoy_cluster_upstream_cx_active{cluster=\"$cluster\",local_cluster=\"$service\",consul_destination_target!=\"\"}) by (consul_destination_datacenter, consul_destination_target)",
+          "format": "time_series",
+          "interval": "",
+          "intervalFactor": 1,
+          "legendFormat": "conn: {{consul_destination_target}} in {{consul_destination_datacenter}}",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "editorMode": "code",
+          "expr": "sum(envoy_cluster_upstream_rq_active{cluster=\"$cluster\",local_cluster=\"$service\",consul_destination_target!=\"\"}) by (consul_destination_datacenter, consul_destination_target)\n",
+          "format": "time_series",
+          "hide": false,
+          "interval": "",
+          "intervalFactor": 1,
+          "legendFormat": "requests: {{consul_destination_target}} in {{consul_destination_datacenter}}",
+          "range": true,
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "editorMode": "code",
+          "expr": "sum(envoy_cluster_upstream_rq_pending_active{cluster=\"$cluster\",local_cluster=\"$service\",consul_destination_target!=\"\"}) by (consul_destination_datacenter, consul_destination_target)",
+          "format": "time_series",
+          "hide": true,
+          "interval": "",
+          "intervalFactor": 1,
+          "legendFormat": "pending: {{consul_destination_target}} in {{consul_destination_datacenter}}",
+          "range": true,
+          "refId": "C"
+        }
+      ],
+      "title": "TOTAL CONN/REQ BY UPSTREAM [up]",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "links": [],
+          "mappings": [],
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "cps"
         },
         "overrides": []
       },
@@ -1024,12 +1169,42 @@
           "format": "time_series",
           "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "upstream: {{consul_destination_target}} in {{consul_destination_datacenter}}",
+          "legendFormat": "RPS: {{consul_destination_target}} in {{consul_destination_datacenter}}",
           "range": true,
           "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "editorMode": "code",
+          "expr": "sum(irate(envoy_cluster_upstream_cx_total{cluster=\"$cluster\",local_cluster=\"$service\",consul_destination_target!=\"\"}[1m])) by (consul_destination_datacenter, consul_destination_target)",
+          "format": "time_series",
+          "hide": false,
+          "interval": "",
+          "intervalFactor": 1,
+          "legendFormat": "CPS: {{consul_destination_target}} in {{consul_destination_datacenter}}",
+          "range": true,
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "editorMode": "code",
+          "expr": "sum(irate(envoy_cluster_upstream_rq_pending_total{cluster=\"$cluster\",local_cluster=\"$service\",consul_destination_target!=\"\"}[1m])) by (consul_destination_datacenter, consul_destination_target)",
+          "format": "time_series",
+          "hide": false,
+          "interval": "",
+          "intervalFactor": 1,
+          "legendFormat": "pending requests to: {{consul_destination_target}} in {{consul_destination_datacenter}}",
+          "range": true,
+          "refId": "C"
         }
       ],
-      "title": "REQUEST RATE BY UPSTREAM [up]",
+      "title": "EGRESS CPS/RPS BY UPSTREAM [up]",
       "type": "timeseries"
     },
     {
@@ -1301,7 +1476,7 @@
           "refId": "A"
         }
       ],
-      "title": "Data Rx (received) [up]",
+      "title": "http data Rx (received) [up]",
       "transparent": true,
       "type": "stat"
     },
@@ -1375,7 +1550,7 @@
           "refId": "A"
         }
       ],
-      "title": "Data Tx (sent) [up]",
+      "title": "http data Tx (sent) [up]",
       "transparent": true,
       "type": "stat"
     }
@@ -1538,6 +1713,6 @@
   "timezone": "",
   "title": "devconsul Dashboard",
   "uid": "consul-service",
-  "version": 18,
+  "version": 22,
   "weekStart": ""
 }
