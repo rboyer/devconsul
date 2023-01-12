@@ -1066,7 +1066,7 @@
           "editorMode": "code",
           "expr": "sum(envoy_cluster_upstream_rq_pending_active{cluster=\"$cluster\",local_cluster=\"$service\",consul_destination_target!=\"\"}) by (consul_destination_target)",
           "format": "time_series",
-          "hide": true,
+          "hide": false,
           "interval": "",
           "intervalFactor": 1,
           "legendFormat": "pending: {{consul_destination_target}}",
@@ -1304,6 +1304,166 @@
         }
       ],
       "title": "P95 LATENCY",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "links": [],
+          "mappings": [],
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 0,
+        "y": 37
+      },
+      "id": 106,
+      "links": [],
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "9.1.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "editorMode": "code",
+          "expr": "sum(irate(envoy_cluster_upstream_cx_connect_timeout{cluster=\"$cluster\",local_cluster=\"$service\",consul_destination_target!=\"\"}[1m])) by (consul_destination_target)",
+          "format": "time_series",
+          "interval": "",
+          "intervalFactor": 1,
+          "legendFormat": "connect timeout: {{consul_destination_target}}",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "editorMode": "code",
+          "expr": "sum(irate(envoy_cluster_upstream_rq_pending_failure_eject{cluster=\"$cluster\",local_cluster=\"$service\",consul_destination_target!=\"\"}[1m])) by (consul_destination_target)\n",
+          "format": "time_series",
+          "hide": false,
+          "interval": "",
+          "intervalFactor": 1,
+          "legendFormat": "pending failure ejection: {{consul_destination_target}}",
+          "range": true,
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "editorMode": "code",
+          "expr": "sum(irate(envoy_cluster_upstream_rq_pending_overflow{cluster=\"$cluster\",local_cluster=\"$service\",consul_destination_target!=\"\"}[1m])) by (consul_destination_target)\n",
+          "format": "time_series",
+          "hide": false,
+          "interval": "",
+          "intervalFactor": 1,
+          "legendFormat": "pending overflow: {{consul_destination_target}}",
+          "range": true,
+          "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "editorMode": "code",
+          "expr": "sum(irate(envoy_cluster_upstream_rq_timeout{cluster=\"$cluster\",local_cluster=\"$service\",consul_destination_target!=\"\"}[1m])) by (consul_destination_target)\n",
+          "format": "time_series",
+          "hide": false,
+          "interval": "",
+          "intervalFactor": 1,
+          "legendFormat": "request timeout: {{consul_destination_target}}",
+          "range": true,
+          "refId": "D"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "editorMode": "code",
+          "expr": "sum(irate(envoy_cluster_upstream_rq_rx_reset{cluster=\"$cluster\",local_cluster=\"$service\",consul_destination_target!=\"\"}[1m])) by (consul_destination_target)\n",
+          "format": "time_series",
+          "hide": false,
+          "interval": "",
+          "intervalFactor": 1,
+          "legendFormat": "request reset: {{consul_destination_target}}",
+          "range": true,
+          "refId": "E"
+        }
+      ],
+      "title": "UPSTREAM REQUEST ERRORS [up]",
       "type": "timeseries"
     },
     {
@@ -1559,11 +1719,142 @@
         "type": "prometheus",
         "uid": "PBFA97CFB590B2093"
       },
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "links": [],
+          "mappings": [],
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 0,
+        "y": 44
+      },
+      "id": 107,
+      "links": [],
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "9.1.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "editorMode": "code",
+          "expr": "sum(irate(envoy_cluster_upstream_rq_retry{cluster=\"$cluster\",local_cluster=\"$service\",consul_destination_target!=\"\"}[1m])) by (consul_destination_target)",
+          "format": "time_series",
+          "interval": "",
+          "intervalFactor": 1,
+          "legendFormat": "request retry: {{consul_destination_target}}",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "editorMode": "code",
+          "expr": "sum(irate(envoy_cluster_upstream_rq_retry_success{cluster=\"$cluster\",local_cluster=\"$service\",consul_destination_target!=\"\"}[1m])) by (consul_destination_target)\n",
+          "format": "time_series",
+          "hide": false,
+          "interval": "",
+          "intervalFactor": 1,
+          "legendFormat": "request retry success: {{consul_destination_target}}",
+          "range": true,
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "editorMode": "code",
+          "expr": "sum(irate(envoy_cluster_upstream_rq_retry_overflow{cluster=\"$cluster\",local_cluster=\"$service\",consul_destination_target!=\"\"}[1m])) by (consul_destination_target)\n",
+          "format": "time_series",
+          "hide": false,
+          "interval": "",
+          "intervalFactor": 1,
+          "legendFormat": "request retry overflow: {{consul_destination_target}}",
+          "range": true,
+          "refId": "C"
+        }
+      ],
+      "title": "UPSTREAM RETRY [up]",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
       "gridPos": {
         "h": 2.2,
         "w": 24,
         "x": 0,
-        "y": 44
+        "y": 51
       },
       "id": 104,
       "links": [],
@@ -1653,7 +1944,7 @@
         "h": 7,
         "w": 8,
         "x": 8,
-        "y": 46.2
+        "y": 53.2
       },
       "id": 105,
       "links": [],
@@ -1885,6 +2176,6 @@
   "timezone": "",
   "title": "devconsul Dashboard",
   "uid": "consul-service",
-  "version": 23,
+  "version": 25,
   "weekStart": ""
 }
