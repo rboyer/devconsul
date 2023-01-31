@@ -113,7 +113,7 @@ func (c *Core) generateConfigs(primaryOnly bool) error {
 
 	if c.config.PrometheusEnabled {
 		addImage("prometheus", "prom/prometheus:latest")
-		addImage("grafana", "grafana/grafana-oss:latest")
+		addImage("grafana", "grafana/grafana-oss:9.3.2")
 
 		containers = append(containers,
 			tfgen.PrometheusContainer(),
