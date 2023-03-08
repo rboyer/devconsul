@@ -3,6 +3,7 @@ package tfgen
 import (
 	"text/template"
 
+	"github.com/rboyer/devconsul/cachestore"
 	"github.com/rboyer/devconsul/config"
 	"github.com/rboyer/devconsul/infra"
 )
@@ -15,23 +16,16 @@ type terraformPod struct {
 	EnterpriseLicensePath string
 }
 
-func GenerateAgentContainers(
+func GenerateNodeContainers(
 	cfg *config.Config,
 	topology *infra.Topology,
+	cache *cachestore.Store,
 	node *infra.Node,
 	podContents bool,
 ) ([]Resource, error) {
-	podName := node.Name + "-pod"
-
-	podHCL, err := GenerateAgentHCL(cfg, topology, node)
-	if err != nil {
-		return nil, err
-	}
-
 	pod := terraformPod{
-		PodName: podName,
+		PodName: node.PodName(),
 		Node:    node,
-		HCL:     podHCL,
 		Labels:  map[string]string{
 			//
 		},
@@ -45,14 +39,34 @@ func GenerateAgentContainers(
 	containers = append(containers, Eval(tfPauseT, &pod))
 
 	if podContents {
-		containers = append(containers, Eval(tfConsulT, &pod))
+		if node.IsAgent() {
+			podHCL, err := GenerateAgentHCL(cfg, topology, node)
+			if err != nil {
+				return nil, err
+			}
+			pod.HCL = podHCL
 
-		if gwRes := GenerateMeshGatewayContainer(cfg, topology, podName, pod.Node); gwRes != nil {
-			containers = append(containers, gwRes)
+			containers = append(containers, Eval(tfConsulT, &pod))
 		}
 
-		if resources := GeneratePingPongContainers(cfg, podName, pod.Node); len(resources) > 0 {
-			containers = append(containers, resources...)
+		if node.RunsWorkloads() {
+			if gwRes := GenerateMeshGatewayContainer(cfg, topology, pod.PodName, pod.Node); gwRes != nil {
+				containers = append(containers, gwRes)
+			}
+
+			if resources := GeneratePingPongContainers(cfg, topology, pod.PodName, pod.Node); len(resources) > 0 {
+				containers = append(containers, resources...)
+			}
+		}
+
+		if node.Kind == infra.NodeKindInfra {
+			resources, err := GenerateInfraContainers(cfg, topology, cache, pod.PodName, pod.Node)
+			if err != nil {
+				return nil, err
+			}
+			if len(resources) > 0 {
+				containers = append(containers, resources...)
+			}
 		}
 	}
 

@@ -1,0 +1,43 @@
+resource "docker_container" "{{.NodeName}}-{{.PingPong}}-sidecar" {
+	name = "{{.NodeName}}-{{.PingPong}}-sidecar"
+    network_mode = "container:${docker_container.{{.PodName}}.id}"
+	image        = {{ .DataplaneImageResource }}
+    restart  = "on-failure"
+
+  labels {
+    label = "devconsul"
+    value = "1"
+  }
+  labels {
+    label = "devconsul.type"
+    value = "dataplane"
+  }
+
+  volumes {
+    host_path      = abspath("cache")
+    container_path = "/secrets"
+    read_only      = true
+  }
+  volumes {
+    host_path      = abspath("dataplane-boot.sh")
+    container_path = "/bin/dataplane-boot.sh"
+    read_only      = true
+  }
+  volumes {
+    host_path      = abspath("cache/tls")
+    container_path = "/tls"
+    read_only      = true
+  }
+
+  env = [
+{{- range .EnvVars }}
+      "{{.}}",
+{{- end}}
+  ]
+
+  #"/usr/local/bin/consul-dataplane"
+  command = [
+    "/usr/local/bin/dumb-init",
+    "/bin/dataplane-boot.sh",
+  ]
+}

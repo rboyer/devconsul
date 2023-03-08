@@ -124,9 +124,8 @@ config "simple-no-acls" {
   }
 
   enterprise {
-    enabled            = true
-    license_path       = "/home/rboyer/.consul.dev.licence"
-    disable_partitions = true
+    enabled      = true
+    license_path = "/home/rboyer/.consul.dev.licence"
   }
 
   envoy {
@@ -165,9 +164,8 @@ config "simple" {
   }
 
   enterprise {
-    enabled            = true
-    license_path       = "/home/rboyer/.consul.dev.licence"
-    disable_partitions = true
+    enabled      = true
+    license_path = "/home/rboyer/.consul.dev.licence"
   }
 
   envoy {

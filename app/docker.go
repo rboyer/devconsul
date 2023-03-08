@@ -36,11 +36,19 @@ func (a *App) buildDockerImages(force bool) error {
 		if err := addFileToHash("Dockerfile-envoy", hash); err != nil {
 			return err
 		}
+		if err := addFileToHash("Dockerfile-cdp", hash); err != nil {
+			return err
+		}
+		if err := addFileToHash("Dockerfile-tool", hash); err != nil {
+			return err
+		}
 
-		hash.Write([]byte(a.config.EnvoyVersion))
-		hash.Write([]byte(a.config.ConsulImage))
-		hash.Write([]byte(a.config.CanaryEnvoyVersion))
-		hash.Write([]byte(a.config.CanaryConsulImage))
+		hash.Write([]byte(a.config.Versions.Envoy))
+		hash.Write([]byte(a.config.Versions.ConsulImage))
+		hash.Write([]byte(a.config.Versions.DataplaneImage))
+		hash.Write([]byte(a.config.CanaryVersions.Envoy))
+		hash.Write([]byte(a.config.CanaryVersions.ConsulImage))
+		hash.Write([]byte(a.config.CanaryVersions.DataplaneImage))
 
 		currentHash = fmt.Sprintf("%x", hash.Sum(nil))
 	}
@@ -65,16 +73,16 @@ func (a *App) buildDockerImages(force bool) error {
 	// tag base
 	if err := a.runner.DockerExec([]string{
 		"tag",
-		a.config.ConsulImage,
+		a.config.Versions.ConsulImage,
 		"local/consul-base:latest",
 	}, nil); err != nil {
 		return err
 	}
 
-	if a.config.CanaryConsulImage != "" {
+	if a.config.CanaryVersions.ConsulImage != "" {
 		if err := a.runner.DockerExec([]string{
 			"tag",
-			a.config.CanaryConsulImage,
+			a.config.CanaryVersions.ConsulImage,
 			"local/consul-base-canary:latest",
 		}, nil); err != nil {
 			return err
@@ -87,7 +95,7 @@ func (a *App) buildDockerImages(force bool) error {
 		"--build-arg",
 		"CONSUL_IMAGE=local/consul-base:latest",
 		"--build-arg",
-		"ENVOY_VERSION=" + a.config.EnvoyVersion,
+		"ENVOY_VERSION=" + a.config.Versions.Envoy,
 		"-t", "local/consul-envoy",
 		"-f", "Dockerfile-envoy",
 		".",
@@ -95,16 +103,60 @@ func (a *App) buildDockerImages(force bool) error {
 		return err
 	}
 
-	if a.config.CanaryEnvoyVersion != "" {
+	if a.config.CanaryVersions.Envoy != "" {
 		if err := a.runner.DockerExec([]string{
 			"build",
 			"--build-arg",
 			"CONSUL_IMAGE=local/consul-base-canary:latest",
 			"--build-arg",
-			"ENVOY_VERSION=" + a.config.CanaryEnvoyVersion,
+			"ENVOY_VERSION=" + a.config.CanaryVersions.Envoy,
 			"-t", "local/consul-envoy-canary",
 			"-f", "Dockerfile-envoy",
 			".",
+		}, nil); err != nil {
+			return err
+		}
+	}
+
+	// build cdp
+	if err := a.runner.DockerExec([]string{
+		"build",
+		"--build-arg",
+		"DATAPLANE_IMAGE=" + a.config.Versions.DataplaneImage,
+		"-t", "local/consul-dataplane",
+		"-f", "Dockerfile-cdp",
+		".",
+	}, nil); err != nil {
+		return err
+	}
+
+	if a.config.CanaryVersions.DataplaneImage != "" {
+		if err := a.runner.DockerExec([]string{
+			"build",
+			"--build-arg",
+			"DATAPLANE_IMAGE=" + a.config.CanaryVersions.DataplaneImage,
+			"-t", "local/consul-dataplane-canary",
+			"-f", "Dockerfile-cdp",
+			".",
+		}, nil); err != nil {
+			return err
+		}
+	}
+
+	// build tool
+	{
+		_, err := os.Stat("./bin/clustertool")
+		if os.IsNotExist(err) {
+			return fmt.Errorf("clustertool binary not present in bin/ ; please run 'make'")
+		} else if err != nil {
+			return err
+		}
+
+		if err := a.runner.DockerExec([]string{
+			"build",
+			"-t", "local/clustertool",
+			"-f", "Dockerfile-tool",
+			"./bin",
 		}, nil); err != nil {
 			return err
 		}
@@ -129,7 +181,7 @@ func (a *App) runStopDC2() error {
 	)
 
 	a.topology.WalkSilent(func(n *infra.Node) {
-		pods[n.Cluster] = append(pods[n.Cluster], n.Name+"-pod")
+		pods[n.Cluster] = append(pods[n.Cluster], n.PodName())
 		containers[n.Cluster] = append(containers[n.Cluster], n.Name)
 		if n.MeshGateway {
 			containers[n.Cluster] = append(containers[n.Cluster], n.Name+"-mesh-gateway")

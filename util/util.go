@@ -3,9 +3,9 @@ package util
 import "fmt"
 
 type Identifier struct {
-	Name      string
-	Namespace string
-	Partition string
+	Name      string `json:",omitempty"`
+	Namespace string `json:",omitempty"`
+	Partition string `json:",omitempty"`
 }
 
 func NewIdentifier(name, namespace, partition string) Identifier {
@@ -23,11 +23,11 @@ func (id *Identifier) Normalize() {
 	id.Partition = PartitionOrDefault(id.Partition)
 }
 
-func (id *Identifier) String() string {
+func (id Identifier) String() string {
 	return fmt.Sprintf("%s/%s/%s", id.Partition, id.Namespace, id.Name)
 }
 
-func (id *Identifier) ID() string {
+func (id Identifier) ID() string {
 	return fmt.Sprintf("%s.%s.%s", id.Partition, id.Namespace, id.Name)
 }
 
@@ -42,4 +42,30 @@ func NamespaceOrDefault(name string) string {
 		return "default"
 	}
 	return name
+}
+
+type Identifier2 struct {
+	Name      string `json:",omitempty"`
+	Partition string `json:",omitempty"`
+}
+
+func NewIdentifier2(name, partition string) Identifier2 {
+	id := Identifier2{
+		Name:      name,
+		Partition: partition,
+	}
+	id.Normalize()
+	return id
+}
+
+func (id *Identifier2) Normalize() {
+	id.Partition = PartitionOrDefault(id.Partition)
+}
+
+func (id Identifier2) String() string {
+	return fmt.Sprintf("%s/%s", id.Partition, id.Name)
+}
+
+func (id Identifier2) ID() string {
+	return fmt.Sprintf("%s.%s", id.Partition, id.Name)
 }

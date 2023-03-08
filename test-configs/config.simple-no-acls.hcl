@@ -1,8 +1,7 @@
 active = "simple-no-acls"
 
 config "simple-no-acls" {
-  consul_image  = "consul-dev:latest"
-  envoy_version = "v1.22.5"
+  consul_image = "consul-dev:latest"
 
   security {
     disable_acls         = true

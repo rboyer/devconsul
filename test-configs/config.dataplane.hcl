@@ -1,13 +1,16 @@
 active = "simple"
 
 config "simple" {
-  consul_image = "consul-dev:latest"
+  consul_image    = "consul-dev:latest"
+  dataplane_image = "hashicorp/consul-dataplane:1.0.0"
 
   security {
     initial_master_token = "root"
     encryption {
-      tls    = true
-      gossip = true
+      tls             = true
+      tls_grpc        = true
+      gossip          = true
+      server_tls_grpc = true
     }
   }
 
@@ -29,6 +32,13 @@ config "simple" {
     cluster "dc2" {
       servers = 1
       clients = 2
+    }
+
+    ### default toggle
+    # node_mode = "dataplane"
+
+    node "dc1-client1" {
+      mode = "dataplane"
     }
   }
 }

@@ -15,12 +15,16 @@ func (c *Core) runGenerate(primaryOnly bool) error {
 
 	c.topology.WalkSilent(func(node *infra.Node) {
 		c.logger.Info("Generating node",
+			"kind", node.Kind,
 			"name", node.Name,
-			"server", node.Server,
 			"dc", node.Cluster,
 			"ip", node.LocalAddress(),
 		)
 	})
+
+	if err := c.generateCatalogInfo(primaryOnly); err != nil {
+		return err
+	}
 
 	if err := c.generateConfigs(primaryOnly); err != nil {
 		return err
@@ -82,24 +86,32 @@ func (c *Core) generateConfigs(primaryOnly bool) error {
 		addVolume("grafana-data")
 	}
 
-	addImage("pause", "k8s.gcr.io/pause:3.3")
-	addImage("consul", c.config.ConsulImage)
+	addImage("pause", "registry.k8s.io/pause:3.3")
+	addImage("consul", c.config.Versions.ConsulImage)
 	addImage("consul-envoy", "local/consul-envoy:latest")
+	addImage("consul-dataplane", "local/consul-dataplane:latest") //c.config.Versions.DataplaneImage)
 	addImage("pingpong", "rboyer/pingpong:latest")
+	addImage("clustertool", "local/clustertool:latest")
 
-	if c.config.CanaryEnvoyVersion != "" {
+	if c.config.CanaryVersions.Envoy != "" {
 		addImage("consul-envoy-canary", "local/consul-envoy-canary:latest")
 	}
 
+	if c.config.CanaryVersions.DataplaneImage != "" {
+		addImage("consul-dataplane-canary", "local/consul-dataplane-canary:latest") //c.config.CanaryVersions.DataplaneImage)
+	}
+
 	if err := c.topology.Walk(func(node *infra.Node) error {
-		addVolume(node.Name)
+		if node.IsAgent() {
+			addVolume(node.Name)
+		}
 
 		// NOTE: primaryOnly implies we still generate empty pods in the remote datacenters
 		populatePodContents := true
 		if primaryOnly {
 			populatePodContents = node.Cluster == config.PrimaryCluster
 		}
-		myContainers, err := tfgen.GenerateAgentContainers(c.config, c.topology, node, populatePodContents)
+		myContainers, err := tfgen.GenerateNodeContainers(c.config, c.topology, c.cache, node, populatePodContents)
 		if err != nil {
 			return err
 		}

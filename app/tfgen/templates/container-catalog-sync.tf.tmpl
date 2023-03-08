@@ -1,0 +1,37 @@
+resource "docker_container" "{{.NodeName}}-catalog-sync" {
+  name    = "{{.NodeName}}-catalog-sync"
+  network_mode = "container:${docker_container.{{.PodName}}.id}"
+  image   = docker_image.clustertool.latest
+  restart = "on-failure"
+
+  labels {
+    label = "devconsul"
+    value = "1"
+  }
+  labels {
+    label = "devconsul.type"
+    value = "infra"
+  }
+
+  volumes {
+    host_path      = abspath("cache")
+    container_path = "/secrets"
+    read_only      = true
+  }
+  volumes {
+    host_path      = abspath("cache/tls")
+    container_path = "/tls"
+    read_only      = true
+  }
+
+  env = [
+  "DEVCONSUL_HASH_VALUE={{.HashValue}}",
+  ]
+
+  command = [
+  "catalog-sync",
+{{- range .Args }}
+      "{{.}}",
+{{- end}}
+  ]
+}

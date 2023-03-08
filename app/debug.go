@@ -34,6 +34,110 @@ var knownConfigEntryKinds = []string{
 	api.ExportedServices,
 }
 
+func (a *App) RunDumpLogs() error {
+	// This only makes sense to run after you've configured it once.
+	if err := checkHasInitRunOnce(); err != nil {
+		return err
+	}
+
+	if err := os.RemoveAll("logs"); err != nil {
+		return fmt.Errorf("problem clearing logs directory: %w", err)
+	}
+
+	if err := os.MkdirAll("logs", 0755); err != nil {
+		return fmt.Errorf("could not create logs output directory: %w", err)
+	}
+
+	logDockerCmd := func(fn string, args []string) error {
+		var err error
+		fn, err = filepath.Abs(fn)
+		if err != nil {
+			return err
+		}
+		w, err := safeio.OpenFile(fn, 0644)
+		if err != nil {
+			return err
+		}
+		defer w.Close()
+
+		if err := a.runner.DockerExec(args, w); err != nil {
+			return err
+		}
+
+		return w.Commit()
+	}
+
+	writeLogs := func(c string) error {
+		fn := filepath.Join("logs", c+".log")
+		if err := logDockerCmd(fn, []string{"logs", c}); err != nil {
+			return err
+		}
+
+		a.logger.Info("captured docker logs", "container", c, "path", fn)
+
+		return nil
+	}
+
+	dumpRoute := func(c string) error {
+		fn := filepath.Join("logs", c+".route.txt")
+		args := []string{
+			"exec",
+			c,
+			"route", "-n",
+			// d exec dc1-server1 route -n
+		}
+		if err := logDockerCmd(fn, args); err != nil {
+			return err
+		}
+
+		a.logger.Info("captured docker route table", "container", c, "path", fn)
+
+		return nil
+	}
+
+	doStuff := func(c string) error {
+		if err := writeLogs(c); err != nil {
+			return err
+		}
+		if err := dumpRoute(c); err != nil {
+			return err
+		}
+		return nil
+	}
+
+	a.topology.WalkSilent(func(n *infra.Node) {
+		var containers []string
+
+		containers = append(containers, n.Name)
+
+		if n.MeshGateway {
+			containers = append(
+				containers,
+				n.Name+"-mesh-gateway",
+			)
+		}
+		if n.Service != nil {
+			containers = append(
+				containers,
+				n.Name+"-"+n.Service.ID.Name+"-sidecar-proxy",
+			)
+		}
+
+		for _, c := range containers {
+			if err := doStuff(c); err != nil {
+				switch {
+				case strings.Contains(err.Error(), `Error response from daemon: No such container:`):
+				case strings.Contains(err.Error(), `Error: No such container:`):
+				default:
+					a.logger.Error("could not capture docker logs", "container", c, "error", err)
+				}
+			}
+		}
+	})
+
+	return nil
+}
+
 func (c *Core) RunDebugListConfigs() error {
 	client, err := c.debugPrimaryClient()
 	if err != nil {
@@ -187,51 +291,65 @@ func (c *Core) runDebugSaveGrafana(client *grafana.Client, uid, fileName string)
 func (c *Core) RunCheckMesh() error {
 	client := cleanhttp.DefaultClient()
 
-	now := time.Now()
+	var stopCh <-chan time.Time
+	if c.timeout > 0 {
+		stopCh = time.After(c.timeout)
+	}
 
-	c.topology.WalkSilent(func(n *infra.Node) {
-		if n.Server || n.MeshGateway {
-			return
-		}
-		addr := n.LocalAddress()
-
-		logger := c.logger.Named(n.Name)
-		logger = logger.With("addr", addr)
-
-		logger.Info("Checking pingpong mesh instance")
-
-		ppr, err := fetchPingPongPage(client, addr)
-		if err != nil {
-			logger.Error("fetching endpoint failed", "error", err)
-			return
-		}
-		if ppr.Name != "" {
-			logger = logger.Named("app__" + ppr.Name)
+	successMap := make(map[string]map[string]struct{})
+	for {
+		select {
+		case <-stopCh:
+			return errors.New("did not complete")
+		default:
 		}
 
-		logger.Info("found application", "app", ppr.Name)
-		if len(ppr.Pings) > 0 {
-			evt := ppr.Pings[0]
-
-			if evt.Err != "" {
-				logger.Error("last ping", "error", evt.Err)
-			} else {
-				logger.Info("last ping",
-					"started", prettyTime(now, evt.Start),
-					"ended", prettyTime(now, evt.End))
+		anyFailed := false
+		c.topology.WalkSilent(func(n *infra.Node) {
+			if !n.RunsWorkloads() || n.MeshGateway || n.Service == nil {
+				return
 			}
-		}
-		if len(ppr.Pongs) > 0 {
-			evt := ppr.Pongs[0]
+			addr := n.LocalAddress()
+			sid := n.Service.ID.String()
 
-			if evt.Err != "" {
-				logger.Error("last pong", "error", evt.Err)
-			} else {
-				logger.Info("last pong", "received",
-					prettyTime(now, evt.Recv))
+			nodeSuccessMap, ok := successMap[n.Name]
+			if !ok {
+				nodeSuccessMap = make(map[string]struct{})
+				successMap[n.Name] = nodeSuccessMap
 			}
+
+			if _, ok := nodeSuccessMap[sid]; ok {
+				return
+			}
+
+			logger := c.logger.With(
+				"node", n.Name,
+				"service", sid,
+				"addr", addr,
+			)
+
+			// logger.Info("Checking pingpong mesh instance")
+
+			status, err := fetchPingHealthz(client, addr)
+			if err != nil {
+				logger.Error("fetching endpoint failed", "error", err)
+				anyFailed = true
+				return
+			}
+			if status == "OK" {
+				logger.Info("last ping", "status", status)
+				nodeSuccessMap[sid] = struct{}{}
+			} else {
+				logger.Error("last ping", "status", status)
+				anyFailed = true
+			}
+		})
+		if !anyFailed {
+			break
 		}
-	})
+		time.Sleep(100 * time.Millisecond)
+	}
+	c.logger.Info("mesh check complete", "status", "OK")
 
 	return nil
 }
@@ -257,6 +375,24 @@ type Ping struct {
 	Start *time.Time `json:",omitempty"`
 	End   *time.Time `json:",omitempty"`
 	// DurSec int        `json:",omitempty"`
+}
+
+func fetchPingHealthz(client *http.Client, addr string) (string, error) {
+	resp, err := client.Get("http://" + addr + ":8080/pinghealthz")
+	if err != nil {
+		return "", err
+	}
+	if resp.Body == nil {
+		return "", errors.New("no response body")
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+
+	return strings.TrimSpace(string(body)), nil
 }
 
 func fetchPingPongPage(client *http.Client, addr string) (*PingPongResponse, error) {

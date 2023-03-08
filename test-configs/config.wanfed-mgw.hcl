@@ -1,8 +1,7 @@
 active = "wanfed-mgw"
 
 config "wanfed-mgw" {
-  consul_image  = "consul-dev:latest"
-  envoy_version = "v1.22.5"
+  consul_image = "consul-dev:latest"
 
   security {
     initial_master_token = "root"

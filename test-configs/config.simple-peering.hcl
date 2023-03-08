@@ -1,8 +1,7 @@
 active = "simple-peering"
 
 config "simple-peering" { # TODO finish
-  consul_image  = "consul-dev:latest"
-  envoy_version = "v1.22.5"
+  consul_image = "consul-dev:latest"
 
   security {
     encryption {
@@ -87,11 +86,11 @@ config "simple-peering" { # TODO finish
   "Services": [
     {
       "Name": "ping",
-      "Consumers": [ { "PeerName": "peer-dc2" } ]
+      "Consumers": [ { "Peer": "peer-dc2" } ]
     },
     {
       "Name": "pong",
-      "Consumers": [ { "PeerName": "peer-dc2" } ]
+      "Consumers": [ { "Peer": "peer-dc2" } ]
     }
   ]
 }
@@ -160,11 +159,11 @@ config "simple-peering" { # TODO finish
   "Services": [
     {
       "Name": "ping",
-      "Consumers": [ { "PeerName": "peer-dc1" } ]
+      "Consumers": [ { "Peer": "peer-dc1" } ]
     },
     {
       "Name": "pong",
-      "Consumers": [ { "PeerName": "peer-dc1" } ]
+      "Consumers": [ { "Peer": "peer-dc1" } ]
     }
   ]
 }

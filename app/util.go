@@ -3,42 +3,28 @@ package app
 import (
 	"encoding/json"
 	"io"
-	"os"
-	"path/filepath"
+
+	"github.com/rboyer/devconsul/util"
 )
 
+// Deprecated: x
 func filesExist(parent string, paths ...string) (bool, error) {
-	for _, p := range paths {
-		ok, err := fileExists(filepath.Join(parent, p))
-		if err != nil {
-			return false, err
-		}
-		if !ok {
-			return false, nil
-		}
-	}
-	return true, nil
+	return util.FilesExist(parent, paths...)
 }
 
+// Deprecated: x
 func fileExists(path string) (bool, error) {
-	_, err := os.Stat(path)
-	if os.IsNotExist(err) {
-		return false, nil
-	} else if err != nil {
-		return false, err
-	} else {
-		return true, nil
-	}
+	return util.FileExists(path)
 }
 
+// Deprecated: x
+func hashFile(path string) (string, error) {
+	return util.HashFile(path)
+}
+
+// Deprecated: x
 func addFileToHash(path string, w io.Writer) error {
-	f, err := os.Open(path)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-	_, err = io.Copy(w, f)
-	return err
+	return util.AddFileToHash(path, w)
 }
 
 func jsonPretty(val interface{}) string {

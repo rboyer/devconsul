@@ -30,6 +30,23 @@ func CompileTopology(cfg *config.Config) (*Topology, error) {
 		return nil, fmt.Errorf("unknown network_shape: %s", cfg.TopologyNetworkShape)
 	}
 
+	switch cfg.TopologyNodeMode {
+	case string(NodeModeAgent):
+		topology.NodeMode = NodeModeAgent
+	case string(NodeModeDataplane):
+		topology.NodeMode = NodeModeDataplane
+	default:
+		return nil, fmt.Errorf("unknown node_mode: %s", cfg.TopologyNodeMode)
+	}
+
+	for _, n := range cfg.TopologyNodes {
+		switch n.Mode {
+		case string(NodeModeAgent), string(NodeModeDataplane), "":
+		default:
+			return nil, fmt.Errorf("unknown node[%q].mode: %s", n.NodeName, n.Mode)
+		}
+	}
+
 	// TODO(peering): require TLS for peering
 	switch cfg.TopologyLinkMode {
 	case string(ClusterLinkModePeer):
@@ -92,8 +109,8 @@ func CompileTopology(cfg *config.Config) (*Topology, error) {
 
 			node := &Node{
 				Cluster:   clusterName,
+				Kind:      NodeKindServer,
 				Name:      clusterName + "-server" + id,
-				Server:    true,
 				Partition: "default",
 				Addresses: []Address{
 					{
@@ -102,6 +119,12 @@ func CompileTopology(cfg *config.Config) (*Topology, error) {
 					},
 				},
 				Index: idx - 1,
+			}
+
+			if c := getNode(node.Name); c != nil {
+				if c.Mode != string(NodeModeAgent) {
+					return fmt.Errorf("a consul server cannot be agentless")
+				}
 			}
 
 			switch topology.NetworkShape {
@@ -124,6 +147,25 @@ func CompileTopology(cfg *config.Config) (*Topology, error) {
 			topology.AddNode(node)
 		}
 
+		{ // add special pod
+			const idx = 100
+			ip := baseIP + ".100"
+
+			nodeName := clusterName + "-infra1"
+			node := &Node{
+				Cluster:   clusterName,
+				Name:      nodeName,
+				Kind:      NodeKindInfra,
+				Partition: "default",
+				Addresses: []Address{{
+					Network:   topology.NetworkShape.GetNetworkName(clusterName),
+					IPAddress: ip,
+				}},
+				Index: idx - 1,
+			}
+			topology.AddNode(node)
+		}
+
 		numServiceClients := clients - meshGateways
 		for idx := 1; idx <= clients; idx++ {
 			isGatewayClient := (idx > numServiceClients)
@@ -136,7 +178,7 @@ func CompileTopology(cfg *config.Config) (*Topology, error) {
 			node := &Node{
 				Cluster: clusterName,
 				Name:    nodeName,
-				Server:  false,
+				Kind:    NodeKindClient,
 				Addresses: []Address{
 					{
 						Network:   topology.NetworkShape.GetNetworkName(clusterName),
@@ -149,6 +191,16 @@ func CompileTopology(cfg *config.Config) (*Topology, error) {
 			nodeConfig := config.Node{} // yay zero value!
 			if c := getNode(nodeName); c != nil {
 				nodeConfig = *c
+			}
+
+			if topology.NodeMode == NodeModeDataplane {
+				node.Kind = NodeKindDataplane
+			}
+			switch nodeConfig.Mode {
+			case string(NodeModeAgent):
+				node.Kind = NodeKindClient
+			case string(NodeModeDataplane):
+				node.Kind = NodeKindDataplane
 			}
 
 			{ // handle partition defaulting regardless of OSS/ENT
@@ -261,6 +313,9 @@ func CompileTopology(cfg *config.Config) (*Topology, error) {
 		}
 		if c.Clients <= 0 {
 			return nil, fmt.Errorf("%s: must always have at least one client", c.Name)
+		}
+		if c.Clients > 50 {
+			return nil, fmt.Errorf("%s: must always have no more than 50 clients", c.Name)
 		}
 
 		m := clusterNamePatt.FindStringSubmatch(c.Name)

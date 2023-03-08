@@ -17,6 +17,7 @@ if [[ -z "${service_register_file}" ]]; then
 fi
 
 api_args=()
+acl_api_args=()
 case "${mode}" in
     insecure)
         ;;
@@ -28,6 +29,7 @@ case "${mode}" in
         fi
 
         api_args+=( -token-file "${token_file}" )
+        acl_api_args+=( -token-file "${token_file}" )
 
         ;;
     login)
@@ -53,6 +55,7 @@ case "${mode}" in
         echo "Wrote new token to ${token_sink_file}"
 
         api_args+=( -token-file "${token_sink_file}" )
+        acl_api_args+=( -token-file "${token_sink_file}" )
 
         ;;
     *)
@@ -63,6 +66,7 @@ esac
 
 if [[ -n "${partition}" ]]; then
     api_args+=( -partition "${partition}" )
+    acl_api_args+=( -partition "${partition}" )
 fi
 
 if [[ -n "$agent_tls" ]]; then
@@ -73,6 +77,7 @@ if [[ -n "$agent_tls" ]]; then
 else
     api_args+=( -http-addr http://127.0.0.1:8500 )
 fi
+acl_api_args+=( -http-addr http://127.0.0.1:8500 )
 
 grpc_args=()
 if [[ -n "$agent_grpc_tls" ]]; then
@@ -83,8 +88,7 @@ fi
 
 if [[ "${mode}" != "insecure" ]]; then
     while : ; do
-        # if consul acl token read "${api_args[@]}" -self &> /dev/null ; then
-        if consul acl token read "${api_args[@]}" -self ; then
+        if consul acl token read "${acl_api_args[@]}" -self ; then
             break
         fi
 

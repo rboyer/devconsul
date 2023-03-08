@@ -18,10 +18,15 @@ fi
 
 rm -f config.hcl
 
+mkdir -p bin
+cp -f ../bin/clustertool ./bin
 cp -f ../Dockerfile-envoy .
+cp -f ../Dockerfile-cdp .
+cp -f ../Dockerfile-tool .
 cp -f ../versions.tf .
 cp -f ../mesh-gateway-sidecar-boot.sh .
 cp -f ../sidecar-boot.sh .
+cp -f ../dataplane-boot.sh .
 
 terraform init
 
@@ -38,19 +43,35 @@ for fn in config.*.hcl; do
         devconsul primary || {
             echo "FAIL: error bringing up primary environment: $fn" >&2
             failed="${failed},$fn(primary)"
+
+            devconsul dump-logs || true
         }
     fi
     devconsul up || {
         echo "FAIL: error bringing up rest of environment: $fn" >&2
         failed="${failed},$fn(up)"
+
+        devconsul dump-logs || true
     }
+    # devconsul check-mesh || {
+    #     echo "WARN: various mesh resources are not actually healthy: $fn" >&2
+    # }
     devconsul down &>/dev/null || {
         echo "FAIL: error tearing down environment: $fn" >&2
         # failed="${failed},$fn(down)"
     }
 done
 
-rm -f config.hcl Dockerfile-envoy versions.tf mesh-gateway-sidecar-boot.sh sidecar-boot.sh
+rm -f \
+    config.hcl \
+    Dockerfile-envoy \
+    Dockerfile-cdp \
+    Dockerfile-tool \
+    versions.tf \
+    mesh-gateway-sidecar-boot.sh \
+    sidecar-boot.sh \
+    dataplane-boot.sh \
+    bin/clustertool
 
 echo "========================="
 if [[ -n "${failed}" ]]; then

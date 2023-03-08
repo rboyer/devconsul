@@ -38,6 +38,7 @@ func GeneratePrometheusConfigFile(cfg *config.Config, topology *infra.Topology) 
 		Params      map[string][]string
 		Targets     []string
 		Labels      []kv
+		Token       string
 	}
 
 	jobs := make(map[string]*job)
@@ -54,13 +55,13 @@ func GeneratePrometheusConfigFile(cfg *config.Config, topology *infra.Topology) 
 	}
 
 	topology.WalkSilent(func(node *infra.Node) {
-		if node.Server {
+		if node.IsServer() {
 			add(&job{
 				Name:        "consul-server--" + node.Name,
 				MetricsPath: "/v1/agent/metrics",
+				Token:       cfg.AgentMasterToken,
 				Params: map[string][]string{
 					"format": {"prometheus"},
-					"token":  {cfg.AgentMasterToken},
 				},
 				Targets: []string{
 					net.JoinHostPort(node.LocalAddress(), "8500"),
@@ -76,9 +77,9 @@ func GeneratePrometheusConfigFile(cfg *config.Config, topology *infra.Topology) 
 			add(&job{
 				Name:        "consul-client--" + node.Name,
 				MetricsPath: "/v1/agent/metrics",
+				Token:       cfg.AgentMasterToken,
 				Params: map[string][]string{
 					"format": {"prometheus"},
-					"token":  {cfg.AgentMasterToken},
 				},
 				Targets: []string{
 					net.JoinHostPort(node.LocalAddress(), "8500"),

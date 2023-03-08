@@ -17,17 +17,18 @@ func (e *rawConfigEnvelope) GetActive() (*rawConfig, bool) {
 // rawConfig is the top level structure representing the contents of a user
 // provided config file. It is what the file is initially decoded into.
 type rawConfig struct {
-	Name          string                  `hcl:"name,label"`
-	ConsulImage   string                  `hcl:"consul_image,optional"`
-	EnvoyVersion  string                  `hcl:"envoy_version,optional"`
-	CanaryProxies *rawConfigCanaryProxies `hcl:"canary_proxies,block"`
-	Security      *rawConfigSecurity      `hcl:"security,block"`
-	Kubernetes    *rawConfigK8S           `hcl:"kubernetes,block"`
-	Envoy         *rawConfigEnvoy         `hcl:"envoy,block"`
-	Monitor       *rawConfigMonitor       `hcl:"monitor,block"`
-	Enterprise    *rawConfigEnterprise    `hcl:"enterprise,block"`
-	Topology      *rawTopology            `hcl:"topology,block"`
-	Clusters      []*rawClusterConfig     `hcl:"cluster_config,block"`
+	Name           string                  `hcl:"name,label"`
+	ConsulImage    string                  `hcl:"consul_image,optional"`
+	EnvoyVersion   string                  `hcl:"envoy_version,optional"`
+	DataplaneImage string                  `hcl:"dataplane_image,optional"`
+	CanaryProxies  *rawConfigCanaryProxies `hcl:"canary_proxies,block"`
+	Security       *rawConfigSecurity      `hcl:"security,block"`
+	Kubernetes     *rawConfigK8S           `hcl:"kubernetes,block"`
+	Envoy          *rawConfigEnvoy         `hcl:"envoy,block"`
+	Monitor        *rawConfigMonitor       `hcl:"monitor,block"`
+	Enterprise     *rawConfigEnterprise    `hcl:"enterprise,block"`
+	Topology       *rawTopology            `hcl:"topology,block"`
+	Clusters       []*rawClusterConfig     `hcl:"cluster_config,block"`
 
 	DeprecatedRawConfigEntries []string `hcl:"config_entries,optional"`
 }
@@ -102,22 +103,23 @@ type rawConfigEncryption struct {
 }
 
 type rawConfigCanaryProxies struct {
-	ConsulImage  string   `hcl:"consul_image,optional"`
-	EnvoyVersion string   `hcl:"envoy_version,optional"`
-	Nodes        []string `hcl:"nodes,optional"`
+	ConsulImage    string   `hcl:"consul_image,optional"`
+	EnvoyVersion   string   `hcl:"envoy_version,optional"`
+	DataplaneImage string   `hcl:"dataplane_image,optional"`
+	Nodes          []string `hcl:"nodes,optional"`
 }
 
 type rawConfigEnterprise struct {
-	Enabled           bool         `hcl:"enabled,optional"`
-	Partitions        []*Partition `hcl:"partition,block"`
-	Segments          []string     `hcl:"segments,optional"`
-	LicensePath       string       `hcl:"license_path,optional"`
-	DisablePartitions bool         `hcl:"disable_partitions,optional"`
+	Enabled     bool         `hcl:"enabled,optional"`
+	Partitions  []*Partition `hcl:"partition,block"`
+	Segments    []string     `hcl:"segments,optional"`
+	LicensePath string       `hcl:"license_path,optional"`
 }
 
 type rawTopology struct {
 	NetworkShape string     `hcl:"network_shape,optional"`
 	LinkMode     string     `hcl:"link_mode,optional"`
+	NodeMode     string     `hcl:"node_mode,optional"`
 	Cluster      []*Cluster `hcl:"cluster,block"`
 	Nodes        []*Node    `hcl:"node,block"`
 

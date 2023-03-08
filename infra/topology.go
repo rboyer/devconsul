@@ -41,16 +41,22 @@ const (
 	ClusterLinkModeFederate = ClusterLinkMode("federate")
 )
 
+type NodeMode string
+
+const (
+	NodeModeAgent     = NodeMode("agent")
+	NodeModeDataplane = NodeMode("dataplane")
+)
+
 type Topology struct {
 	NetworkShape NetworkShape
 	LinkMode     ClusterLinkMode
+	NodeMode     NodeMode
 
 	networks map[string]*Network
 	clusters []*Cluster
 
-	nm      map[string]*Node
-	servers []string // node names
-	clients []string // node names
+	nm map[string]*Node
 
 	additionalPrimaryGateways []string
 }
@@ -61,7 +67,7 @@ func (t *Topology) LinkWithFederation() bool { return t.LinkMode == ClusterLinkM
 func (t *Topology) LinkWithPeering() bool    { return t.LinkMode == ClusterLinkModePeer }
 
 func (t *Topology) LeaderIP(cluster string, wan bool) string {
-	for _, name := range t.servers {
+	for _, name := range t.sortedNodeKind(NodeKindServer) {
 		n := t.Node(name)
 		if n.Cluster == cluster {
 			if wan {
@@ -104,7 +110,7 @@ func (t *Topology) Cluster(name string) *Cluster {
 
 func (t *Topology) ServerIPs(cluster string) []string {
 	var out []string
-	for _, name := range t.servers {
+	for _, name := range t.sortedNodeKind(NodeKindServer) {
 		n := t.Node(name)
 		if n.Cluster == cluster {
 			out = append(out, n.LocalAddress())
@@ -115,21 +121,48 @@ func (t *Topology) ServerIPs(cluster string) []string {
 
 func (t *Topology) GatewayAddrs(cluster string) []string {
 	var out []string
-	for _, name := range t.clients {
-		n := t.Node(name)
-		if n.Cluster == cluster && n.MeshGateway {
-			out = append(out, n.PublicAddress()+":8443")
+	t.WalkSilent(func(n *Node) {
+		switch n.Kind {
+		case NodeKindClient, NodeKindDataplane:
+			if n.Cluster == cluster && n.MeshGateway {
+				out = append(out, n.PublicAddress()+":8443")
+			}
 		}
-	}
+	})
 	out = append(out, t.additionalPrimaryGateways...)
 	return out
 }
 
-func (t *Topology) all() []string {
-	o := make([]string, 0, len(t.servers)+len(t.clients))
-	o = append(o, t.servers...)
-	o = append(o, t.clients...)
+func (t *Topology) sortedNodeKind(kind NodeKind) []string {
+	var o []string
+	for name, n := range t.nm {
+		if n.Kind == kind {
+			o = append(o, name)
+		}
+	}
+	sort.Strings(o)
 	return o
+}
+
+func (t *Topology) sortedNodes() []string {
+	var o1, o2, o3 []string
+	for name, n := range t.nm {
+		switch n.Kind {
+		case NodeKindInfra:
+			o1 = append(o1, name)
+		case NodeKindServer:
+			o2 = append(o2, name)
+		case NodeKindClient, NodeKindDataplane:
+			o3 = append(o3, name)
+		}
+	}
+	sort.Strings(o1)
+	sort.Strings(o2)
+	sort.Strings(o3)
+
+	o1 = append(o1, o2...)
+	o1 = append(o1, o3...)
+	return o1
 }
 
 func (t *Topology) Node(name string) *Node {
@@ -162,7 +195,7 @@ func (t *Topology) ClusterNodes(cluster string) []*Node {
 }
 
 func (t *Topology) Walk(f func(n *Node) error) error {
-	for _, nodeName := range t.all() {
+	for _, nodeName := range t.sortedNodes() {
 		node := t.Node(nodeName)
 		if err := f(node); err != nil {
 			return err
@@ -171,7 +204,7 @@ func (t *Topology) Walk(f func(n *Node) error) error {
 	return nil
 }
 func (t *Topology) WalkSilent(f func(n *Node)) {
-	for _, nodeName := range t.all() {
+	for _, nodeName := range t.sortedNodes() {
 		node := t.Node(nodeName)
 		f(node)
 	}
@@ -185,15 +218,13 @@ func (t *Topology) AddNetwork(n *Network) {
 }
 
 func (t *Topology) AddNode(node *Node) {
+	if node.Kind == "" {
+		panic("missing node kind")
+	}
 	if t.nm == nil {
 		t.nm = make(map[string]*Node)
 	}
 	t.nm[node.Name] = node
-	if node.Server {
-		t.servers = append(t.servers, node.Name)
-	} else {
-		t.clients = append(t.clients, node.Name)
-	}
 }
 
 func (t *Topology) AddAdditionalPrimaryGateway(addr string) {
@@ -222,12 +253,22 @@ func (n *Network) DockerName() string {
 	return "devconsul-" + n.Name
 }
 
+type NodeKind string
+
+const (
+	NodeKindUnknown   NodeKind = ""
+	NodeKindServer    NodeKind = "server"
+	NodeKindClient    NodeKind = "client"
+	NodeKindDataplane NodeKind = "dataplane"
+	NodeKindInfra     NodeKind = "infra"
+)
+
 type Node struct {
+	Kind            NodeKind
 	Cluster         string
 	Name            string
 	Segment         string // may be empty
 	Partition       string // will be not empty
-	Server          bool
 	Addresses       []Address
 	Service         *Service
 	MeshGateway     bool
@@ -238,18 +279,33 @@ type Node struct {
 	MeshGatewayUseDNSWANAddress bool
 }
 
+func (n *Node) PodName() string  { return n.Name + "-pod" }
+func (n *Node) Hostname() string { return n.PodName() }
+
+func (n *Node) IsServer() bool {
+	return n.Kind == NodeKindServer
+}
+
+func (n *Node) IsAgent() bool {
+	switch n.Kind {
+	case NodeKindServer, NodeKindClient:
+		return true
+	}
+	return false
+}
+
+func (n *Node) RunsWorkloads() bool {
+	switch n.Kind {
+	case NodeKindServer, NodeKindClient, NodeKindDataplane:
+		return true
+	}
+	return false
+}
+
 func (n *Node) AddLabels(m map[string]string) {
 	m["devconsul.cluster"] = n.Cluster
-
-	var agentType string
-	if n.Server {
-		agentType = "server"
-	} else {
-		agentType = "client"
-	}
-	m["devconsul.agentType"] = agentType
-
 	m["devconsul.node"] = n.Name
+	m["devconsul.kind"] = string(n.Kind)
 }
 
 func (n *Node) TokenName() string { return "agent--" + n.Name }

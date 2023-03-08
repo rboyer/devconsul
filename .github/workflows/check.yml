@@ -5,8 +5,9 @@ on:
   push:
 
 env:
-  GO_VERSION: 1.19
-  GOLANGCI_LINT_VERSION: v1.50.1
+  DOCKER_BUILDKIT: '1'
+  GO_VERSION: '1.20'
+  GOLANGCI_LINT_VERSION: v1.51.1
 
 # This workflow runs for not-yet-reviewed external contributions and so it
 # intentionally has no write access and only limited read access to the
@@ -132,13 +133,22 @@ jobs:
         run: |
           make
           mv $(which devconsul) /usr/local/bin
+          mv ./bin/clustertool /usr/local/bin
           devconsul help
+          clustertool catalog-sync -h
 
-      - name: upload binary
+      - name: upload devconsul binary
         uses: actions/upload-artifact@v3
         with:
           name: devconsul
           path: /usr/local/bin/devconsul
+          if-no-files-found: error
+
+      - name: upload clustertool binary
+        uses: actions/upload-artifact@v3
+        with:
+          name: clustertool
+          path: /usr/local/bin/clustertool
           if-no-files-found: error
 
   get-consul-binary:
@@ -148,10 +158,10 @@ jobs:
       - name: fetch consul
         shell: bash
         run: |
-          docker pull consul:latest
-          docker tag consul:latest consul-dev:latest
+          docker pull hashicorp/consul:latest
+          docker tag hashicorp/consul:latest consul-dev:latest
           docker rm -f consul-extract || true
-          docker create --name consul-extract consul:latest
+          docker create --name consul-extract consul-dev:latest
           docker cp consul-extract:/bin/consul "/usr/local/bin/consul"
           docker rm -f consul-extract || true
 
@@ -180,6 +190,12 @@ jobs:
           name: devconsul
           path: /usr/local/bin/
 
+      - name: download clustertool binary
+        uses: actions/download-artifact@v3
+        with:
+          name: clustertool
+          path: ./bin/
+
       - name: download consul binary
         uses: actions/download-artifact@v3
         with:
@@ -189,9 +205,10 @@ jobs:
       - name: fix permissions
         shell: bash
         run: |
-          chmod 755 /usr/local/bin/devconsul /usr/local/bin/consul
+          chmod 755 /usr/local/bin/devconsul /usr/local/bin/consul ./bin/clustertool
           consul version
           devconsul help
+          ./bin/clustertool catalog-sync -h
 
       - name: test container
         timeout-minutes: 10
@@ -200,3 +217,26 @@ jobs:
           docker pull consul:latest
           docker tag consul:latest consul-dev:latest
           ./test-configs/test.sh "${{matrix.config_file}}"
+
+      - name: capture failed container logs
+        if: failure()
+        shell: bash
+        run: |
+          cd test-configs
+          devconsul dump-logs || true
+          cp -a cache cache-output
+          devconsul down &>/dev/null || true
+
+      - uses: actions/upload-artifact@v3
+        if: failure()
+        with:
+          name: "docker-logs-${{matrix.config_file}}"
+          path: ./test-configs/logs
+          if-no-files-found: ignore
+
+      - uses: actions/upload-artifact@v3
+        if: failure()
+        with:
+          name: "run-cache-${{matrix.config_file}}"
+          path: ./test-configs/cache-output
+          if-no-files-found: ignore

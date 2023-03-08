@@ -1,3 +1,3 @@
 package config
 
-const DefaultEnvoyVersion = "v1.23.1"
+const DefaultEnvoyVersion = "v1.24.0"

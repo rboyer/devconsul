@@ -43,6 +43,9 @@ func parseConfig(pathname string, contents []byte) (*Config, error) {
 	if uc.EnvoyVersion == "" {
 		uc.EnvoyVersion = DefaultEnvoyVersion
 	}
+	if uc.DataplaneImage == "" {
+		uc.DataplaneImage = DefaultDataplaneImage
+	}
 	if uc.Envoy.LogLevel == "" {
 		uc.Envoy.LogLevel = "info"
 	}
@@ -51,6 +54,9 @@ func parseConfig(pathname string, contents []byte) (*Config, error) {
 	}
 	if uc.Topology.LinkMode == "" {
 		uc.Topology.LinkMode = "federate"
+	}
+	if uc.Topology.NodeMode == "" {
+		uc.Topology.NodeMode = "agent"
 	}
 
 	if !uc.Security.DisableACLs {
@@ -101,12 +107,18 @@ func parseConfig(pathname string, contents []byte) (*Config, error) {
 	}
 
 	cfg := &Config{
-		ConfName:                         uc.Name,
-		ConsulImage:                      uc.ConsulImage,
-		EnvoyVersion:                     uc.EnvoyVersion,
-		CanaryConsulImage:                uc.CanaryProxies.ConsulImage,
-		CanaryEnvoyVersion:               uc.CanaryProxies.EnvoyVersion,
-		CanaryNodes:                      uc.CanaryProxies.Nodes,
+		ConfName: uc.Name,
+		Versions: Versions{
+			ConsulImage:    uc.ConsulImage,
+			Envoy:          uc.EnvoyVersion,
+			DataplaneImage: uc.DataplaneImage,
+		},
+		CanaryNodes: uc.CanaryProxies.Nodes,
+		CanaryVersions: Versions{
+			ConsulImage:    uc.CanaryProxies.ConsulImage,
+			Envoy:          uc.CanaryProxies.EnvoyVersion,
+			DataplaneImage: uc.CanaryProxies.DataplaneImage,
+		},
 		EncryptionTLS:                    uc.Security.Encryption.TLS,
 		EncryptionTLSAPI:                 uc.Security.Encryption.TLSAPI,
 		EncryptionTLSGRPC:                uc.Security.Encryption.TLSGRPC,
@@ -123,10 +135,10 @@ func parseConfig(pathname string, contents []byte) (*Config, error) {
 		InitialMasterToken:               uc.Security.InitialMasterToken,
 		EnterpriseEnabled:                uc.Enterprise.Enabled,
 		EnterprisePartitions:             uc.Enterprise.Partitions,
-		EnterpriseDisablePartitions:      uc.Enterprise.DisablePartitions,
 		EnterpriseLicensePath:            uc.Enterprise.LicensePath,
 		TopologyNetworkShape:             uc.Topology.NetworkShape,
 		TopologyLinkMode:                 uc.Topology.LinkMode,
+		TopologyNodeMode:                 uc.Topology.NodeMode,
 		TopologyClusters:                 uc.Topology.Cluster,
 		TopologyNodes:                    uc.Topology.Nodes,
 		ConfigEntries:                    make(map[string][]api.ConfigEntry),
@@ -306,11 +318,14 @@ func validateConfig(cfg *Config) error {
 		return fmt.Errorf("encryption.tls_grpc=true requires encryption.tls=true")
 	}
 
-	if cfg.CanaryConsulImage == "" && cfg.CanaryEnvoyVersion != "" {
+	if cfg.CanaryVersions.ConsulImage == "" && cfg.CanaryVersions.Envoy != "" {
 		return fmt.Errorf("canary_proxies.consul_image must be set if canary_proxies.envoy_verison is set")
 	}
-	if cfg.CanaryConsulImage != "" && cfg.CanaryEnvoyVersion == "" {
-		return fmt.Errorf("canary_proxies.envoy_image must be set if canary_proxies.consul_image is set")
+	if cfg.CanaryVersions.ConsulImage == "" && cfg.CanaryVersions.DataplaneImage != "" {
+		return fmt.Errorf("canary_proxies.consul_image must be set if canary_proxies.dataplane_version is set")
+	}
+	if cfg.CanaryVersions.ConsulImage != "" && cfg.CanaryVersions.Envoy == "" && cfg.CanaryVersions.DataplaneImage == "" {
+		return fmt.Errorf("canary_proxies.envoy_image and/or canary_proxies.dataplane_version must be set if canary_proxies.consul_image is set")
 	}
 
 	if cfg.PrometheusEnabled && cfg.SecurityDisableACLs {

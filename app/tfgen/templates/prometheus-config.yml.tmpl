@@ -31,6 +31,11 @@ scrape_configs:
   - job_name: {{.Name}}
     metrics_path: "{{.MetricsPath}}"
     honor_labels: false
+{{ if .Token }}
+    authorization:
+      type: Bearer
+      credentials: "{{ .Token }}"
+{{ end }}
     params:
 {{- range $k, $vl := .Params }}
       {{ $k }}:

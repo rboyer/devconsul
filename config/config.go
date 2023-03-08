@@ -4,13 +4,17 @@ import (
 	"github.com/hashicorp/consul/api"
 )
 
+type Versions struct {
+	ConsulImage    string
+	Envoy          string
+	DataplaneImage string
+}
+
 // Config is the runtime configuration struct derived from rawConfig.
 type Config struct {
 	ConfName                         string // name from config.hcl
-	ConsulImage                      string
-	EnvoyVersion                     string
-	CanaryConsulImage                string
-	CanaryEnvoyVersion               string
+	Versions                         Versions
+	CanaryVersions                   Versions
 	CanaryNodes                      []string
 	EncryptionTLS                    bool
 	EncryptionTLSAPI                 bool
@@ -32,16 +36,17 @@ type Config struct {
 	EnterpriseEnabled                bool
 	EnterpriseSegments               map[string]int
 	EnterprisePartitions             []*Partition
-	EnterpriseDisablePartitions      bool
 	EnterpriseLicensePath            string
 	TopologyNetworkShape             string
 	TopologyLinkMode                 string
+	TopologyNodeMode                 string
 	TopologyClusters                 []*Cluster
 	TopologyNodes                    []*Node
 }
 
 func (c *Config) CanaryInfo() (configured bool, nodes map[string]struct{}) {
-	configured = c.CanaryConsulImage != "" && c.CanaryEnvoyVersion != ""
+	// TODO(cdp): how is this supposed to work?
+	configured = c.CanaryVersions.ConsulImage != "" && c.CanaryVersions.Envoy != ""
 
 	nodes = make(map[string]struct{})
 	for _, n := range c.CanaryNodes {
@@ -76,6 +81,7 @@ type Cluster struct {
 
 type Node struct {
 	NodeName           string            `hcl:"name,label"`
+	Mode               string            `hcl:"mode,optional"`
 	Segment            string            `hcl:"segment,optional"`
 	Partition          string            `hcl:"partition,optional"`
 	UpstreamName       string            `hcl:"upstream_name,optional"`

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/hashicorp/go-hclog"
 
@@ -25,6 +26,7 @@ type Core = App
 type App struct {
 	logger  hclog.Logger
 	rootDir string
+	timeout time.Duration // check-mesh
 
 	config   *config.Config
 	topology *infra.Topology
@@ -32,6 +34,10 @@ type App struct {
 	runner   *runner.Runner
 
 	BootInfo // for boot
+}
+
+func (c *App) SetTimeout(v time.Duration) {
+	c.timeout = v
 }
 
 func New(logger hclog.Logger) (*App, error) {

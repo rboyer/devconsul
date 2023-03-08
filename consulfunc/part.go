@@ -28,8 +28,8 @@ func ListPartitionNames(client *api.Client) ([]string, error) {
 	return out, nil
 }
 
-func PartitionQueryOptionsList(client *api.Client, enterprise, partitionsDisabled bool) ([]*api.QueryOptions, error) {
-	if !enterprise || partitionsDisabled {
+func PartitionQueryOptionsList(client *api.Client, enterprise bool) ([]*api.QueryOptions, error) {
+	if !enterprise {
 		return []*api.QueryOptions{{}}, nil
 	}
 

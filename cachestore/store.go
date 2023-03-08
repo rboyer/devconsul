@@ -83,6 +83,10 @@ func (s *Store) DelValuePrefix(prefix string) ([]string, error) {
 	return out, nil
 }
 
+func (s *Store) GetPathToStringFile(filename string) string {
+	return filepath.Join(s.Dir, filename)
+}
+
 func (s *Store) LoadStringFile(filename string) (string, error) {
 	fn := filepath.Join(s.Dir, filename)
 	b, err := os.ReadFile(fn)

@@ -1,0 +1,5 @@
+FROM alpine:latest
+RUN addgroup clustertool && adduser -S -G clustertool clustertool
+COPY clustertool /bin/clustertool
+USER clustertool
+ENTRYPOINT ["/bin/clustertool"]

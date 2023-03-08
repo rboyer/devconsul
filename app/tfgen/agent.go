@@ -17,14 +17,18 @@ func GenerateAgentHCL(
 	topology *infra.Topology,
 	node *infra.Node,
 ) (string, error) {
+	if !node.IsAgent() {
+		return "", fmt.Errorf("not an agent")
+	}
+
 	var inSecondaryDatacenter bool
-	if node.Server && topology.LinkWithFederation() {
+	if node.IsServer() && topology.LinkWithFederation() {
 		inSecondaryDatacenter = node.Cluster != config.PrimaryCluster
 	}
 
 	var b HCLBuilder
 
-	b.add("server", node.Server)
+	b.add("server", node.IsServer())
 	b.add("client_addr", "0.0.0.0")
 	b.add("advertise_addr", node.LocalAddress())
 	b.add("datacenter", node.Cluster)
@@ -41,7 +45,7 @@ func GenerateAgentHCL(
 
 	b.addSlice("retry_join", topology.ServerIPs(node.Cluster))
 
-	if node.Server && topology.LinkWithPeering() {
+	if node.IsServer() && topology.LinkWithPeering() {
 		b.addBlock("peering", func() {
 			b.add("enabled", true)
 		})
@@ -67,7 +71,7 @@ func GenerateAgentHCL(
 
 	if cfg.EncryptionTLS {
 		prefix := node.Cluster + "-client-consul-" + strconv.Itoa(node.Index)
-		if node.Server {
+		if node.IsServer() {
 			prefix = node.Cluster + "-server-consul-" + strconv.Itoa(node.Index)
 		}
 		b.addBlock("tls", func() {
@@ -87,7 +91,7 @@ func GenerateAgentHCL(
 					// b.add("verify_incoming", true)
 				})
 			}
-			if cfg.EncryptionTLSGRPC || (node.Server && cfg.EncryptionServerTLSGRPC) {
+			if cfg.EncryptionTLSGRPC || (node.IsServer() && cfg.EncryptionServerTLSGRPC) {
 				b.addBlock("grpc", func() {
 					b.add("ca_file", "/tls/consul-agent-ca.pem")
 					b.add("cert_file", "/tls/"+prefix+".pem")
@@ -102,7 +106,7 @@ func GenerateAgentHCL(
 		if cfg.EncryptionTLSAPI {
 			b.add("https", 8501)
 		}
-		if cfg.EncryptionTLSGRPC || (node.Server && cfg.EncryptionServerTLSGRPC) {
+		if cfg.EncryptionTLSGRPC || (node.IsServer() && cfg.EncryptionServerTLSGRPC) {
 			b.add("grpc_tls", 8503)
 			b.add("grpc", -1)
 		} else {
@@ -110,7 +114,7 @@ func GenerateAgentHCL(
 			b.add("grpc_tls", -1)
 		}
 
-		if !node.Server && node.Segment != "" {
+		if !node.IsServer() && node.Segment != "" {
 			port := cfg.EnterpriseSegments[node.Segment]
 			b.add("serf_lan", port)
 		}
@@ -122,11 +126,11 @@ func GenerateAgentHCL(
 			b.add("default_policy", "deny")
 			b.add("down_policy", "extend-cache")
 			b.add("enable_token_persistence", true)
-			if node.Server && inSecondaryDatacenter {
+			if node.IsServer() && inSecondaryDatacenter {
 				b.add("enable_token_replication", true)
 			}
 			b.addBlock("tokens", func() {
-				if node.Server && !inSecondaryDatacenter {
+				if node.IsServer() && !inSecondaryDatacenter {
 					b.add("initial_management", cfg.InitialMasterToken)
 				}
 				b.add("agent_recovery", cfg.AgentMasterToken)
@@ -134,7 +138,7 @@ func GenerateAgentHCL(
 		})
 	}
 
-	if node.Server {
+	if node.IsServer() {
 		useWANIP := false
 		switch topology.NetworkShape {
 		case infra.NetworkShapeIslands:
@@ -222,7 +226,7 @@ func GenerateAgentHCL(
 
 	} else {
 		b.add("segment", node.Segment)
-		if !cfg.EnterpriseDisablePartitions && cfg.EnterpriseEnabled {
+		if cfg.EnterpriseEnabled {
 			b.add("partition", node.Partition)
 		}
 	}

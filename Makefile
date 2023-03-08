@@ -4,8 +4,14 @@ SHELL := /bin/bash
 all: install
 
 .PHONY: install
-install:
+install: clustertool
 	@go install
+
+.PHONY: clustertool
+clustertool:
+	@mkdir -p bin
+	@CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -tags netgo -ldflags '-w' -o bin ./clustertool
+	@#docker build -t local/clustertool -f Dockerfile-tool ./bin
 
 .PHONY: tidy
 tidy:

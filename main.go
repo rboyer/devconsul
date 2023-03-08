@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/hashicorp/go-hclog"
 
@@ -32,6 +33,7 @@ var allCommands = []command{
 	{"config-entries", (*app.App).RunDebugListConfigs, nil},
 	{"grpc-check", (*app.App).RunGRPCCheck, nil},
 	{"check-mesh", (*app.App).RunCheckMesh, nil},
+	{"dump-logs", (*app.App).RunDumpLogs, nil},
 }
 
 func main() {
@@ -40,7 +42,7 @@ func main() {
 	// Create logger
 	logger := hclog.New(&hclog.LoggerOptions{
 		Name:       app.ProgramName,
-		Level:      hclog.Debug,
+		Level:      hclog.Trace,
 		Output:     os.Stderr,
 		JSONFormat: false,
 	})
@@ -53,9 +55,17 @@ func main() {
 	os.Args = os.Args[1:]
 	os.Args[0] = app.ProgramName
 
-	var resetOnce bool
+	var (
+		resetOnce bool
+		timeout   time.Duration
+	)
 	flag.BoolVar(&resetOnce, "force", false, "force one time operations to run again")
+	flag.DurationVar(&timeout, "timeout", 1*time.Minute, "[check-mesh] total runtime")
 	flag.Parse()
+
+	if timeout < 0 {
+		timeout = 0
+	}
 
 	if resetOnce {
 		if err := app.ResetRunOnceMemory(); err != nil {
@@ -79,6 +89,7 @@ func main() {
 		logger.Error(err.Error())
 		os.Exit(1)
 	}
+	core.SetTimeout(timeout)
 
 	commandMap := make(map[string]func(core *app.App) error)
 	for _, cmd := range allCommands {

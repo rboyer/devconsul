@@ -8,6 +8,7 @@ readonly agent_grpc_tls="${SBOOT_AGENT_GRPC_TLS:-}"
 readonly partition="${SBOOT_PARTITION:-}"
 
 api_args=()
+acl_api_args=()
 case "${mode}" in
     insecure)
         ;;
@@ -29,6 +30,7 @@ case "${mode}" in
         done
 
         api_args+=( -token-file "${token_file}" )
+        acl_api_args+=( -token-file "${token_file}" )
 
         ;;
     *)
@@ -39,6 +41,7 @@ esac
 
 if [[ -n "${partition}" ]]; then
     api_args+=( -partition "${partition}" )
+    acl_api_args+=( -partition "${partition}" )
 fi
 
 if [[ -n "$agent_tls" ]]; then
@@ -49,12 +52,24 @@ if [[ -n "$agent_tls" ]]; then
 else
     api_args+=( -http-addr http://127.0.0.1:8500 )
 fi
+acl_api_args+=( -http-addr http://127.0.0.1:8500 )
 
 grpc_args=()
 if [[ -n "$agent_grpc_tls" ]]; then
     grpc_args+=( -grpc-addr https://127.0.0.1:8503 )
 else
     grpc_args+=( -grpc-addr http://127.0.0.1:8502 )
+fi
+
+if [[ "${mode}" != "insecure" ]]; then
+    while : ; do
+        if consul acl token read "${acl_api_args[@]}" -self ; then
+            break
+        fi
+
+        echo "waiting for ACLs to work..."
+        sleep 0.1
+    done
 fi
 
 echo "Launching mesh-gateway proxy..."

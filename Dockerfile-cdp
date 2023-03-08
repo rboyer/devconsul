@@ -1,0 +1,8 @@
+ARG DATAPLANE_IMAGE
+FROM busybox:latest
+FROM ${DATAPLANE_IMAGE}
+COPY --from=0 /bin/busybox /bin/busybox
+USER 0:0
+RUN ["busybox", "--install", "/bin", "-s"]
+USER 100:0
+ENTRYPOINT []

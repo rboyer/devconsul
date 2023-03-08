@@ -13,16 +13,20 @@ func TestParseConfig_EmptyInferDefaults(t *testing.T) {
 
 	require.Equal(t, &Config{
 		ConfName:             "legacy",
-		ConsulImage:          "consul-dev:latest",
 		EnvoyLogLevel:        "info",
-		EnvoyVersion:         "v1.23.1",
 		TopologyNetworkShape: "flat",
 		TopologyLinkMode:     "federate",
+		TopologyNodeMode:     "agent",
 		TopologyClusters: []*Cluster{
 			{Name: "dc1", Servers: 1, Clients: 2},
 		},
 		ConfigEntries: map[string][]api.ConfigEntry{},
 		VaultAsMeshCA: make(map[string]struct{}),
+		Versions: Versions{
+			ConsulImage:    "consul-dev:latest",
+			DataplaneImage: "hashicorp/consul-dataplane:1.0.0",
+			Envoy:          "v1.24.0",
+		},
 	}, fc)
 }
 
@@ -35,16 +39,20 @@ func TestParseConfig_BothFormats(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, &Config{
 			ConfName:             "legacy",
-			ConsulImage:          "consul-dev:latest",
 			EnvoyLogLevel:        "info",
-			EnvoyVersion:         "v1.18.3",
 			TopologyNetworkShape: "flat",
 			TopologyLinkMode:     "federate",
+			TopologyNodeMode:     "agent",
 			TopologyClusters: []*Cluster{
 				{Name: "dc1", Servers: 1, Clients: 2},
 			},
 			ConfigEntries: map[string][]api.ConfigEntry{},
 			VaultAsMeshCA: make(map[string]struct{}),
+			Versions: Versions{
+				ConsulImage:    "consul-dev:latest",
+				DataplaneImage: "hashicorp/consul-dataplane:1.0.0",
+				Envoy:          "v1.18.3",
+			},
 		}, fc)
 	})
 	t.Run("new 1", func(t *testing.T) {
@@ -61,16 +69,20 @@ func TestParseConfig_BothFormats(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, &Config{
 			ConfName:             "beta",
-			ConsulImage:          "consul-dev:latest",
 			EnvoyLogLevel:        "info",
-			EnvoyVersion:         "v1.18.3",
 			TopologyNetworkShape: "flat",
 			TopologyLinkMode:     "federate",
+			TopologyNodeMode:     "agent",
 			TopologyClusters: []*Cluster{
 				{Name: "dc1", Servers: 1, Clients: 2},
 			},
 			ConfigEntries: map[string][]api.ConfigEntry{},
 			VaultAsMeshCA: make(map[string]struct{}),
+			Versions: Versions{
+				ConsulImage:    "consul-dev:latest",
+				Envoy:          "v1.18.3",
+				DataplaneImage: "hashicorp/consul-dataplane:1.0.0",
+			},
 		}, fc)
 	})
 	t.Run("new 2", func(t *testing.T) {
@@ -87,16 +99,20 @@ func TestParseConfig_BothFormats(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, &Config{
 			ConfName:             "alpha",
-			ConsulImage:          "consul-dev:latest",
 			EnvoyLogLevel:        "info",
-			EnvoyVersion:         "v1.17.3",
 			TopologyNetworkShape: "flat",
 			TopologyLinkMode:     "federate",
+			TopologyNodeMode:     "agent",
 			TopologyClusters: []*Cluster{
 				{Name: "dc1", Servers: 1, Clients: 2},
 			},
 			ConfigEntries: map[string][]api.ConfigEntry{},
 			VaultAsMeshCA: make(map[string]struct{}),
+			Versions: Versions{
+				ConsulImage:    "consul-dev:latest",
+				Envoy:          "v1.17.3",
+				DataplaneImage: "hashicorp/consul-dataplane:1.0.0",
+			},
 		}, fc)
 	})
 }
@@ -213,11 +229,16 @@ EOF
 	require.NoError(t, err)
 
 	expected := &Config{
-		ConfName:            "legacy",
-		ConsulImage:         "my-dev-image:blah",
-		EnvoyVersion:        "v1.18.3",
-		CanaryConsulImage:   "consul:1.9.5",
-		CanaryEnvoyVersion:  "v1.17.2",
+		ConfName: "legacy",
+		Versions: Versions{
+			ConsulImage:    "my-dev-image:blah",
+			Envoy:          "v1.18.3",
+			DataplaneImage: "hashicorp/consul-dataplane:1.0.0",
+		},
+		CanaryVersions: Versions{
+			ConsulImage: "consul:1.9.5",
+			Envoy:       "v1.17.2",
+		},
 		CanaryNodes:         []string{"abc", "def"},
 		EncryptionTLS:       true,
 		EncryptionTLSAPI:    true,
@@ -246,6 +267,7 @@ EOF
 		EnterpriseSegments:   map[string]int{"seg1": 8303, "seg2": 8304},
 		TopologyNetworkShape: "islands",
 		TopologyLinkMode:     "peer",
+		TopologyNodeMode:     "agent",
 		TopologyClusters: []*Cluster{
 			{Name: "dc1", Servers: 3, Clients: 2, MeshGateways: 1},
 			{Name: "dc2", Servers: 3, Clients: 2, MeshGateways: 1},

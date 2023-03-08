@@ -17,6 +17,12 @@ func GenerateMeshGatewayContainer(
 		return nil
 	}
 
+	switch node.Kind {
+	case infra.NodeKindClient:
+	default:
+		panic("figure this out: " + node.Kind)
+	}
+
 	type tfMeshGatewayInfo struct {
 		PodName            string
 		NodeName           string
@@ -56,10 +62,8 @@ func GenerateMeshGatewayContainer(
 	}
 
 	if config.EnterpriseEnabled && node.Partition != "" {
-		if !config.EnterpriseDisablePartitions {
-			mgi.SidecarBootEnvVars = append(mgi.SidecarBootEnvVars,
-				"SBOOT_PARTITION="+node.Partition)
-		}
+		mgi.SidecarBootEnvVars = append(mgi.SidecarBootEnvVars,
+			"SBOOT_PARTITION="+node.Partition)
 	}
 
 	if config.EncryptionTLSAPI {
@@ -81,7 +85,7 @@ func GenerateMeshGatewayContainer(
 		mgi.EnableWAN = true
 		mgi.LANAddress = `{{ GetInterfaceIP \"eth0\" }}:8443`
 		if node.MeshGatewayUseDNSWANAddress {
-			mgi.WANAddress = node.Name + "-pod:8443"
+			mgi.WANAddress = node.PodName() + ":8443"
 		} else {
 			mgi.WANAddress = `{{ GetInterfaceIP \"eth0\" }}:8443`
 		}

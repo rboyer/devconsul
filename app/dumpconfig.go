@@ -13,23 +13,39 @@ func (c *Core) RunConfigDump() error {
 	var (
 		servers    = make(map[string]int)
 		clients    = make(map[string]int)
+		dataplanes = make(map[string]int)
 		localAddrs = make(map[string]string)
 		clusters   []string
 		pods       = make(map[string][]string)
 		containers = make(map[string][]string)
 	)
 	c.topology.WalkSilent(func(n *infra.Node) {
-		if n.Server {
+		switch n.Kind {
+		case infra.NodeKindServer:
 			servers[n.Cluster]++
-		} else {
+		case infra.NodeKindClient:
 			clients[n.Cluster]++
+		case infra.NodeKindDataplane:
+			dataplanes[n.Cluster]++
 		}
 		localAddrs[n.Name] = n.LocalAddress()
 
-		pods[n.Cluster] = append(pods[n.Cluster], n.Name+"-pod")
-		containers[n.Cluster] = append(containers[n.Cluster], n.Name)
+		pods[n.Cluster] = append(pods[n.Cluster], n.PodName())
+		if n.IsAgent() {
+			containers[n.Cluster] = append(containers[n.Cluster], n.Name)
+		}
 		if n.MeshGateway {
 			containers[n.Cluster] = append(containers[n.Cluster], n.Name+"-mesh-gateway")
+		}
+		if n.Kind == infra.NodeKindInfra {
+			containers[n.Cluster] = append(containers[n.Cluster], n.Name+"-catalog-sync")
+		}
+
+		if n.RunsWorkloads() && n.Service != nil {
+			s := n.Service
+
+			containers[n.Cluster] = append(containers[n.Cluster], n.Name+"-"+s.ID.Name)
+			containers[n.Cluster] = append(containers[n.Cluster], n.Name+"-"+s.ID.Name+"-sidecar")
 		}
 	})
 
@@ -39,8 +55,8 @@ func (c *Core) RunConfigDump() error {
 
 	m := map[string]interface{}{
 		"confName":         c.config.ConfName,
-		"image":            c.config.ConsulImage,
-		"envoyVersion":     c.config.EnvoyVersion,
+		"image":            c.config.Versions.ConsulImage,
+		"envoyVersion":     c.config.Versions.Envoy,
 		"tls":              bool2str(c.config.EncryptionTLS),
 		"gossip":           bool2str(c.config.EncryptionGossip),
 		"k8s":              bool2str(c.config.KubernetesEnabled),
@@ -59,6 +75,9 @@ func (c *Core) RunConfigDump() error {
 	}
 	for dc, n := range clients {
 		m["topology.clients."+dc] = n
+	}
+	for dc, n := range dataplanes {
+		m["topology.dataplanes."+dc] = n
 	}
 
 	if len(args) == 0 {

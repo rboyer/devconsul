@@ -150,10 +150,33 @@ func cmdExec(name, binary string, args []string, stdout io.Writer, dir string) e
 	cmd.Stderr = &errWriter
 	cmd.Stdin = nil
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("could not invoke %q: %v : %s", name, err, errWriter.String())
+		return &ExecError{
+			BinaryName:  name,
+			Err:         err,
+			ErrorOutput: errWriter.String(),
+		}
 	}
 
 	return nil
+}
+
+type ExecError struct {
+	BinaryName  string
+	ErrorOutput string
+	Err         error
+}
+
+func (e *ExecError) Unwrap() error {
+	return e.Err
+}
+
+func (e *ExecError) Error() string {
+	return fmt.Sprintf(
+		"could not invoke %q: %v : %s",
+		e.BinaryName,
+		e.Err,
+		e.ErrorOutput,
+	)
 }
 
 func (r *Runner) GetPathToSelf() string {

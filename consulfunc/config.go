@@ -27,10 +27,10 @@ var kinds = []string{
 	api.ExportedServices,
 }
 
-func ListAllConfigEntries(client *api.Client, enterprise, partitionsDisabled bool) (map[ConfigKindName]api.ConfigEntry, error) {
+func ListAllConfigEntries(client *api.Client, enterprise bool) (map[ConfigKindName]api.ConfigEntry, error) {
 	ce := client.ConfigEntries()
 
-	queryOptionList, err := PartitionQueryOptionsList(client, enterprise, partitionsDisabled)
+	queryOptionList, err := PartitionQueryOptionsList(client, enterprise)
 	if err != nil {
 		return nil, fmt.Errorf("error listing partitions: %w", err)
 	}
