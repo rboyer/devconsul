@@ -228,7 +228,7 @@ func (c *Core) waitForTokenOnServers(cluster string, tokenName, tokenSecret stri
 				AllowStale: true,
 			})
 			if err != nil || tok == nil {
-				logger.Trace("token not ready on server", "token-name", tokenName, "error", err)
+				logger.Debug("token not ready on server", "token-name", tokenName, "error", err)
 				time.Sleep(250 * time.Millisecond)
 				continue
 			}

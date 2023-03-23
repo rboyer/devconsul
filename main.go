@@ -42,7 +42,7 @@ func main() {
 	// Create logger
 	logger := hclog.New(&hclog.LoggerOptions{
 		Name:       app.ProgramName,
-		Level:      hclog.Trace,
+		Level:      hclog.Debug,
 		Output:     os.Stderr,
 		JSONFormat: false,
 	})
