@@ -38,8 +38,8 @@ format:
 .PHONY: update-envoy
 update-envoy:
 	@docker rm -f consul-envoy-check &>/dev/null || true
-	@docker pull consul:latest || true
-	@docker run -d --name consul-envoy-check consul:latest
+	@docker pull hashicorp/consul:latest || true
+	@docker run -d --name consul-envoy-check hashicorp/consul:latest
 	@mkdir -p cache
 	@docker exec -it consul-envoy-check sh -c 'wget -q localhost:8500/v1/agent/self -O -' | jq -r '.xDS.SupportedProxies.envoy[0]' > cache/default_envoy.val
 	@docker rm -f consul-envoy-check &>/dev/null || true
