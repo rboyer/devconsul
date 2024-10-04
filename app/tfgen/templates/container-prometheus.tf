@@ -20,6 +20,7 @@ resource "docker_container" "prometheus" {
     container_path = "/etc/prometheus/prometheus.yml"
     read_only      = true
   }
+  network_mode = "bridge"
   networks_advanced {
     name         = docker_network.devconsul-lan.name
     ipv4_address = "10.0.100.100"

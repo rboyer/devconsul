@@ -1,5 +1,5 @@
 ARG DATAPLANE_IMAGE
-FROM busybox:latest
+FROM busybox:1.34
 FROM ${DATAPLANE_IMAGE}
 COPY --from=0 /bin/busybox /bin/busybox
 USER 0:0

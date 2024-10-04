@@ -26,6 +26,7 @@ resource "docker_container" "vault" {
     read_only      = true
   }
 
+  network_mode = "bridge"
   networks_advanced {
     name         = docker_network.devconsul-lan.name
     ipv4_address = "10.0.100.111"

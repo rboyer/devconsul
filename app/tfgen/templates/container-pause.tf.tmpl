@@ -20,6 +20,7 @@ resource "docker_container" "{{.PodName}}" {
   }
 {{- end }}
 
+network_mode = "bridge"
 {{- range .Node.Addresses }}
 networks_advanced {
   name         = docker_network.devconsul-{{.Network}}.name
